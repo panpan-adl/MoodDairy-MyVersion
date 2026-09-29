@@ -1,0 +1,647 @@
+{
+    "test_id": "holland_simplified_v1",
+    "test_name": "霍兰德职业兴趣",
+    "test_name_en": "Holland RIASEC Career Interest Test",
+    "test_description": "通过30道题目探索你的职业兴趣类型，了解适合你的职业方向。",
+    "version": "1.0",
+    "category": "career",
+    "icon": "work",
+    "total_questions": 30,
+    "estimated_time_minutes": 8,
+    "result_type": "holland_code",
+    "disclaimer": "本测试为简化版霍兰德职业兴趣测试，仅供自我探索参考，建议结合专业职业规划咨询。",
+    "source": "基于约翰·霍兰德教授的RIASEC职业兴趣理论",
+    "dimensions": [
+        {
+            "code": "R",
+            "name": "实际型",
+            "name_en": "Realistic",
+            "description": "喜欢动手操作、使用工具，偏好具体的任务",
+            "icon": "🔧"
+        },
+        {
+            "code": "I",
+            "name": "研究型",
+            "name_en": "Investigative",
+            "description": "喜欢思考、分析、研究问题，追求知识和理解",
+            "icon": "🔬"
+        },
+        {
+            "code": "A",
+            "name": "艺术型",
+            "name_en": "Artistic",
+            "description": "喜欢创意表达、追求美感和自由",
+            "icon": "🎨"
+        },
+        {
+            "code": "S",
+            "name": "社会型",
+            "name_en": "Social",
+            "description": "喜欢与人交往、帮助他人、善于沟通",
+            "icon": "🤝"
+        },
+        {
+            "code": "E",
+            "name": "企业型",
+            "name_en": "Enterprising",
+            "description": "喜欢领导、说服他人，追求成就和影响力",
+            "icon": "📊"
+        },
+        {
+            "code": "C",
+            "name": "常规型",
+            "name_en": "Conventional",
+            "description": "喜欢有条理、按规则办事，注重细节和精确",
+            "icon": "📋"
+        }
+    ],
+    "questions": [
+        {
+            "question_id": 1,
+            "question_text": "我喜欢自己动手修理东西",
+            "dimension": "R",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        },
+        {
+            "question_id": 2,
+            "question_text": "我喜欢户外活动，如露营、爬山等",
+            "dimension": "R",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        },
+        {
+            "question_id": 3,
+            "question_text": "我喜欢操作机器设备或使用工具",
+            "dimension": "R",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        },
+        {
+            "question_id": 4,
+            "question_text": "我喜欢做园艺或照顾植物",
+            "dimension": "R",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        },
+        {
+            "question_id": 5,
+            "question_text": "我喜欢做需要体力的工作",
+            "dimension": "R",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        },
+        {
+            "question_id": 6,
+            "question_text": "我喜欢阅读科学或技术类书籍",
+            "dimension": "I",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        },
+        {
+            "question_id": 7,
+            "question_text": "我喜欢分析问题的原因",
+            "dimension": "I",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        },
+        {
+            "question_id": 8,
+            "question_text": "我对科学实验感兴趣",
+            "dimension": "I",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        },
+        {
+            "question_id": 9,
+            "question_text": "我喜欢解决复杂的数学或逻辑问题",
+            "dimension": "I",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        },
+        {
+            "question_id": 10,
+            "question_text": "我对事物的运作原理充满好奇",
+            "dimension": "I",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        },
+        {
+            "question_id": 11,
+            "question_text": "我喜欢画画、设计或创作艺术作品",
+            "dimension": "A",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        },
+        {
+            "question_id": 12,
+            "question_text": "我喜欢写作或创作文学作品",
+            "dimension": "A",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        },
+        {
+            "question_id": 13,
+            "question_text": "我喜欢演奏乐器或唱歌",
+            "dimension": "A",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        },
+        {
+            "question_id": 14,
+            "question_text": "我欣赏艺术、音乐或戏剧表演",
+            "dimension": "A",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        },
+        {
+            "question_id": 15,
+            "question_text": "我喜欢用创新的方式表达自己",
+            "dimension": "A",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        },
+        {
+            "question_id": 16,
+            "question_text": "我喜欢帮助别人解决问题",
+            "dimension": "S",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        },
+        {
+            "question_id": 17,
+            "question_text": "我喜欢教导或培训他人",
+            "dimension": "S",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        },
+        {
+            "question_id": 18,
+            "question_text": "我喜欢参与志愿者或社区服务活动",
+            "dimension": "S",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        },
+        {
+            "question_id": 19,
+            "question_text": "我善于倾听别人的烦恼",
+            "dimension": "S",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        },
+        {
+            "question_id": 20,
+            "question_text": "我喜欢与人合作完成任务",
+            "dimension": "S",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        },
+        {
+            "question_id": 21,
+            "question_text": "我喜欢说服别人接受我的观点",
+            "dimension": "E",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        },
+        {
+            "question_id": 22,
+            "question_text": "我喜欢领导团队或项目",
+            "dimension": "E",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        },
+        {
+            "question_id": 23,
+            "question_text": "我对商业和创业感兴趣",
+            "dimension": "E",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        },
+        {
+            "question_id": 24,
+            "question_text": "我喜欢竞争性的活动",
+            "dimension": "E",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        },
+        {
+            "question_id": 25,
+            "question_text": "我喜欢策划和组织活动",
+            "dimension": "E",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        },
+        {
+            "question_id": 26,
+            "question_text": "我喜欢整理和归档资料",
+            "dimension": "C",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        },
+        {
+            "question_id": 27,
+            "question_text": "我喜欢按照规定的流程做事",
+            "dimension": "C",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        },
+        {
+            "question_id": 28,
+            "question_text": "我对数据和表格处理感兴趣",
+            "dimension": "C",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        },
+        {
+            "question_id": 29,
+            "question_text": "我注重工作的准确性和细节",
+            "dimension": "C",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        },
+        {
+            "question_id": 30,
+            "question_text": "我喜欢制定计划和时间表",
+            "dimension": "C",
+            "options": [
+                {
+                    "option_id": "Y",
+                    "option_text": "符合",
+                    "score": 1
+                },
+                {
+                    "option_id": "N",
+                    "option_text": "不符合",
+                    "score": 0
+                }
+            ]
+        }
+    ],
+    "result_interpretation": {
+        "description": "根据六个维度的得分，取前三个最高分组成霍兰德代码",
+        "dimension_descriptions": {
+            "R": {
+                "high_score_meaning": "你喜欢实际动手的工作，倾向于处理具体的事物而非抽象的概念。",
+                "suitable_careers": [
+                    "工程师",
+                    "技师",
+                    "建筑师",
+                    "厨师",
+                    "运动员",
+                    "农艺师"
+                ],
+                "work_environment": "户外、实验室、车间"
+            },
+            "I": {
+                "high_score_meaning": "你喜欢探索和理解事物，倾向于从事需要思考和分析的工作。",
+                "suitable_careers": [
+                    "科学家",
+                    "研究员",
+                    "医生",
+                    "程序员",
+                    "数据分析师",
+                    "心理学家"
+                ],
+                "work_environment": "研究机构、大学、实验室"
+            },
+            "A": {
+                "high_score_meaning": "你有创造力和艺术感，喜欢通过各种方式表达自己。",
+                "suitable_careers": [
+                    "设计师",
+                    "作家",
+                    "艺术家",
+                    "音乐家",
+                    "演员",
+                    "摄影师"
+                ],
+                "work_environment": "工作室、表演场所、自由职业"
+            },
+            "S": {
+                "high_score_meaning": "你喜欢与人打交道，乐于帮助和服务他人。",
+                "suitable_careers": [
+                    "教师",
+                    "护士",
+                    "心理咨询师",
+                    "社工",
+                    "人力资源",
+                    "客服"
+                ],
+                "work_environment": "学校、医院、社区服务机构"
+            },
+            "E": {
+                "high_score_meaning": "你有领导才能和说服力，喜欢影响和带领他人。",
+                "suitable_careers": [
+                    "企业家",
+                    "销售经理",
+                    "律师",
+                    "政治家",
+                    "市场营销",
+                    "项目经理"
+                ],
+                "work_environment": "企业、政府机构、商业环境"
+            },
+            "C": {
+                "high_score_meaning": "你细心有条理，喜欢按规则办事，注重accuracy和效率。",
+                "suitable_careers": [
+                    "会计师",
+                    "审计员",
+                    "行政人员",
+                    "图书馆员",
+                    "银行职员",
+                    "统计员"
+                ],
+                "work_environment": "办公室、金融机构、政府部门"
+            }
+        }
+    }
+}

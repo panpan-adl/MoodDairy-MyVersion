@@ -1,0 +1,132 @@
+{
+  "test_id": "phq9_v1",
+  "test_name": "PHQ-9 情绪健康自评",
+  "test_name_en": "Patient Health Questionnaire-9",
+  "test_description": "请回想过去两周内，以下问题困扰您的频率。这份问卷可以帮助您了解近期的情绪状态。",
+  "version": "1.0",
+  "category": "mental_health",
+  "icon": "mood",
+  "total_questions": 9,
+  "estimated_time_minutes": 3,
+  "result_type": "score",
+  "score_range": {
+    "min": 0,
+    "max": 27
+  },
+  "disclaimer": "本测试仅供参考，不能替代专业的临床诊断。如您持续感到困扰，建议寻求专业心理咨询师或医生的帮助。",
+  "source": "PHQ-9由Robert L. Spitzer博士、Janet B.W. Williams博士、Kurt Kroenke博士设计，属于公共领域量表。",
+  "global_options": [
+    {
+      "option_id": 0,
+      "option_text": "完全没有",
+      "score": 0
+    },
+    {
+      "option_id": 1,
+      "option_text": "有几天",
+      "score": 1
+    },
+    {
+      "option_id": 2,
+      "option_text": "超过一半的天数",
+      "score": 2
+    },
+    {
+      "option_id": 3,
+      "option_text": "几乎每天",
+      "score": 3
+    }
+  ],
+  "questions": [
+    {
+      "question_id": 1,
+      "question_text": "做事时提不起劲或没有乐趣"
+    },
+    {
+      "question_id": 2,
+      "question_text": "感到心情低落、沮丧或绝望"
+    },
+    {
+      "question_id": 3,
+      "question_text": "入睡困难、睡不安稳或睡眠过多"
+    },
+    {
+      "question_id": 4,
+      "question_text": "感到疲倦或精力不足"
+    },
+    {
+      "question_id": 5,
+      "question_text": "食欲不振或吃太多"
+    },
+    {
+      "question_id": 6,
+      "question_text": "觉得自己很糟糕——或觉得自己失败了，或让自己或家人失望"
+    },
+    {
+      "question_id": 7,
+      "question_text": "对事物专注有困难，例如阅读报纸或看电视"
+    },
+    {
+      "question_id": 8,
+      "question_text": "动作或说话速度缓慢到别人已经察觉？或正好相反——烦躁或坐立不安、动来动去的情况比平常更多"
+    },
+    {
+      "question_id": 9,
+      "question_text": "有不如死掉或用某种方式伤害自己的念头",
+      "is_critical": true,
+      "critical_threshold": 1,
+      "critical_message": "如果您有自我伤害的想法，请立即寻求专业帮助。24小时心理援助热线：400-161-9995"
+    }
+  ],
+  "additional_question": {
+    "question_text": "如果您在以上任何问题中有所困扰，这些问题给您的工作、家务或与他人相处带来了多大的困难？",
+    "options": [
+      { "option_id": 0, "option_text": "完全没有困难" },
+      { "option_id": 1, "option_text": "有一些困难" },
+      { "option_id": 2, "option_text": "非常困难" },
+      { "option_id": 3, "option_text": "极度困难" }
+    ]
+  },
+  "result_interpretation": [
+    {
+      "score_range": [0, 4],
+      "level": "minimal",
+      "level_name": "正常",
+      "color": "#4CAF50",
+      "description": "您目前的情绪状态良好，没有明显的抑郁症状。继续保持健康的生活方式！",
+      "suggestion": "建议继续保持规律作息、适度运动和社交活动。"
+    },
+    {
+      "score_range": [5, 9],
+      "level": "mild",
+      "level_name": "轻度",
+      "color": "#FFEB3B",
+      "description": "您可能存在轻度的情绪困扰。这种情况很常见，通常可以通过自我调节来改善。",
+      "suggestion": "建议尝试规律运动、保证充足睡眠、与朋友家人倾诉。如果持续超过两周，建议咨询专业人士。"
+    },
+    {
+      "score_range": [10, 14],
+      "level": "moderate",
+      "level_name": "中度",
+      "color": "#FF9800",
+      "description": "您可能正在经历中度的情绪困扰，这可能已经对您的日常生活造成了一定影响。",
+      "suggestion": "建议您认真考虑寻求专业的心理咨询帮助。同时，请保持与家人朋友的沟通。"
+    },
+    {
+      "score_range": [15, 19],
+      "level": "moderately_severe",
+      "level_name": "中重度",
+      "color": "#FF5722",
+      "description": "您正经历较为严重的情绪困扰，这可能已经明显影响了您的日常生活和工作。",
+      "suggestion": "强烈建议您尽快寻求专业心理医生或精神科医生的帮助。请记住，寻求帮助是勇敢的表现。"
+    },
+    {
+      "score_range": [20, 27],
+      "level": "severe",
+      "level_name": "重度",
+      "color": "#F44336",
+      "description": "您目前的情绪状态需要重视。请不要独自承受，专业的帮助可以让情况好转。",
+      "suggestion": "请立即寻求专业医生的帮助。24小时心理援助热线：400-161-9995。您不是一个人，有很多人愿意帮助您。"
+    }
+  ]
+}

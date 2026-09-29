@@ -1,0 +1,301 @@
+{
+    "test_id": "daily_mood_v1",
+    "test_name": "每日心情打卡",
+    "test_name_en": "Daily Mood Check-in",
+    "test_description": "花一分钟记录今天的心情状态，帮助您更好地了解自己的情绪变化。",
+    "version": "1.0",
+    "category": "daily_check",
+    "icon": "today",
+    "total_questions": 6,
+    "estimated_time_minutes": 1,
+    "result_type": "mood_score",
+    "score_range": {
+        "min": 6,
+        "max": 30
+    },
+    "allow_multiple_per_day": false,
+    "questions": [
+        {
+            "question_id": 1,
+            "question_text": "今天整体心情如何？",
+            "question_type": "emoji_scale",
+            "options": [
+                {
+                    "option_id": 1,
+                    "emoji": "😢",
+                    "option_text": "很糟糕",
+                    "score": 1
+                },
+                {
+                    "option_id": 2,
+                    "emoji": "😔",
+                    "option_text": "不太好",
+                    "score": 2
+                },
+                {
+                    "option_id": 3,
+                    "emoji": "😐",
+                    "option_text": "一般般",
+                    "score": 3
+                },
+                {
+                    "option_id": 4,
+                    "emoji": "🙂",
+                    "option_text": "还不错",
+                    "score": 4
+                },
+                {
+                    "option_id": 5,
+                    "emoji": "😊",
+                    "option_text": "很开心",
+                    "score": 5
+                }
+            ]
+        },
+        {
+            "question_id": 2,
+            "question_text": "今天的精力状态如何？",
+            "question_type": "scale",
+            "options": [
+                {
+                    "option_id": 1,
+                    "option_text": "精疲力竭",
+                    "score": 1
+                },
+                {
+                    "option_id": 2,
+                    "option_text": "有点疲惫",
+                    "score": 2
+                },
+                {
+                    "option_id": 3,
+                    "option_text": "状态一般",
+                    "score": 3
+                },
+                {
+                    "option_id": 4,
+                    "option_text": "精力充沛",
+                    "score": 4
+                },
+                {
+                    "option_id": 5,
+                    "option_text": "活力满满",
+                    "score": 5
+                }
+            ]
+        },
+        {
+            "question_id": 3,
+            "question_text": "今天睡眠质量怎么样？",
+            "question_type": "scale",
+            "options": [
+                {
+                    "option_id": 1,
+                    "option_text": "几乎没睡",
+                    "score": 1
+                },
+                {
+                    "option_id": 2,
+                    "option_text": "睡眠很差",
+                    "score": 2
+                },
+                {
+                    "option_id": 3,
+                    "option_text": "睡眠一般",
+                    "score": 3
+                },
+                {
+                    "option_id": 4,
+                    "option_text": "睡得不错",
+                    "score": 4
+                },
+                {
+                    "option_id": 5,
+                    "option_text": "睡得很好",
+                    "score": 5
+                }
+            ]
+        },
+        {
+            "question_id": 4,
+            "question_text": "今天有没有感到压力？",
+            "question_type": "scale",
+            "options": [
+                {
+                    "option_id": 1,
+                    "option_text": "压力山大",
+                    "score": 1
+                },
+                {
+                    "option_id": 2,
+                    "option_text": "压力较大",
+                    "score": 2
+                },
+                {
+                    "option_id": 3,
+                    "option_text": "有一点压力",
+                    "score": 3
+                },
+                {
+                    "option_id": 4,
+                    "option_text": "压力较小",
+                    "score": 4
+                },
+                {
+                    "option_id": 5,
+                    "option_text": "轻松自在",
+                    "score": 5
+                }
+            ]
+        },
+        {
+            "question_id": 5,
+            "question_text": "今天主要的情绪是什么？",
+            "question_type": "emotion_select",
+            "allow_multiple": true,
+            "max_select": 3,
+            "options": [
+                {
+                    "option_id": "happy",
+                    "emoji": "😊",
+                    "option_text": "开心",
+                    "category": "positive"
+                },
+                {
+                    "option_id": "calm",
+                    "emoji": "😌",
+                    "option_text": "平静",
+                    "category": "positive"
+                },
+                {
+                    "option_id": "excited",
+                    "emoji": "🤩",
+                    "option_text": "兴奋",
+                    "category": "positive"
+                },
+                {
+                    "option_id": "grateful",
+                    "emoji": "🥰",
+                    "option_text": "感恩",
+                    "category": "positive"
+                },
+                {
+                    "option_id": "hopeful",
+                    "emoji": "🌟",
+                    "option_text": "期待",
+                    "category": "positive"
+                },
+                {
+                    "option_id": "sad",
+                    "emoji": "😢",
+                    "option_text": "难过",
+                    "category": "negative"
+                },
+                {
+                    "option_id": "anxious",
+                    "emoji": "😰",
+                    "option_text": "焦虑",
+                    "category": "negative"
+                },
+                {
+                    "option_id": "angry",
+                    "emoji": "😠",
+                    "option_text": "生气",
+                    "category": "negative"
+                },
+                {
+                    "option_id": "lonely",
+                    "emoji": "😔",
+                    "option_text": "孤独",
+                    "category": "negative"
+                },
+                {
+                    "option_id": "tired",
+                    "emoji": "😩",
+                    "option_text": "疲惫",
+                    "category": "negative"
+                },
+                {
+                    "option_id": "confused",
+                    "emoji": "😕",
+                    "option_text": "迷茫",
+                    "category": "neutral"
+                },
+                {
+                    "option_id": "bored",
+                    "emoji": "😑",
+                    "option_text": "无聊",
+                    "category": "neutral"
+                }
+            ]
+        },
+        {
+            "question_id": 6,
+            "question_text": "今天有什么值得记录的事吗？（可选）",
+            "question_type": "text_input",
+            "required": false,
+            "placeholder": "简单写几句话吧...",
+            "max_length": 200
+        }
+    ],
+    "result_interpretation": [
+        {
+            "score_range": [
+                6,
+                12
+            ],
+            "level": "low",
+            "level_name": "需要关注",
+            "color": "#FF9800",
+            "emoji": "🌧️",
+            "description": "今天似乎有些不太顺利，记得好好休息，照顾好自己。",
+            "suggestion": "要不要画一幅画来释放情绪？或者和我聊聊今天发生的事？"
+        },
+        {
+            "score_range": [
+                13,
+                18
+            ],
+            "level": "medium",
+            "level_name": "状态一般",
+            "color": "#FFEB3B",
+            "emoji": "⛅",
+            "description": "今天的状态还可以，有些起伏是正常的。",
+            "suggestion": "明天会更好的！记得早点休息哦。"
+        },
+        {
+            "score_range": [
+                19,
+                24
+            ],
+            "level": "good",
+            "level_name": "状态不错",
+            "color": "#8BC34A",
+            "emoji": "🌤️",
+            "description": "今天的状态还不错呢！继续保持！",
+            "suggestion": "要不要记录一下今天的开心时刻？"
+        },
+        {
+            "score_range": [
+                25,
+                30
+            ],
+            "level": "excellent",
+            "level_name": "状态很棒",
+            "color": "#4CAF50",
+            "emoji": "☀️",
+            "description": "今天真是美好的一天！你的好心情会感染身边的人！",
+            "suggestion": "太棒了！要不要画一幅开心的画来记录这份好心情？"
+        }
+    ],
+    "trend_analysis": {
+        "enabled": true,
+        "min_days_for_trend": 7,
+        "metrics": [
+            "overall_mood",
+            "energy",
+            "sleep",
+            "stress"
+        ]
+    }
+}

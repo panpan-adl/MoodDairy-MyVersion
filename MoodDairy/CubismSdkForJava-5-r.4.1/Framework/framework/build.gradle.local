@@ -1,0 +1,47 @@
+// 这是为你的项目创建的本地 build.gradle 文件
+// 如果 Framework 模块无法编译，可以尝试使用这个配置
+
+plugins {
+    id 'com.android.library'
+}
+
+android {
+    namespace = "com.live2d.sdk.cubism.framework"
+    compileSdk 36  // 使用固定值，而不是 PROP_COMPILE_SDK_VERSION
+
+    defaultConfig {
+        minSdkVersion 24  // 使用固定值
+        targetSdkVersion 36  // 使用固定值
+        versionCode 1
+        versionName "1.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles "consumer-rules.pro"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+dependencies {
+    // 使用绝对路径或相对于项目根目录的路径
+    compileOnly(files("../../../../app/libs/Live2DCubismCore.aar"))
+    // 或者使用相对路径（从 Framework/framework 目录）
+    // compileOnly(files("../../../Core/android/Live2DCubismCore.aar"))
+
+    testImplementation 'junit:junit:4.13.2'
+}

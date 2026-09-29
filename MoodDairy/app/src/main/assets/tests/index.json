@@ -1,0 +1,117 @@
+{
+    "version": "1.0",
+    "last_updated": "2026-01-05",
+    "total_tests": 6,
+    "categories": [
+        {
+            "category_id": "mental_health",
+            "category_name": "心理健康",
+            "description": "专业的心理健康评估量表",
+            "icon": "favorite"
+        },
+        {
+            "category_id": "daily_check",
+            "category_name": "每日记录",
+            "description": "日常情绪追踪和记录",
+            "icon": "today"
+        },
+        {
+            "category_id": "personality",
+            "category_name": "人格探索",
+            "description": "了解你的性格特点",
+            "icon": "person"
+        },
+        {
+            "category_id": "career",
+            "category_name": "职业发展",
+            "description": "探索适合你的职业方向",
+            "icon": "work"
+        }
+    ],
+    "tests": [
+        {
+            "test_id": "daily_mood_v1",
+            "name": "每日心情打卡",
+            "icon": "today",
+            "category": "daily_check",
+            "question_count": 6,
+            "time_minutes": 1,
+            "description": "花一分钟记录今天的心情",
+            "file_path": "daily_mood/test.json",
+            "sort_order": 1,
+            "is_recommended": true,
+            "recommended_frequency": "daily",
+            "badge": "每日推荐"
+        },
+        {
+            "test_id": "phq9_v1",
+            "name": "PHQ-9 情绪健康自评",
+            "icon": "mood",
+            "category": "mental_health",
+            "question_count": 9,
+            "time_minutes": 3,
+            "description": "评估近两周的情绪状态",
+            "file_path": "phq9/test.json",
+            "sort_order": 2,
+            "is_recommended": true,
+            "recommended_frequency": "biweekly",
+            "badge": "专业量表"
+        },
+        {
+            "test_id": "gad7_v1",
+            "name": "GAD-7 焦虑自评",
+            "icon": "psychology",
+            "category": "mental_health",
+            "question_count": 7,
+            "time_minutes": 2,
+            "description": "评估近两周的焦虑状态",
+            "file_path": "gad7/test.json",
+            "sort_order": 3,
+            "is_recommended": true,
+            "recommended_frequency": "biweekly",
+            "badge": "专业量表"
+        },
+        {
+            "test_id": "mbti_simplified_v1",
+            "name": "MBTI人格探索",
+            "icon": "person",
+            "category": "personality",
+            "question_count": 28,
+            "time_minutes": 8,
+            "description": "探索你的16型人格类型",
+            "file_path": "mbti/test.json",
+            "sort_order": 4,
+            "is_recommended": true,
+            "recommended_frequency": "once",
+            "badge": "热门测试"
+        },
+        {
+            "test_id": "animal_personality_v1",
+            "name": "动物人格测试",
+            "icon": "pets",
+            "category": "personality",
+            "question_count": 18,
+            "time_minutes": 5,
+            "description": "发现你的动物灵魂，获得专属宠物",
+            "file_path": "animal_personality/test.json",
+            "sort_order": 5,
+            "is_recommended": true,
+            "recommended_frequency": "once",
+            "badge": "解锁宠物",
+            "special_reward": "完成测试可解锁专属虚拟宠物伙伴"
+        },
+        {
+            "test_id": "holland_simplified_v1",
+            "name": "霍兰德职业兴趣",
+            "icon": "work",
+            "category": "career",
+            "question_count": 30,
+            "time_minutes": 8,
+            "description": "探索适合你的职业方向",
+            "file_path": "holland/test.json",
+            "sort_order": 6,
+            "is_recommended": false,
+            "recommended_frequency": "yearly"
+        }
+    ]
+}

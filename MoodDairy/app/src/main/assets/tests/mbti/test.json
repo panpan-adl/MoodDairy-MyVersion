@@ -1,0 +1,1119 @@
+{
+    "test_id": "mbti_simplified_v1",
+    "test_name": "MBTI人格探索",
+    "test_name_en": "MBTI Personality Type Indicator",
+    "test_description": "通过28道题目探索你的人格类型，了解自己的思维和行为模式。",
+    "version": "1.0",
+    "category": "personality",
+    "icon": "person",
+    "total_questions": 28,
+    "estimated_time_minutes": 8,
+    "result_type": "mbti_type",
+    "disclaimer": "本测试为简化版MBTI人格测试，仅供娱乐和自我探索参考，不具备专业心理学诊断效力。",
+    "dimensions": [
+        {
+            "dimension_id": "EI",
+            "dimension_name": "能量来源",
+            "pole_a": {
+                "code": "E",
+                "name": "外向",
+                "description": "从与他人互动中获得能量"
+            },
+            "pole_b": {
+                "code": "I",
+                "name": "内向",
+                "description": "从独处和内省中获得能量"
+            }
+        },
+        {
+            "dimension_id": "SN",
+            "dimension_name": "信息获取",
+            "pole_a": {
+                "code": "S",
+                "name": "感觉",
+                "description": "关注具体事实和细节"
+            },
+            "pole_b": {
+                "code": "N",
+                "name": "直觉",
+                "description": "关注可能性和整体模式"
+            }
+        },
+        {
+            "dimension_id": "TF",
+            "dimension_name": "决策方式",
+            "pole_a": {
+                "code": "T",
+                "name": "思考",
+                "description": "基于逻辑和客观分析做决定"
+            },
+            "pole_b": {
+                "code": "F",
+                "name": "情感",
+                "description": "基于价值观和对他人的影响做决定"
+            }
+        },
+        {
+            "dimension_id": "JP",
+            "dimension_name": "生活方式",
+            "pole_a": {
+                "code": "J",
+                "name": "判断",
+                "description": "喜欢有计划、有组织的生活"
+            },
+            "pole_b": {
+                "code": "P",
+                "name": "知觉",
+                "description": "喜欢灵活、随性的生活方式"
+            }
+        }
+    ],
+    "questions": [
+        {
+            "question_id": 1,
+            "question_text": "在社交聚会上，你通常：",
+            "dimension": "EI",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "主动与很多人交谈，包括陌生人",
+                    "scores": {
+                        "E": 2,
+                        "I": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "只与少数熟悉的朋友交谈",
+                    "scores": {
+                        "E": 0,
+                        "I": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 2,
+            "question_text": "忙碌一天后，你更想要：",
+            "dimension": "EI",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "和朋友出去放松一下",
+                    "scores": {
+                        "E": 2,
+                        "I": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "独自待着恢复精力",
+                    "scores": {
+                        "E": 0,
+                        "I": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 3,
+            "question_text": "在团队讨论中，你更倾向于：",
+            "dimension": "EI",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "积极发言，边说边想",
+                    "scores": {
+                        "E": 2,
+                        "I": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "先倾听思考，想好再说",
+                    "scores": {
+                        "E": 0,
+                        "I": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 4,
+            "question_text": "你的朋友圈通常是：",
+            "dimension": "EI",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "很广泛，认识很多人",
+                    "scores": {
+                        "E": 2,
+                        "I": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "比较小，但关系深厚",
+                    "scores": {
+                        "E": 0,
+                        "I": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 5,
+            "question_text": "长时间独处后，你会：",
+            "dimension": "EI",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "渴望出去见见朋友",
+                    "scores": {
+                        "E": 2,
+                        "I": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "感觉很充实和满足",
+                    "scores": {
+                        "E": 0,
+                        "I": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 6,
+            "question_text": "独处时安静地阅读或思考会让你：",
+            "dimension": "EI",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "感到无聊，想找人聊天",
+                    "scores": {
+                        "E": 2,
+                        "I": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "感到放松和享受",
+                    "scores": {
+                        "E": 0,
+                        "I": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 7,
+            "question_text": "工作或学习时，你喜欢：",
+            "dimension": "EI",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "在有人的环境中，偶尔交流",
+                    "scores": {
+                        "E": 2,
+                        "I": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "在安静私密的空间独自完成",
+                    "scores": {
+                        "E": 0,
+                        "I": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 8,
+            "question_text": "学习新东西时，你更喜欢：",
+            "dimension": "SN",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "一步步按顺序学习具体的内容",
+                    "scores": {
+                        "S": 2,
+                        "N": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "先了解整体框架和核心概念",
+                    "scores": {
+                        "S": 0,
+                        "N": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 9,
+            "question_text": "你更相信：",
+            "dimension": "SN",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "亲眼看到的事实和经验",
+                    "scores": {
+                        "S": 2,
+                        "N": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "直觉和预感",
+                    "scores": {
+                        "S": 0,
+                        "N": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 10,
+            "question_text": "描述一件事时，你通常：",
+            "dimension": "SN",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "详细描述具体发生了什么",
+                    "scores": {
+                        "S": 2,
+                        "N": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "概括性地描述整体感受和意义",
+                    "scores": {
+                        "S": 0,
+                        "N": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 11,
+            "question_text": "你更欣赏的人是：",
+            "dimension": "SN",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "脚踏实地、注重细节的人",
+                    "scores": {
+                        "S": 2,
+                        "N": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "富有创意、充满想象力的人",
+                    "scores": {
+                        "S": 0,
+                        "N": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 12,
+            "question_text": "你更喜欢的书籍/电影是：",
+            "dimension": "SN",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "描写真实生活、有实际参考价值的",
+                    "scores": {
+                        "S": 2,
+                        "N": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "充满想象力、探索可能性的",
+                    "scores": {
+                        "S": 0,
+                        "N": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 13,
+            "question_text": "面对问题时，你倾向于：",
+            "dimension": "SN",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "用已验证的方法解决",
+                    "scores": {
+                        "S": 2,
+                        "N": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "寻找新的、创新的解决方案",
+                    "scores": {
+                        "S": 0,
+                        "N": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 14,
+            "question_text": "思考未来时，你更多想的是：",
+            "dimension": "SN",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "基于现有条件可以实现的目标",
+                    "scores": {
+                        "S": 2,
+                        "N": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "各种理想的可能性和愿景",
+                    "scores": {
+                        "S": 0,
+                        "N": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 15,
+            "question_text": "做决定时，你更看重：",
+            "dimension": "TF",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "逻辑分析和客观事实",
+                    "scores": {
+                        "T": 2,
+                        "F": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "对相关人员的影响和感受",
+                    "scores": {
+                        "T": 0,
+                        "F": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 16,
+            "question_text": "朋友向你诉苦时，你更倾向于：",
+            "dimension": "TF",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "帮他们分析问题、提出解决方案",
+                    "scores": {
+                        "T": 2,
+                        "F": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "倾听和共情，给予情感支持",
+                    "scores": {
+                        "T": 0,
+                        "F": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 17,
+            "question_text": "在辩论中，你认为更重要的是：",
+            "dimension": "TF",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "坚持正确的观点，即使可能伤害关系",
+                    "scores": {
+                        "T": 2,
+                        "F": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "维护和谐的关系，即使可能妥协观点",
+                    "scores": {
+                        "T": 0,
+                        "F": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 18,
+            "question_text": "你更欣赏别人说你：",
+            "dimension": "TF",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "思维清晰、逻辑严密",
+                    "scores": {
+                        "T": 2,
+                        "F": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "善解人意、富有同情心",
+                    "scores": {
+                        "T": 0,
+                        "F": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 19,
+            "question_text": "面对批评时，你通常：",
+            "dimension": "TF",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "客观分析批评是否有道理",
+                    "scores": {
+                        "T": 2,
+                        "F": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "首先会感到受伤或沮丧",
+                    "scores": {
+                        "T": 0,
+                        "F": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 20,
+            "question_text": "你认为公平是：",
+            "dimension": "TF",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "对所有人一视同仁，按规则办事",
+                    "scores": {
+                        "T": 2,
+                        "F": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "根据每个人的具体情况灵活处理",
+                    "scores": {
+                        "T": 0,
+                        "F": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 21,
+            "question_text": "选择工作时，你更看重：",
+            "dimension": "TF",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "薪资待遇和发展前景",
+                    "scores": {
+                        "T": 2,
+                        "F": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "工作氛围和人际关系",
+                    "scores": {
+                        "T": 0,
+                        "F": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 22,
+            "question_text": "你的生活方式更接近：",
+            "dimension": "JP",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "有明确的计划和安排",
+                    "scores": {
+                        "J": 2,
+                        "P": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "随性自然，走一步看一步",
+                    "scores": {
+                        "J": 0,
+                        "P": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 23,
+            "question_text": "面对deadline，你通常：",
+            "dimension": "JP",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "提前完成，留有余地",
+                    "scores": {
+                        "J": 2,
+                        "P": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "在最后时刻迸发灵感完成",
+                    "scores": {
+                        "J": 0,
+                        "P": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 24,
+            "question_text": "你的书桌/房间通常是：",
+            "dimension": "JP",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "整洁有序，东西有固定位置",
+                    "scores": {
+                        "J": 2,
+                        "P": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "看起来有些乱，但自己能找到东西",
+                    "scores": {
+                        "J": 0,
+                        "P": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 25,
+            "question_text": "计划改变时，你的反应是：",
+            "dimension": "JP",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "感到不安，希望尽快确定新计划",
+                    "scores": {
+                        "J": 2,
+                        "P": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "觉得无所谓，随机应变就好",
+                    "scores": {
+                        "J": 0,
+                        "P": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 26,
+            "question_text": "做决定时，你更倾向于：",
+            "dimension": "JP",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "尽快做出决定，不喜欢悬而未决",
+                    "scores": {
+                        "J": 2,
+                        "P": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "保持开放，收集更多信息再决定",
+                    "scores": {
+                        "J": 0,
+                        "P": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 27,
+            "question_text": "旅行时，你更喜欢：",
+            "dimension": "JP",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "提前规划好行程和住宿",
+                    "scores": {
+                        "J": 2,
+                        "P": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "走到哪算哪，随遇而安",
+                    "scores": {
+                        "J": 0,
+                        "P": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 28,
+            "question_text": "你更喜欢的工作方式是：",
+            "dimension": "JP",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "有明确的目标和步骤",
+                    "scores": {
+                        "J": 2,
+                        "P": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "灵活自由，可以随时调整",
+                    "scores": {
+                        "J": 0,
+                        "P": 2
+                    }
+                }
+            ]
+        }
+    ],
+    "result_types": {
+        "INTJ": {
+            "name": "建筑师",
+            "emoji": "🏛️",
+            "brief": "战略性的思想家，有远见且独立",
+            "description": "你是一个富有想象力且战略性的思想家，做任何事都有周密的计划。你独立思考，追求知识和能力，对自己和他人都有很高的标准。",
+            "strengths": [
+                "战略思维",
+                "独立自主",
+                "追求卓越",
+                "洞察力强"
+            ],
+            "growth_areas": [
+                "可以更多表达情感",
+                "尝试更灵活地应对变化"
+            ],
+            "compatible_types": [
+                "ENFP",
+                "ENTP"
+            ],
+            "famous_people": [
+                "埃隆·马斯克",
+                "尼古拉·特斯拉",
+                "艾萨克·牛顿"
+            ]
+        },
+        "INTP": {
+            "name": "逻辑学家",
+            "emoji": "🔬",
+            "brief": "创新的发明家，对知识有无尽的渴望",
+            "description": "你热爱理论和抽象思考，喜欢分析复杂的问题。你是原创的思想家，对逻辑和理性有着深深的热爱。",
+            "strengths": [
+                "逻辑分析",
+                "创新思维",
+                "客观公正",
+                "求知欲强"
+            ],
+            "growth_areas": [
+                "可以更关注实际执行",
+                "尝试更主动地社交"
+            ],
+            "compatible_types": [
+                "ENFJ",
+                "ENTJ"
+            ],
+            "famous_people": [
+                "阿尔伯特·爱因斯坦",
+                "比尔·盖茨",
+                "居里夫人"
+            ]
+        },
+        "ENTJ": {
+            "name": "指挥官",
+            "emoji": "⚔️",
+            "brief": "大胆的领导者，总能找到方法达成目标",
+            "description": "你是天生的领导者，果断、有魄力，善于组织和计划。你追求效率和成就，能够带领团队实现目标。",
+            "strengths": [
+                "领导能力",
+                "战略规划",
+                "果断决策",
+                "高效执行"
+            ],
+            "growth_areas": [
+                "可以更多考虑他人感受",
+                "学会适当放松"
+            ],
+            "compatible_types": [
+                "INFP",
+                "INTP"
+            ],
+            "famous_people": [
+                "史蒂夫·乔布斯",
+                "玛格丽特·撒切尔",
+                "拿破仑"
+            ]
+        },
+        "ENTP": {
+            "name": "辩论家",
+            "emoji": "💡",
+            "brief": "聪明好奇的思想家，无法抗拒智力挑战",
+            "description": "你思维敏捷，善于辩论和解决问题。你喜欢挑战传统观念，总是在寻找新的可能性和机会。",
+            "strengths": [
+                "创新能力",
+                "快速学习",
+                "适应能力强",
+                "善于沟通"
+            ],
+            "growth_areas": [
+                "可以更专注于完成项目",
+                "注意顾及他人情绪"
+            ],
+            "compatible_types": [
+                "INFJ",
+                "INTJ"
+            ],
+            "famous_people": [
+                "马克·吐温",
+                "本杰明·富兰克林",
+                "达芬奇"
+            ]
+        },
+        "INFJ": {
+            "name": "提倡者",
+            "emoji": "🌟",
+            "brief": "安静而神秘的理想主义者，同时又是鼓舞人心的领导者",
+            "description": "你是罕见的人格类型，有着强烈的直觉和同理心。你渴望帮助他人，追求人生的意义和目标。",
+            "strengths": [
+                "洞察力强",
+                "富有同情心",
+                "坚定理想",
+                "创造力强"
+            ],
+            "growth_areas": [
+                "学会优先照顾自己",
+                "接受不完美"
+            ],
+            "compatible_types": [
+                "ENTP",
+                "ENFP"
+            ],
+            "famous_people": [
+                "马丁·路德·金",
+                "纳尔逊·曼德拉",
+                "甘地"
+            ]
+        },
+        "INFP": {
+            "name": "调停者",
+            "emoji": "🦋",
+            "brief": "富有诗意和同情心的理想主义者",
+            "description": "你是一个梦想家，内心深处有着丰富的情感世界。你追求真实和意义，渴望让世界变得更美好。",
+            "strengths": [
+                "富有同理心",
+                "创意十足",
+                "忠于价值观",
+                "适应能力强"
+            ],
+            "growth_areas": [
+                "可以更务实",
+                "学会接受负面情绪"
+            ],
+            "compatible_types": [
+                "ENFJ",
+                "ENTJ"
+            ],
+            "famous_people": [
+                "莎士比亚",
+                "约翰·列侬",
+                "威廉·华兹华斯"
+            ]
+        },
+        "ENFJ": {
+            "name": "主人公",
+            "emoji": "🌈",
+            "brief": "有魅力的领导者，能鼓舞和激励他人",
+            "description": "你是天生的领袖，善于理解他人，能够激励和帮助别人发挥潜能。你重视和谐与合作。",
+            "strengths": [
+                "领导魅力",
+                "善解人意",
+                "鼓励他人",
+                "组织能力强"
+            ],
+            "growth_areas": [
+                "学会适当说不",
+                "关注自己的需求"
+            ],
+            "compatible_types": [
+                "INFP",
+                "INTP"
+            ],
+            "famous_people": [
+                "奥巴马",
+                "奥普拉·温弗瑞",
+                "马丁·路德·金"
+            ]
+        },
+        "ENFP": {
+            "name": "竞选者",
+            "emoji": "🎭",
+            "brief": "热情洋溢的创意家，总能找到理由微笑",
+            "description": "你充满热情和创造力，善于与人交往，能够看到生活中的各种可能性。你追求自由和真实。",
+            "strengths": [
+                "创意无限",
+                "热情洋溢",
+                "善于交际",
+                "乐观向上"
+            ],
+            "growth_areas": [
+                "提高专注力",
+                "学会完成开始的项目"
+            ],
+            "compatible_types": [
+                "INFJ",
+                "INTJ"
+            ],
+            "famous_people": [
+                "罗宾·威廉姆斯",
+                "威尔·史密斯",
+                "詹妮弗·安妮斯顿"
+            ]
+        },
+        "ISTJ": {
+            "name": "物流师",
+            "emoji": "📋",
+            "brief": "实际而注重事实的人，可靠性无可质疑",
+            "description": "你务实可靠，注重传统和规则。你是团队中的中流砥柱，总是能够按时完成任务。",
+            "strengths": [
+                "责任心强",
+                "可靠守信",
+                "条理清晰",
+                "注重细节"
+            ],
+            "growth_areas": [
+                "可以更开放地接受新想法",
+                "尝试更灵活"
+            ],
+            "compatible_types": [
+                "ESFP",
+                "ESTP"
+            ],
+            "famous_people": [
+                "沃伦·巴菲特",
+                "安格拉·默克尔",
+                "乔治·华盛顿"
+            ]
+        },
+        "ISFJ": {
+            "name": "守卫者",
+            "emoji": "🛡️",
+            "brief": "非常专注而温暖的守护者",
+            "description": "你是忠诚可靠的守护者，总是默默地关心和照顾身边的人。你重视传统，尊重他人。",
+            "strengths": [
+                "忠诚可靠",
+                "细心周到",
+                "耐心",
+                "务实"
+            ],
+            "growth_areas": [
+                "学会表达自己的需求",
+                "不要过度承担他人的问题"
+            ],
+            "compatible_types": [
+                "ESTP",
+                "ESFP"
+            ],
+            "famous_people": [
+                "碧昂丝",
+                "凯特王妃",
+                "特蕾莎修女"
+            ]
+        },
+        "ESTJ": {
+            "name": "总经理",
+            "emoji": "📊",
+            "brief": "出色的管理者，在管理事物和人方面无与伦比",
+            "description": "你是天生的组织者和管理者，注重效率和秩序。你做事果断，善于执行计划。",
+            "strengths": [
+                "组织能力",
+                "执行力强",
+                "可靠",
+                "直接坦率"
+            ],
+            "growth_areas": [
+                "可以更灵活",
+                "尝试更多倾听"
+            ],
+            "compatible_types": [
+                "ISFP",
+                "ISTP"
+            ],
+            "famous_people": [
+                "亨利·福特",
+                "希拉里·克林顿",
+                "杰克·韦尔奇"
+            ]
+        },
+        "ESFJ": {
+            "name": "执政官",
+            "emoji": "🤝",
+            "brief": "关心他人的社交达人，热衷于帮助别人",
+            "description": "你热情友好，善于照顾他人。你重视和谐与合作，喜欢帮助别人，是可靠的朋友和同事。",
+            "strengths": [
+                "善于社交",
+                "关心他人",
+                "责任心强",
+                "实际"
+            ],
+            "growth_areas": [
+                "不要过于在意他人看法",
+                "学会接受批评"
+            ],
+            "compatible_types": [
+                "ISTP",
+                "ISFP"
+            ],
+            "famous_people": [
+                "泰勒·斯威夫特",
+                "珍妮弗·洛佩兹",
+                "比尔·克林顿"
+            ]
+        },
+        "ISTP": {
+            "name": "鉴赏家",
+            "emoji": "🔧",
+            "brief": "大胆而实际的实验家，善于使用各种工具",
+            "description": "你是独立的问题解决者，喜欢探索事物的运作原理。你冷静、理性，善于在危机中保持镇定。",
+            "strengths": [
+                "动手能力强",
+                "解决问题",
+                "冷静理性",
+                "适应力强"
+            ],
+            "growth_areas": [
+                "可以更多表达情感",
+                "学会长期规划"
+            ],
+            "compatible_types": [
+                "ESFJ",
+                "ESTJ"
+            ],
+            "famous_people": [
+                "克林特·伊斯特伍德",
+                "汤姆·克鲁斯",
+                "迈克尔·乔丹"
+            ]
+        },
+        "ISFP": {
+            "name": "探险家",
+            "emoji": "🎨",
+            "brief": "灵活有魅力的艺术家，时刻准备着探索和体验新事物",
+            "description": "你是敏感的艺术家，欣赏美和和谐。你活在当下，喜欢用行动而不是语言来表达自己。",
+            "strengths": [
+                "艺术感强",
+                "敏感细腻",
+                "忠诚",
+                "灵活"
+            ],
+            "growth_areas": [
+                "学会更长远规划",
+                "尝试更多表达自己"
+            ],
+            "compatible_types": [
+                "ESFJ",
+                "ESTJ"
+            ],
+            "famous_people": [
+                "迈克尔·杰克逊",
+                "鲍勃·迪伦",
+                "玛丽莲·梦露"
+            ]
+        },
+        "ESTP": {
+            "name": "企业家",
+            "emoji": "🚀",
+            "brief": "聪明、精力充沛且善于感知的人，喜欢冒险",
+            "description": "你充满活力，喜欢冒险和挑战。你是行动派，善于在压力下做出快速决定。",
+            "strengths": [
+                "行动力强",
+                "善于交际",
+                "适应力强",
+                "务实"
+            ],
+            "growth_areas": [
+                "可以更多考虑长期后果",
+                "学会耐心"
+            ],
+            "compatible_types": [
+                "ISFJ",
+                "ISTJ"
+            ],
+            "famous_people": [
+                "唐纳德·特朗普",
+                "麦当娜",
+                "杰克·尼克尔森"
+            ]
+        },
+        "ESFP": {
+            "name": "表演者",
+            "emoji": "🎉",
+            "brief": "自发、精力充沛且热情的表演者——生活永远不会无聊",
+            "description": "你是天生的表演者，热爱生活，善于活跃气氛。你活在当下，喜欢用自己的热情感染周围的人。",
+            "strengths": [
+                "热情洋溢",
+                "善于交际",
+                "乐观",
+                "适应力强"
+            ],
+            "growth_areas": [
+                "学会长远规划",
+                "处理负面情绪"
+            ],
+            "compatible_types": [
+                "ISFJ",
+                "ISTJ"
+            ],
+            "famous_people": [
+                "玛丽莲·梦露",
+                "埃尔维斯·普雷斯利",
+                "威尔·史密斯"
+            ]
+        }
+    }
+}

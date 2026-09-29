@@ -1,0 +1,116 @@
+{
+    "test_id": "gad7_v1",
+    "test_name": "GAD-7 焦虑自评",
+    "test_name_en": "Generalized Anxiety Disorder-7",
+    "test_description": "请回想过去两周内，以下问题困扰您的频率。这份问卷可以帮助您了解近期的焦虑状态。",
+    "version": "1.0",
+    "category": "mental_health",
+    "icon": "psychology",
+    "total_questions": 7,
+    "estimated_time_minutes": 2,
+    "result_type": "score",
+    "score_range": {
+        "min": 0,
+        "max": 21
+    },
+    "disclaimer": "本测试仅供参考，不能替代专业的临床诊断。如您持续感到困扰，建议寻求专业心理咨询师或医生的帮助。",
+    "source": "GAD-7由Robert L. Spitzer博士、Janet B.W. Williams博士、Kurt Kroenke博士设计，属于公共领域量表。",
+    "global_options": [
+        {
+            "option_id": 0,
+            "option_text": "完全没有",
+            "score": 0
+        },
+        {
+            "option_id": 1,
+            "option_text": "有几天",
+            "score": 1
+        },
+        {
+            "option_id": 2,
+            "option_text": "超过一半的天数",
+            "score": 2
+        },
+        {
+            "option_id": 3,
+            "option_text": "几乎每天",
+            "score": 3
+        }
+    ],
+    "questions": [
+        {
+            "question_id": 1,
+            "question_text": "感到紧张、焦虑或不安"
+        },
+        {
+            "question_id": 2,
+            "question_text": "无法停止或控制担忧"
+        },
+        {
+            "question_id": 3,
+            "question_text": "对各种各样的事情担忧过多"
+        },
+        {
+            "question_id": 4,
+            "question_text": "很难放松下来"
+        },
+        {
+            "question_id": 5,
+            "question_text": "心绪不宁以至于难以静坐"
+        },
+        {
+            "question_id": 6,
+            "question_text": "容易烦躁或易怒"
+        },
+        {
+            "question_id": 7,
+            "question_text": "感到害怕，好像要发生什么可怕的事情"
+        }
+    ],
+    "result_interpretation": [
+        {
+            "score_range": [
+                0,
+                4
+            ],
+            "level": "minimal",
+            "level_name": "正常",
+            "color": "#4CAF50",
+            "description": "您目前的焦虑水平在正常范围内。这是个好消息！",
+            "suggestion": "继续保持健康的生活节奏，适当运动和休息有助于维持良好的心理状态。"
+        },
+        {
+            "score_range": [
+                5,
+                9
+            ],
+            "level": "mild",
+            "level_name": "轻度焦虑",
+            "color": "#FFEB3B",
+            "description": "您可能存在轻度的焦虑感。适度的焦虑是正常的，但需要关注。",
+            "suggestion": "建议尝试深呼吸练习、冥想或轻度运动来缓解焦虑。如果持续超过两周，可以考虑咨询专业人士。"
+        },
+        {
+            "score_range": [
+                10,
+                14
+            ],
+            "level": "moderate",
+            "level_name": "中度焦虑",
+            "color": "#FF9800",
+            "description": "您可能正在经历中度焦虑，这可能已经影响到日常生活和工作效率。",
+            "suggestion": "建议您认真考虑寻求专业的心理咨询帮助。同时，可以尝试规律作息和减少咖啡因摄入。"
+        },
+        {
+            "score_range": [
+                15,
+                21
+            ],
+            "level": "severe",
+            "level_name": "重度焦虑",
+            "color": "#F44336",
+            "description": "您目前的焦虑水平较高，可能已经严重影响了您的生活质量。",
+            "suggestion": "强烈建议您尽快寻求专业心理医生或精神科医生的帮助。请记住，焦虑症是可以治疗的，寻求帮助是正确的选择。24小时心理援助热线：400-161-9995"
+        }
+    ]
+}

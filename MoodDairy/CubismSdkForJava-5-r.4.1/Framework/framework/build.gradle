@@ -1,0 +1,56 @@
+plugins {
+    id 'com.android.library'
+}
+
+android {
+    namespace = "com.live2d.sdk.cubism.framework"
+    // 使用固定值，避免依赖属性变量
+    compileSdk 36
+    
+    // 不指定 buildToolsVersion，让 Gradle 自动选择
+    // buildToolsVersion "34.0.0"  // 注释掉，使用默认版本
+
+    defaultConfig {
+        minSdkVersion 24
+        targetSdkVersion 36
+        versionCode 1
+        versionName "1.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles "consumer-rules.pro"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        // 使用与主项目相同的 Java 版本（Java 11）
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+    
+    // 抑制编译警告（这些是 SDK 源代码中的警告，不影响功能）
+    tasks.withType(JavaCompile) {
+        options.compilerArgs << '-Xlint:-dep-ann'  // 忽略 @Deprecated 注解警告
+        options.compilerArgs << '-Xlint:-unchecked'  // 忽略未检查操作警告
+    }
+}
+
+// 移除 Java toolchain 配置，使用项目默认的 Java 版本
+// java {
+//     toolchain {
+//         languageVersion = JavaLanguageVersion.of(17)
+//     }
+// }
+
+dependencies {
+    // Framework 模块位于 CubismSdkForJava-5-r.4.1/Framework/framework/
+    // Core AAR 位于 CubismSdkForJava-5-r.4.1/Core/android/
+    // 相对路径：从 framework/ 向上两级到 CubismSdkForJava-5-r.4.1/，然后进入 Core/android/
+    compileOnly(fileTree(dir: '../../Core/android', include: ['Live2DCubismCore.aar']))
+
+    testImplementation 'junit:junit:4.13.2'
+}

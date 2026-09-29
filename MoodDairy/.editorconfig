@@ -1,0 +1,14 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{png,jpg,jpeg,gif,webp,ico,pdf,mp3,m4a,wav,ogg,flac,webm,mp4,mov,mkv,avi,jar,keystore}]
+insert_final_newline = false
+trim_trailing_whitespace = false
+
+[*.{bat,cmd,ps1}]
+end_of_line = crlf

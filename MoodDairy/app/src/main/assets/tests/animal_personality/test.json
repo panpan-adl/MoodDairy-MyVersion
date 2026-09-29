@@ -1,0 +1,622 @@
+{
+    "test_id": "animal_personality_v1",
+    "test_name": "动物人格测试",
+    "test_name_en": "Animal Personality Test",
+    "test_description": "通过18道趣味题目，发现你内心深处的动物灵魂！测试结果将为你匹配专属的小动物伙伴。",
+    "version": "1.0",
+    "category": "personality",
+    "icon": "pets",
+    "total_questions": 18,
+    "estimated_time_minutes": 5,
+    "result_type": "animal_type",
+    "disclaimer": "本测试仅供娱乐，结果将用于为您匹配App中的虚拟宠物伙伴。",
+    "dimensions": [
+        {
+            "dimension_id": "social",
+            "dimension_name": "社交倾向",
+            "pole_a": {
+                "code": "G",
+                "name": "群居型",
+                "description": "喜欢与人相处"
+            },
+            "pole_b": {
+                "code": "S",
+                "name": "独居型",
+                "description": "享受独处时光"
+            }
+        },
+        {
+            "dimension_id": "energy",
+            "dimension_name": "能量水平",
+            "pole_a": {
+                "code": "A",
+                "name": "活跃型",
+                "description": "精力充沛"
+            },
+            "pole_b": {
+                "code": "C",
+                "name": "冷静型",
+                "description": "沉稳内敛"
+            }
+        },
+        {
+            "dimension_id": "thinking",
+            "dimension_name": "思维方式",
+            "pole_a": {
+                "code": "I",
+                "name": "直觉型",
+                "description": "凭感觉行动"
+            },
+            "pole_b": {
+                "code": "L",
+                "name": "逻辑型",
+                "description": "理性分析"
+            }
+        }
+    ],
+    "questions": [
+        {
+            "question_id": 1,
+            "question_text": "周末的理想活动是？",
+            "dimension": "social",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "和朋友们聚会、逛街",
+                    "scores": {
+                        "G": 2,
+                        "S": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "在家追剧、玩游戏",
+                    "scores": {
+                        "G": 0,
+                        "S": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 2,
+            "question_text": "遇到困难时，你会？",
+            "dimension": "social",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "找朋友商量或倾诉",
+                    "scores": {
+                        "G": 2,
+                        "S": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "自己安静地想办法",
+                    "scores": {
+                        "G": 0,
+                        "S": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 3,
+            "question_text": "在聚会上，你通常是？",
+            "dimension": "social",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "活跃的参与者，认识新朋友",
+                    "scores": {
+                        "G": 2,
+                        "S": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "安静的观察者，和熟人聊天",
+                    "scores": {
+                        "G": 0,
+                        "S": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 4,
+            "question_text": "你更喜欢的工作环境是？",
+            "dimension": "social",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "开放式办公室，随时可以交流",
+                    "scores": {
+                        "G": 2,
+                        "S": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "安静的独立空间",
+                    "scores": {
+                        "G": 0,
+                        "S": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 5,
+            "question_text": "长假期间，你更想？",
+            "dimension": "social",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "和朋友一起旅行",
+                    "scores": {
+                        "G": 2,
+                        "S": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "一个人的旅行或宅家",
+                    "scores": {
+                        "G": 0,
+                        "S": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 6,
+            "question_text": "收到好消息时，你会？",
+            "dimension": "social",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "第一时间分享给朋友",
+                    "scores": {
+                        "G": 2,
+                        "S": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "自己默默开心一会儿",
+                    "scores": {
+                        "G": 0,
+                        "S": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 7,
+            "question_text": "早上醒来，你通常？",
+            "dimension": "energy",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "立刻起床，开始新的一天",
+                    "scores": {
+                        "A": 2,
+                        "C": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "赖床一会儿，慢慢清醒",
+                    "scores": {
+                        "A": 0,
+                        "C": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 8,
+            "question_text": "面对新挑战，你会？",
+            "dimension": "energy",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "兴奋地立即开始",
+                    "scores": {
+                        "A": 2,
+                        "C": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "先观察思考再行动",
+                    "scores": {
+                        "A": 0,
+                        "C": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 9,
+            "question_text": "你更喜欢的运动方式是？",
+            "dimension": "energy",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "激烈的球类/跑步等",
+                    "scores": {
+                        "A": 2,
+                        "C": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "瑜伽/散步等舒缓运动",
+                    "scores": {
+                        "A": 0,
+                        "C": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 10,
+            "question_text": "遇到有趣的事，你会？",
+            "dimension": "energy",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "立刻参与进去",
+                    "scores": {
+                        "A": 2,
+                        "C": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "在旁边静静观看",
+                    "scores": {
+                        "A": 0,
+                        "C": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 11,
+            "question_text": "你说话的节奏通常是？",
+            "dimension": "energy",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "语速较快，表达热情",
+                    "scores": {
+                        "A": 2,
+                        "C": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "语速平缓，措辞谨慎",
+                    "scores": {
+                        "A": 0,
+                        "C": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 12,
+            "question_text": "等待排队时，你会？",
+            "dimension": "energy",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "感到焦躁，想做点什么",
+                    "scores": {
+                        "A": 2,
+                        "C": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "耐心等待，放空或看手机",
+                    "scores": {
+                        "A": 0,
+                        "C": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 13,
+            "question_text": "做决定时，你更依赖？",
+            "dimension": "thinking",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "直觉和第一感觉",
+                    "scores": {
+                        "I": 2,
+                        "L": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "理性分析和比较",
+                    "scores": {
+                        "I": 0,
+                        "L": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 14,
+            "question_text": "读书或看电影时，你更喜欢？",
+            "dimension": "thinking",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "情感丰富、引人入胜的故事",
+                    "scores": {
+                        "I": 2,
+                        "L": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "逻辑缜密、烧脑的情节",
+                    "scores": {
+                        "I": 0,
+                        "L": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 15,
+            "question_text": "别人向你描述一个计划时，你首先关注？",
+            "dimension": "thinking",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "这让我感觉怎么样",
+                    "scores": {
+                        "I": 2,
+                        "L": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "这个计划是否可行",
+                    "scores": {
+                        "I": 0,
+                        "L": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 16,
+            "question_text": "遇到意见不合时，你会？",
+            "dimension": "thinking",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "尝试理解对方的感受",
+                    "scores": {
+                        "I": 2,
+                        "L": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "用事实和逻辑说服对方",
+                    "scores": {
+                        "I": 0,
+                        "L": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 17,
+            "question_text": "选择礼物时，你更看重？",
+            "dimension": "thinking",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "对方会有什么情感反应",
+                    "scores": {
+                        "I": 2,
+                        "L": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "礼物是否实用有价值",
+                    "scores": {
+                        "I": 0,
+                        "L": 2
+                    }
+                }
+            ]
+        },
+        {
+            "question_id": 18,
+            "question_text": "面对未知的事物，你更多是？",
+            "dimension": "thinking",
+            "options": [
+                {
+                    "option_id": "A",
+                    "option_text": "好奇和兴奋",
+                    "scores": {
+                        "I": 2,
+                        "L": 0
+                    }
+                },
+                {
+                    "option_id": "B",
+                    "option_text": "谨慎和观察",
+                    "scores": {
+                        "I": 0,
+                        "L": 2
+                    }
+                }
+            ]
+        }
+    ],
+    "result_types": {
+        "GAI": {
+            "animal": "金毛犬",
+            "animal_en": "Golden Retriever",
+            "emoji": "🐕",
+            "image": "golden_retriever.png",
+            "brief": "热情友好的阳光使者",
+            "description": "你就像一只热情洋溢的金毛犬，天生善于社交，对世界充满好奇和热情。你总是能给身边的人带来温暖和快乐，是朋友圈里的开心果。",
+            "traits": [
+                "热情友好",
+                "活力四射",
+                "乐于助人",
+                "温暖治愈"
+            ],
+            "pet_unlocked": "golden_retriever"
+        },
+        "GAL": {
+            "animal": "边境牧羊犬",
+            "animal_en": "Border Collie",
+            "emoji": "🐶",
+            "image": "border_collie.png",
+            "brief": "聪明能干的全能选手",
+            "description": "你像一只聪明的边境牧羊犬，既热爱社交又善于思考。你精力充沛，做事有条理，是团队中不可或缺的核心人物。",
+            "traits": [
+                "聪明机敏",
+                "精力充沛",
+                "领导力强",
+                "善于社交"
+            ],
+            "pet_unlocked": "border_collie"
+        },
+        "GCI": {
+            "animal": "拉布拉多",
+            "animal_en": "Labrador",
+            "emoji": "🐕‍🦺",
+            "image": "labrador.png",
+            "brief": "温顺可靠的贴心伙伴",
+            "description": "你像一只温和的拉布拉多，喜欢与人相处，性格沉稳又充满爱心。你是朋友们最信赖的倾听者，总是能给人安全感。",
+            "traits": [
+                "温和友善",
+                "值得信赖",
+                "善解人意",
+                "忠诚可靠"
+            ],
+            "pet_unlocked": "labrador"
+        },
+        "GCL": {
+            "animal": "大熊猫",
+            "animal_en": "Giant Panda",
+            "emoji": "🐼",
+            "image": "panda.png",
+            "brief": "憨厚可爱的和平使者",
+            "description": "你像一只可爱的大熊猫，外表憨厚内心智慧。你喜欢和朋友在一起，但节奏比较慢，享受悠闲自在的生活方式。",
+            "traits": [
+                "憨厚可爱",
+                "与世无争",
+                "沉稳冷静",
+                "内心坚强"
+            ],
+            "pet_unlocked": "panda"
+        },
+        "SAI": {
+            "animal": "橘猫",
+            "animal_en": "Orange Cat",
+            "emoji": "🐱",
+            "image": "orange_cat.png",
+            "brief": "独立自在的好奇宝宝",
+            "description": "你像一只可爱的橘猫，享受独处时光却又对世界充满好奇。你有自己的节奏和想法，偶尔撒娇卖萌也是你的拿手好戏。",
+            "traits": [
+                "独立自主",
+                "好奇心强",
+                "我行我素",
+                "偶尔粘人"
+            ],
+            "pet_unlocked": "orange_cat"
+        },
+        "SAL": {
+            "animal": "狐狸",
+            "animal_en": "Fox",
+            "emoji": "🦊",
+            "image": "fox.png",
+            "brief": "机智敏锐的独行侠",
+            "description": "你像一只聪明的狐狸，虽然享受独处但充满活力。你思维敏捷，善于观察，总能找到解决问题的聪明办法。",
+            "traits": [
+                "机智灵活",
+                "独立思考",
+                "善于观察",
+                "适应力强"
+            ],
+            "pet_unlocked": "fox"
+        },
+        "SCI": {
+            "animal": "英短猫",
+            "animal_en": "British Shorthair",
+            "emoji": "🐈",
+            "image": "british_shorthair.png",
+            "brief": "优雅淡定的安静灵魂",
+            "description": "你像一只优雅的英短猫，喜欢安静独处，内心丰富而敏感。你有自己的小世界，享受慢节奏的生活方式。",
+            "traits": [
+                "优雅安静",
+                "内心丰富",
+                "敏感细腻",
+                "享受独处"
+            ],
+            "pet_unlocked": "british_shorthair"
+        },
+        "SCL": {
+            "animal": "猫头鹰",
+            "animal_en": "Owl",
+            "emoji": "🦉",
+            "image": "owl.png",
+            "brief": "深邃智慧的思想家",
+            "description": "你像一只沉思的猫头鹰，喜欢在安静中思考深刻的问题。你理性冷静，洞察力强，是朋友们眼中的智者。",
+            "traits": [
+                "深邃智慧",
+                "冷静理性",
+                "洞察力强",
+                "独立思考"
+            ],
+            "pet_unlocked": "owl"
+        }
+    },
+    "scoring_rules": {
+        "description": "根据三个维度的得分组合，确定动物类型",
+        "dimension_calculation": [
+            {
+                "dimension": "social",
+                "threshold": 6,
+                "high": "G",
+                "low": "S"
+            },
+            {
+                "dimension": "energy",
+                "threshold": 6,
+                "high": "A",
+                "low": "C"
+            },
+            {
+                "dimension": "thinking",
+                "threshold": 6,
+                "high": "I",
+                "low": "L"
+            }
+        ]
+    },
+    "pet_system_integration": {
+        "enabled": true,
+        "description": "测试完成后，用户将获得对应的虚拟宠物作为App陪伴伙伴"
+    }
+}

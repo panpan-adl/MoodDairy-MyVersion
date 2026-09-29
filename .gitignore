@@ -1,0 +1,12 @@
+# Environment files
+.env
+**/.env
+
+# Android / Gradle
+.gradle/
+**/build/
+local.properties
+
+# IDE
+.idea/
+.vscode/

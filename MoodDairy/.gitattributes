@@ -1,0 +1,44 @@
+# Default handling
+* text=auto
+
+# Source files should stay LF
+*.kt text eol=lf
+*.kts text eol=lf
+*.java text eol=lf
+*.py text eol=lf
+*.js text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.json text eol=lf
+*.xml text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf
+*.sql text eol=lf
+*.sh text eol=lf
+
+# Windows scripts keep CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary assets
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.mp3 binary
+*.m4a binary
+*.wav binary
+*.ogg binary
+*.flac binary
+*.webm binary
+*.mp4 binary
+*.mov binary
+*.mkv binary
+*.avi binary
+*.jar binary
+*.keystore binary
