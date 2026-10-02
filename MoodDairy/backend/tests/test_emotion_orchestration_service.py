@@ -65,3 +65,54 @@ def test_crisis_message_excludes_drawing_and_video_actions():
     actions = [service.action for service in result.bundle.services]
     assert "open_drawing" not in actions
     assert "play_white_noise" in actions
+
+
+def _face_signal(emotion: str) -> dict:
+    return {"emotion_type": emotion, "recorded_at": None}
+
+
+def test_negative_face_signals_trigger_bundle():
+    face_signals = [_face_signal("sad"), _face_signal("angry"), _face_signal("fear")]
+
+    result = EmotionOrchestrationService().evaluate("今天还行", [], face_signals=face_signals)
+
+    assert result.signal.state == "sustained_low"
+    assert "表情持续低落" in result.signal.trigger_reason
+    assert result.bundle is not None
+
+
+def test_fewer_than_three_negative_face_signals_do_not_trigger():
+    face_signals = [_face_signal("sad"), _face_signal("disgust")]
+
+    result = EmotionOrchestrationService().evaluate("今天还行", [], face_signals=face_signals)
+
+    assert result.signal.state == "normal"
+    assert result.bundle is None
+
+
+def test_positive_face_signals_do_not_trigger():
+    face_signals = [_face_signal("happy"), _face_signal("happy"), _face_signal("neutral")]
+
+    result = EmotionOrchestrationService().evaluate("今天还行", [], face_signals=face_signals)
+
+    assert result.signal.state == "normal"
+    assert result.bundle is None
+
+
+def test_none_face_signals_keeps_default_behavior():
+    result = EmotionOrchestrationService().evaluate("今天还行", [], face_signals=None)
+
+    assert result.signal.state == "normal"
+    assert result.bundle is None
+
+
+def test_crisis_message_takes_precedence_over_face_signals():
+    face_signals = [_face_signal("sad"), _face_signal("angry"), _face_signal("fear")]
+
+    result = EmotionOrchestrationService().evaluate(
+        "我不想活了，想伤害自己", [], face_signals=face_signals
+    )
+
+    assert result.signal.is_crisis is True
+    assert result.bundle is not None
+    assert result.bundle.is_crisis is True

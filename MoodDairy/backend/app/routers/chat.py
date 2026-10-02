@@ -8,7 +8,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 from collections.abc import AsyncIterator
 
@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from openai import OpenAI
 from pydantic import BaseModel, Field, model_validator
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent import PlanStoreError, execute_tool, get_plan_store, get_tool_definition, get_tool_schemas
@@ -24,6 +25,7 @@ from app.agent.client_intents import match_client_action_intent
 from app.agent.tools import build_tool_plan_preview
 from app.config import settings
 from app.database import get_db
+from app.models.database import EmotionRecord
 from app.models.schemas import ErrorResponse
 from app.security.deps import AuthenticatedUserId, ensure_user_match
 from app.security.pii import sanitize_for_llm
@@ -452,21 +454,47 @@ async def _handle_confirmation_turn(request: ChatRequest, db: AsyncSession):
     yield _done_event(final_state="success", reply=reply)
 
 
+async def _fetch_recent_face_signals(
+    db: AsyncSession, user_id: int, window_minutes: int = 15
+) -> List[Dict[str, Any]]:
+    """查询近 window_minutes 分钟内该用户的摄像头表情记录，作为表情信号源。"""
+    try:
+        window_start = datetime.now() - timedelta(minutes=window_minutes)
+        stmt = (
+            select(EmotionRecord.emotion_type, EmotionRecord.recorded_at)
+            .where(EmotionRecord.user_id == user_id)
+            .where(EmotionRecord.source_type == "face_camera")
+            .where(EmotionRecord.recorded_at >= window_start)
+            .order_by(EmotionRecord.recorded_at.desc())
+        )
+        result = await db.execute(stmt)
+        return [
+            {"emotion_type": row.emotion_type, "recorded_at": row.recorded_at}
+            for row in result.all()
+        ]
+    except Exception as exc:
+        logger.warning("Fetch recent face signals failed: %s", exc)
+        return []
+
+
 async def _handle_agent_turn(request: ChatRequest, db: AsyncSession):
     message_text = _normalize_message(request.message, request.merged_image_data_urls)
     full_context = await _build_full_context(request.merged_diary_summaries, message_text)
     valid_images = _valid_images(request.merged_image_data_urls)
+    face_signals = await _fetch_recent_face_signals(db, request.user_id)
     orchestration = EmotionOrchestrationService().evaluate(
         message_text,
         request.merged_diary_summaries,
+        face_signals=face_signals,
     )
 
     logger.info(
-        "Agent turn: user_id=%s message_length=%s summaries=%s images=%s",
+        "Agent turn: user_id=%s message_length=%s summaries=%s images=%s face_signals=%s",
         request.user_id,
         len(message_text),
         len(request.merged_diary_summaries),
         len(valid_images),
+        len(face_signals),
     )
 
     # — Intent shortcut: direct navigation commands are handled without LLM —

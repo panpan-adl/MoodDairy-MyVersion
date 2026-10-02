@@ -149,15 +149,25 @@ class VideoService:
     async def get_video_status(self, task_id: str) -> Dict[str, Any]:
         """
         获取视频生成任务状态
-        
+
+        任务成功后会对无声视频做一次后期配乐（ffmpeg 混入疗愈音乐并上传 OSS），
+        配乐失败时自动降级返回原始无声视频 URL。
+
         Args:
             task_id: 任务ID
-            
+
         Returns:
             dict: {task_id, status, video_url?, error?}
         """
         try:
-            return await self.client.get_video_task_status(task_id)
+            result = await self.client.get_video_task_status(task_id)
+            # 视频渲染成功：异步配乐，替换为带音轨的 URL
+            if result.get("status") == "succeeded" and result.get("video_url"):
+                from .video_audio_mixer import add_background_music
+                result["video_url"] = await add_background_music(
+                    task_id, result["video_url"]
+                )
+            return result
         except VolcengineAPIError as e:
             logger.error(f"获取视频状态失败: {e}")
             raise VideoServiceError(f"获取视频状态失败: {str(e)}")

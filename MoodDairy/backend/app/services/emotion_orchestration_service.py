@@ -62,6 +62,9 @@ CRISIS_TEXT_PATTERNS = (
     "self harm",
 )
 
+FACE_NEGATIVE_EMOTIONS = {"sad", "angry", "fear", "disgust"}
+FACE_SUSTAINED_LOW_THRESHOLD = 3
+
 
 @dataclass(frozen=True)
 class EmotionSignal:
@@ -138,7 +141,12 @@ class EmotionOrchestrationResult:
 class EmotionOrchestrationService:
     """Small deterministic classifier for low-mood service recommendations."""
 
-    def evaluate(self, message: str, summaries: Iterable[Any]) -> EmotionOrchestrationResult:
+    def evaluate(
+        self,
+        message: str,
+        summaries: Iterable[Any],
+        face_signals: Optional[Iterable[Any]] = None,
+    ) -> EmotionOrchestrationResult:
         current_negative = self._message_is_negative(message)
         current_score = 40 if current_negative else 60
         current_emotion = self._infer_message_emotion(message) if current_negative else "中性"
@@ -147,6 +155,13 @@ class EmotionOrchestrationService:
         recent = list(summaries or [])[:5]
         negative_summaries = [item for item in recent if self._summary_is_negative(item)]
         decline = self._recent_decline(recent)
+
+        negative_face_count = 0
+        latest_face_emotion: Optional[str] = None
+        if face_signals:
+            face_items = [item for item in face_signals if self._face_signal_is_negative(item)]
+            negative_face_count = len(face_items)
+            latest_face_emotion = self._face_signal_emotion(face_items[0]) if face_items else None
 
         if is_crisis:
             signal = EmotionSignal(
@@ -178,6 +193,15 @@ class EmotionOrchestrationService:
             )
             return EmotionOrchestrationResult(signal=signal, bundle=self._build_service_bundle(signal))
 
+        if negative_face_count >= FACE_SUSTAINED_LOW_THRESHOLD:
+            signal = EmotionSignal(
+                state="sustained_low",
+                emotion_type=latest_face_emotion or current_emotion,
+                emotion_score=min(current_score, 35),
+                trigger_reason=f"聊天时表情持续低落（近窗内检测到 {negative_face_count} 次负面表情）",
+            )
+            return EmotionOrchestrationResult(signal=signal, bundle=self._build_service_bundle(signal))
+
         if current_negative:
             signal = EmotionSignal(
                 state="low",
@@ -197,6 +221,8 @@ class EmotionOrchestrationService:
         )
 
     def _build_service_bundle(self, signal: EmotionSignal) -> ServiceBundle:
+        from app.services.music_library import normalize_mood
+
         prompt = (
             "一幅安静、柔和、带有治愈感的画面：雨后窗边的微光、温暖的小灯、"
             "逐渐舒展的云层，表达从低落中慢慢恢复的过程"
@@ -209,8 +235,16 @@ class EmotionOrchestrationService:
             payload={"sound_id": "rain", "volume": "0.45"},
             auto_start=True,
         )
+        listen_music = ServiceAction(
+            id="listen_music",
+            title="听点音乐",
+            description="选几首轻柔的音乐，让心情慢慢松下来。",
+            action="open_music",
+            payload={"mood": normalize_mood(signal.emotion_type)},
+        )
         services = [
             auto_white_noise,
+            listen_music,
             ServiceAction(
                 id="healing_drawing",
                 title="生成一幅画",
@@ -333,3 +367,13 @@ class EmotionOrchestrationService:
         if any(score < 1 or score > 100 for score in scores):
             return None
         return scores[1] - scores[0]
+
+    @staticmethod
+    def _face_signal_emotion(item: Any) -> str:
+        value = getattr(item, "emotion_type", None)
+        if value is None and isinstance(item, dict):
+            value = item.get("emotion_type")
+        return str(value or "").strip().lower()
+
+    def _face_signal_is_negative(self, item: Any) -> bool:
+        return self._face_signal_emotion(item) in FACE_NEGATIVE_EMOTIONS

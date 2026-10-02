@@ -3,6 +3,7 @@ package com.example.mydiary.di
 import android.content.Context
 import com.example.mydiary.data.network.DiaryApiService
 import com.example.mydiary.data.repository.DiaryRepository
+import com.example.mydiary.data.repository.EmotionSignalRepository
 import com.example.mydiary.data.repository.MediaRepository
 import com.example.mydiary.data.repository.VoiceRepository
 import com.example.mydiary.util.CacheManager
@@ -75,5 +76,16 @@ object AppModule {
         apiService: DiaryApiService
     ): VoiceRepository {
         return VoiceRepository(apiService)
+    }
+
+    /**
+     * 提供EmotionSignalRepository（摄像头表情信号上报）
+     */
+    @Provides
+    @Singleton
+    fun provideEmotionSignalRepository(
+        apiService: DiaryApiService
+    ): EmotionSignalRepository {
+        return EmotionSignalRepository(apiService)
     }
 }

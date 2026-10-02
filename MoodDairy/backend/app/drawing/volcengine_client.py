@@ -31,7 +31,9 @@ class VolcengineClient:
     """Thin wrapper around Ark/OpenAI-compatible generation APIs."""
 
     IMAGE_MODEL = "doubao-seedream-4-5-251128"
-    VIDEO_MODEL = "doubao-seedance-1-5-pro-251215"
+    # 1.5 Pro 接入点在当前账号下已关闭（InvalidEndpoint.ClosedEndpoint），
+    # 降级使用账号可用的 1.0 Pro Fast（支持图生视频-首帧，请求体兼容）。
+    VIDEO_MODEL = "doubao-seedance-1-0-pro-fast-251015"
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.environ.get("ARK_API_KEY")

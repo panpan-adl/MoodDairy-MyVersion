@@ -1,8 +1,9 @@
-﻿package com.example.mydiary.ui.chat
+package com.example.mydiary.ui.chat
 
 import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.speech.RecognitionListener
@@ -11,6 +12,7 @@ import android.speech.SpeechRecognizer
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,8 +39,10 @@ import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Warning
@@ -82,6 +86,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.compose.AsyncImage
 import com.example.mydiary.data.models.ChatMessage
 import com.example.mydiary.ui.theme.DividerColor
@@ -104,6 +111,7 @@ fun ChatScreen(
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     var inputText by remember { mutableStateOf("") }
     var isListening by remember { mutableStateOf(false) }
     val selectedImageUris = remember { mutableStateListOf<Uri>() }
@@ -112,11 +120,30 @@ fun ChatScreen(
     val serviceBundles by viewModel.serviceBundles.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
+    val emotionConsent by viewModel.emotionConsentGranted.collectAsState()
+    val emotionEnabled by viewModel.emotionCaptureEnabled.collectAsState()
+    val shouldAskEmotionConsent by viewModel.shouldAskEmotionConsent.collectAsState()
+    val isEmotionCapturing by viewModel.isEmotionCapturing.collectAsState()
     val listState = rememberLazyListState()
     val latestInputText by rememberUpdatedState(inputText)
 
     var editingPlan by remember { mutableStateOf<PendingToolPlanUi?>(null) }
     var editingText by remember { mutableStateOf("") }
+
+    var hasCameraPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.CAMERA,
+            ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        hasCameraPermission = granted
+    }
 
     val speechRecognizer = remember(context) {
         if (SpeechRecognizer.isRecognitionAvailable(context)) {
@@ -219,6 +246,28 @@ fun ChatScreen(
         }
     }
 
+    // 表情采集生命周期：前台且已授权+开关开启+有相机权限时启动，后台即停止
+    DisposableEffect(lifecycleOwner, emotionConsent, emotionEnabled, hasCameraPermission) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    if (emotionConsent == true && emotionEnabled && hasCameraPermission) {
+                        viewModel.startEmotionCapture(lifecycleOwner)
+                    }
+                }
+                Lifecycle.Event.ON_PAUSE -> {
+                    viewModel.stopEmotionCapture()
+                }
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            viewModel.stopEmotionCapture()
+        }
+    }
+
     LaunchedEffect(userId) {
         viewModel.initializeChat(userId)
     }
@@ -256,7 +305,10 @@ fun ChatScreen(
             ),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            ChatTopBar(onNavigateToLive2D = onNavigateToLive2D)
+            ChatTopBar(
+                onNavigateToLive2D = onNavigateToLive2D,
+                isEmotionCapturing = isEmotionCapturing,
+            )
 
             errorMessage?.let { error ->
                 Surface(
@@ -406,6 +458,39 @@ fun ChatScreen(
             },
         )
     }
+
+    // 表情识别授权弹窗：首次进入聊天页（尚无授权记录）时强制用户做出选择
+    if (shouldAskEmotionConsent) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text(text = "表情识别授权") },
+            text = {
+                Text(
+                    text = "为了更准确地理解你的情绪状态，聊天时我们会定时通过前置摄像头进行表情识别。\n\n" +
+                        "识别全部在你的设备本地完成，照片不会离开手机，也不会被保存；" +
+                        "我们只向服务器上传情绪标签（如 happy、sad）。\n\n" +
+                        "你可以随时关闭此功能。",
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.setEmotionCaptureConsent(true)
+                        if (!hasCameraPermission) {
+                            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                        }
+                    },
+                ) {
+                    Text("同意")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.setEmotionCaptureConsent(false) }) {
+                    Text("拒绝")
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -505,7 +590,8 @@ private fun EditPlanDialog(
 
 @Composable
 private fun ChatTopBar(
-    onNavigateToLive2D: () -> Unit = {}
+    onNavigateToLive2D: () -> Unit = {},
+    isEmotionCapturing: Boolean = false,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -550,6 +636,17 @@ private fun ChatTopBar(
             }
 
             Spacer(modifier = Modifier.weight(1f))
+
+            // 表情采集指示点：采集期间显示小相机图标
+            if (isEmotionCapturing) {
+                Icon(
+                    imageVector = Icons.Default.PhotoCamera,
+                    contentDescription = "emotion_capture_active",
+                    tint = Primary,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            }
 
             IconButton(onClick = { }) {
                 Icon(
@@ -647,6 +744,7 @@ private fun EmotionServiceBundleSection(
 private fun serviceActionIcon(action: String, id: String): ImageVector {
     return when {
         action == "play_white_noise" -> Icons.Default.PlayArrow
+        action == "open_music" -> Icons.Default.MusicNote
         action == "open_drawing" -> Icons.Default.Palette
         action == "open_test" || id.contains("todo") -> Icons.Default.Checklist
         action == "continue_chat" -> Icons.Default.Chat

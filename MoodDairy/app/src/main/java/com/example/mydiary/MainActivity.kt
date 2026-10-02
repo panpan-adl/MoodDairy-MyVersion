@@ -1,4 +1,4 @@
-﻿package com.example.mydiary
+package com.example.mydiary
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -54,6 +54,8 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.mydiary.data.local.SessionManager
+import com.example.mydiary.music.MusicFloatingLayer
+import com.example.mydiary.music.MusicWidgetController
 import com.example.mydiary.navigation.NavGraph
 import com.example.mydiary.navigation.Routes
 import com.example.mydiary.ui.theme.MyDiaryTheme
@@ -67,19 +69,28 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var sessionManager: SessionManager
 
+    @Inject
+    lateinit var musicWidgetController: MusicWidgetController
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             MyDiaryTheme {
-                MainScreen(sessionManager = sessionManager)
+                MainScreen(
+                    sessionManager = sessionManager,
+                    musicWidgetController = musicWidgetController,
+                )
             }
         }
     }
 }
 
 @Composable
-fun MainScreen(sessionManager: SessionManager) {
+fun MainScreen(
+    sessionManager: SessionManager,
+    musicWidgetController: MusicWidgetController,
+) {
     val navController = rememberNavController()
     var showQuickActions by remember { mutableStateOf(false) }
 
@@ -169,6 +180,9 @@ fun MainScreen(sessionManager: SessionManager) {
                 }
             )
         }
+
+        // 「听点音乐」悬浮层：推荐弹窗 + 可拖拽迷你播放条，跨页面存活
+        MusicFloatingLayer(controller = musicWidgetController)
     }
 }
 

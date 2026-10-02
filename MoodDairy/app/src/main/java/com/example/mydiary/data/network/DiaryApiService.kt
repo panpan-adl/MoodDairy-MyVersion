@@ -350,6 +350,33 @@ interface DiaryApiService {
         @Field("text") text: String
     ): Response<EmotionResult>
     
+    // ============================================================================
+    // 面部表情识别相关API (Face Emotion APIs)
+    // ============================================================================
+
+    /**
+     * 上报摄像头表情识别结果
+     * POST /face-emotion/report
+     *
+     * 聊天页前台静默采集的表情标签，经本地上报写入 emotion_records（source_type='face_camera'）
+     *
+     * @param request 表情标签、置信度与采集时间
+     */
+    @POST("face-emotion/report")
+    suspend fun reportFaceEmotion(
+        @Body request: FaceEmotionReportRequest
+    ): Response<FaceEmotionReportResponse>
+
+    /**
+     * 按心情获取疗愈音乐推荐
+     * GET /music/recommendations?mood=sad&limit=5
+     */
+    @GET("music/recommendations")
+    suspend fun getMusicRecommendations(
+        @Query("mood") mood: String,
+        @Query("limit") limit: Int = 5
+    ): Response<MusicRecommendationResponse>
+
     /**
      * 查询 ASR 转写状态
      * GET /voice/asr-status

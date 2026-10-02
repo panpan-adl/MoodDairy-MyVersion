@@ -4,9 +4,12 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import android.webkit.MimeTypeMap
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.mydiary.capture.EmotionCaptureController
 import com.example.mydiary.data.local.ChatHistoryStorage
+import com.example.mydiary.data.local.EmotionCapturePrefs
 import com.example.mydiary.data.models.ChatConfirmation
 import com.example.mydiary.data.models.ChatContext
 import com.example.mydiary.data.models.ChatMessage
@@ -19,8 +22,10 @@ import com.example.mydiary.data.network.ApiResult
 import com.example.mydiary.data.network.DiaryApiService
 import com.example.mydiary.data.network.SafeApiCall
 import com.example.mydiary.data.repository.DrawingRepository
+import com.example.mydiary.data.repository.EmotionSignalRepository
 import com.example.mydiary.data.repository.VoiceRepository
 import com.example.mydiary.di.AuthInterceptor
+import com.example.mydiary.music.MusicWidgetController
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
@@ -33,10 +38,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -52,6 +60,10 @@ class ChatViewModel @Inject constructor(
     private val chatHistoryStorage: ChatHistoryStorage,
     private val drawingRepository: DrawingRepository,
     private val voiceRepository: VoiceRepository,
+    private val emotionCaptureController: EmotionCaptureController,
+    private val emotionSignalRepository: EmotionSignalRepository,
+    private val emotionCapturePrefs: EmotionCapturePrefs,
+    private val musicWidgetController: MusicWidgetController,
     @Named("shortTimeout") private val okHttpClient: OkHttpClient,
     private val authInterceptor: AuthInterceptor,
     private val gson: Gson,
@@ -79,6 +91,26 @@ class ChatViewModel @Inject constructor(
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
+    // ============================================================================
+    // 摄像头表情识别 (Face Emotion Capture)
+    // ============================================================================
+
+    /** 用户是否已授权表情识别；null 表示尚未询问过 */
+    val emotionConsentGranted: StateFlow<Boolean?> = emotionCapturePrefs.consentGranted
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /** 表情识别功能开关 */
+    val emotionCaptureEnabled: StateFlow<Boolean> = emotionCapturePrefs.enabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    /** 是否需要弹出授权弹窗（DataStore 加载完成且尚未询问过时为 true，避免初始帧闪弹窗） */
+    val shouldAskEmotionConsent: StateFlow<Boolean> = emotionCapturePrefs.consentGranted
+        .map { it == null }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    private val _isEmotionCapturing = MutableStateFlow(false)
+    val isEmotionCapturing: StateFlow<Boolean> = _isEmotionCapturing.asStateFlow()
 
     private var userId: Long = 0L
     private var conversationId: String = ""
@@ -311,6 +343,10 @@ class ChatViewModel @Inject constructor(
                         isFromUser = false,
                     ),
                 )
+            }
+            "open_music" -> {
+                // 音乐弹窗/悬浮条由全局控制器管理，跨页面存活
+                musicWidgetController.openRecommendations(action.payload["mood"].orEmpty())
             }
             else -> {
                 _clientActions.tryEmit(
@@ -550,6 +586,44 @@ class ChatViewModel @Inject constructor(
 
     fun showError(message: String) {
         _errorMessage.value = message
+    }
+
+    /**
+     * 记录用户对表情识别的授权选择
+     */
+    fun setEmotionCaptureConsent(granted: Boolean) {
+        viewModelScope.launch {
+            emotionCapturePrefs.setConsentGranted(granted)
+        }
+    }
+
+    /**
+     * 启动聊天页前台表情采集
+     *
+     * 仅在用户已授权、开关开启且已授予相机权限时由 ChatScreen 调用。
+     * 采集结果经 EmotionSignalRepository 去重后上报后端。
+     */
+    fun startEmotionCapture(lifecycleOwner: LifecycleOwner) {
+        if (_isEmotionCapturing.value) {
+            return
+        }
+        val started = emotionCaptureController.start(lifecycleOwner) { label, confidence ->
+            viewModelScope.launch {
+                emotionSignalRepository.report(label, confidence)
+            }
+        }
+        _isEmotionCapturing.value = started
+    }
+
+    /**
+     * 停止表情采集（聊天页不可见时调用）
+     */
+    fun stopEmotionCapture() {
+        if (!_isEmotionCapturing.value) {
+            return
+        }
+        emotionCaptureController.stop()
+        _isEmotionCapturing.value = false
     }
 
     private suspend fun uploadImagesForChat(imageUris: List<String>): ApiResult<List<String>> =
