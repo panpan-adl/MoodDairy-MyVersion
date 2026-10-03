@@ -82,6 +82,10 @@ class ChatViewModel @Inject constructor(
 
     private val _serviceBundles = MutableStateFlow<List<EmotionServiceBundleUi>>(emptyList())
     val serviceBundles: StateFlow<List<EmotionServiceBundleUi>> = _serviceBundles.asStateFlow()
+    private val _faceEmotionPrompt = MutableStateFlow<EmotionServiceBundleUi?>(null)
+    val faceEmotionPrompt = _faceEmotionPrompt.asStateFlow()
+    private val _faceEmotionStatus = MutableStateFlow("等待摄像头识别")
+    val faceEmotionStatus = _faceEmotionStatus.asStateFlow()
 
     private val _clientActions = MutableSharedFlow<ChatClientAction>(extraBufferCapacity = 8)
     val clientActions: SharedFlow<ChatClientAction> = _clientActions.asSharedFlow()
@@ -111,6 +115,7 @@ class ChatViewModel @Inject constructor(
 
     private val _isEmotionCapturing = MutableStateFlow(false)
     val isEmotionCapturing: StateFlow<Boolean> = _isEmotionCapturing.asStateFlow()
+    private var emotionCaptureGeneration = 0L
 
     private var userId: Long = 0L
     private var conversationId: String = ""
@@ -363,6 +368,12 @@ class ChatViewModel @Inject constructor(
         _serviceBundles.value = _serviceBundles.value.filterNot { it.bundleId == bundleId }
     }
 
+    fun dismissFaceEmotionPrompt(showSuggestions: Boolean) {
+        val prompt = _faceEmotionPrompt.value ?: return
+        if (!showSuggestions) dismissServiceBundle(prompt.bundleId)
+        _faceEmotionPrompt.value = null
+    }
+
     private suspend fun streamReply(request: ChatRequest, assistantTimestamp: Long) {
         withContext(Dispatchers.IO) {
             // 去掉日志等拦截器以免干扰 SSE；保留 JWT 认证
@@ -607,11 +618,28 @@ class ChatViewModel @Inject constructor(
         if (_isEmotionCapturing.value) {
             return
         }
-        val started = emotionCaptureController.start(lifecycleOwner) { label, confidence ->
-            viewModelScope.launch {
-                emotionSignalRepository.report(label, confidence)
-            }
-        }
+        val generation = ++emotionCaptureGeneration
+        _faceEmotionStatus.value = "等待摄像头识别"
+        val started = emotionCaptureController.start(
+            lifecycleOwner,
+            onResult = { label, confidence, duration ->
+                viewModelScope.launch {
+                    if (generation != emotionCaptureGeneration) return@launch
+                    val response = emotionSignalRepository.report(label, confidence, duration)
+                    if (_isEmotionCapturing.value && generation == emotionCaptureGeneration) response?.serviceBundle?.let { event ->
+                        handleServiceBundleEvent(event)
+                        _faceEmotionPrompt.value = _serviceBundles.value.lastOrNull { it.bundleId == event.bundleId }
+                    }
+                }
+            },
+            onObservation = { label, confidence ->
+                val name = mapOf("sad" to "难过", "angry" to "生气", "fear" to "害怕", "disgust" to "厌恶",
+                    "happy" to "开心", "surprise" to "惊讶", "neutral" to "中性")[label]
+                _faceEmotionStatus.value = if (name == null) "未检测到人脸，请正对摄像头"
+                    else "识别：$name · ${(confidence * 100).toInt()}%" + if (confidence < 0.40f) "（置信度不足）" else ""
+            },
+        )
+        if (!started) _faceEmotionStatus.value = "摄像头或表情模型不可用"
         _isEmotionCapturing.value = started
     }
 
@@ -623,7 +651,9 @@ class ChatViewModel @Inject constructor(
             return
         }
         emotionCaptureController.stop()
+        emotionCaptureGeneration++
         _isEmotionCapturing.value = false
+        _faceEmotionPrompt.value = null
     }
 
     private suspend fun uploadImagesForChat(imageUris: List<String>): ApiResult<List<String>> =

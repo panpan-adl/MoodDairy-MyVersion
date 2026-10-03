@@ -141,6 +141,18 @@ class EmotionOrchestrationResult:
 class EmotionOrchestrationService:
     """Small deterministic classifier for low-mood service recommendations."""
 
+    def evaluate_sustained_face(self, emotion: str, confidence: float, duration_ms: int) -> Optional[ServiceBundle]:
+        """React to continuous local observations without waiting for a chat message."""
+        if emotion not in FACE_NEGATIVE_EMOTIONS or confidence < 0.40 or duration_ms < 10_000:
+            return None
+        signal = EmotionSignal(
+            state="sustained_low",
+            emotion_type=emotion,
+            emotion_score=35,
+            trigger_reason=f"连续识别到约 {duration_ms // 1000} 秒负面表情",
+        )
+        return self._build_service_bundle(signal)
+
     def evaluate(
         self,
         message: str,

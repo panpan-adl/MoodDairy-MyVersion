@@ -118,6 +118,8 @@ fun ChatScreen(
     val messages by viewModel.messages.collectAsState()
     val pendingPlans by viewModel.pendingPlans.collectAsState()
     val serviceBundles by viewModel.serviceBundles.collectAsState()
+    val faceEmotionPrompt by viewModel.faceEmotionPrompt.collectAsState()
+    val faceEmotionStatus by viewModel.faceEmotionStatus.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
     val emotionConsent by viewModel.emotionConsentGranted.collectAsState()
@@ -309,6 +311,14 @@ fun ChatScreen(
                 onNavigateToLive2D = onNavigateToLive2D,
                 isEmotionCapturing = isEmotionCapturing,
             )
+            if (isEmotionCapturing) {
+                Text(
+                    text = faceEmotionStatus,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
 
             errorMessage?.let { error ->
                 Surface(
@@ -439,6 +449,20 @@ fun ChatScreen(
                 },
             )
         }
+    }
+
+    if (faceEmotionPrompt != null && !shouldAskEmotionConsent && editingPlan == null) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissFaceEmotionPrompt(false) },
+            title = { Text("想休息一下吗？") },
+            text = { Text("我注意到你可能有些不舒服。表情识别也可能有误，你愿意看看音乐、放松和心情记录建议吗？") },
+            confirmButton = {
+                TextButton(onClick = { viewModel.dismissFaceEmotionPrompt(true) }) { Text("看看建议") }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissFaceEmotionPrompt(false) }) { Text("暂时不用") }
+            },
+        )
     }
 
     if (editingPlan != null) {
