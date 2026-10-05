@@ -4,6 +4,7 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonParser
 import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import retrofit2.Response
 
 object SafeApiCall {
@@ -29,6 +30,8 @@ object SafeApiCall {
                     message = parseErrorMessage(response),
                 )
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (io: IOException) {
             ApiResult.Error(
                 code = -1,

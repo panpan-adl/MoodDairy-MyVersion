@@ -6089,3 +6089,5 @@ CubismSdkForJava-5-r.4.1/**/.transforms/
 .gradle-user/wrapper/dists/gradle-8.13-bin/5xuhj0ry160q40clulazy9h7d/gradle-8.13/lib/plugins/sshd-core-2.12.1.jar
 .gradle-user/wrapper/dists/gradle-8.13-bin/5xuhj0ry160q40clulazy9h7d/gradle-8.13/lib/plugins/sshd-sftp-2.12.1.jar
 .gradle-user/wrapper/dists/gradle-8.13-bin/5xuhj0ry160q40clulazy9h7d/gradle-8.13/lib/plugins/testng-6.3.1.jar
+
+.model-tools/

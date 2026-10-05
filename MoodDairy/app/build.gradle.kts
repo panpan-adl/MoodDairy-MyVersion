@@ -154,10 +154,9 @@ dependencies {
     implementation("androidx.camera:camera-video:1.4.1")
     implementation("androidx.camera:camera-view:1.4.1")
 
-    // ML Kit 人脸检测 + TFLite 表情分类（聊天页摄像头表情识别）
-    // 2.17.0 起支持 FULLY_CONNECTED op v12（新版 TF 导出的 TFLite 需要）
+    // ML Kit 人脸检测 + ONNX Runtime 本地表情分类
     implementation("com.google.mlkit:face-detection:16.1.7")
-    implementation("org.tensorflow:tensorflow-lite:2.17.0")
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.23.2")
 
     // Media3 (音频播放)
     implementation("androidx.media3:media3-exoplayer:1.2.1")
