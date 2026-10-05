@@ -942,13 +942,14 @@ private fun ChatInputBar(
                 OutlinedTextField(
                     value = inputText,
                     onValueChange = onInputChange,
-                    enabled = enabled,
+                    // 2026-10-02: AI 回复期间也允许输入，仅发送按钮在回复完成后才可用
+                    enabled = true,
                     modifier = Modifier
                         .weight(1f)
                         .padding(horizontal = 8.dp),
                     placeholder = {
                         Text(
-                            text = if (enabled) "输入消息..." else "处理中...",
+                            text = if (enabled) "输入消息..." else "正在回复中，可以先输入...",
                             color = TextTertiary,
                         )
                     },

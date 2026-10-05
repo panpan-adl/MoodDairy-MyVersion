@@ -73,6 +73,12 @@ object SafeApiCall {
 
         val obj = element.asJsonObject
         val detail = obj.get("detail")
+
+        // FastAPI/Pydantic 校验错误项（含 msg + loc），转为友好中文提示
+        if (obj.has("msg") && obj.has("loc")) {
+            return formatValidationError(obj)
+        }
+
         val error = obj.get("error")
         val message = obj.get("message")
 
@@ -82,6 +88,42 @@ object SafeApiCall {
             error?.let(::extractBestMessage),
             element.toString(),
         )
+    }
+
+    /**
+     * 将 Pydantic 校验错误转为友好中文，如 "密码至少需要 6 个字符"
+     */
+    private fun formatValidationError(obj: com.google.gson.JsonObject): String {
+        val field = obj.getAsJsonArray("loc")
+            ?.lastOrNull()
+            ?.takeIf { it.isJsonPrimitive }
+            ?.asString
+            .orEmpty()
+        val fieldName = when (field) {
+            "username" -> "用户名"
+            "password" -> "密码"
+            "nickname" -> "昵称"
+            "phone" -> "手机号"
+            "email" -> "邮箱"
+            "birthday" -> "生日"
+            else -> field
+        }
+        val type = obj.get("type")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty()
+        val ctx = obj.getAsJsonObject("ctx")
+        val reason = when (type) {
+            "string_too_short" -> {
+                val min = ctx?.get("min_length")?.takeIf { it.isJsonPrimitive }?.asInt
+                if (min != null) "至少需要 $min 个字符" else "长度不足"
+            }
+            "string_too_long" -> {
+                val max = ctx?.get("max_length")?.takeIf { it.isJsonPrimitive }?.asInt
+                if (max != null) "不能超过 $max 个字符" else "长度超限"
+            }
+            "missing" -> "不能为空"
+            "value_error" -> "格式不正确"
+            else -> obj.get("msg")?.takeIf { it.isJsonPrimitive }?.asString ?: "输入不合法"
+        }
+        return if (fieldName.isBlank()) reason else "$fieldName$reason"
     }
 
     private fun extractArrayMessage(array: JsonArray): String {

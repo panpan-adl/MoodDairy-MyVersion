@@ -173,7 +173,7 @@ class ChatRequest(BaseModel):
     """Unified chat request payload for both normal and confirmation turns."""
 
     user_id: int = Field(..., description="User ID")
-    message: str = Field(default="", max_length=1000, description="User message")
+    message: str = Field(default="", max_length=2000, description="User message")
     conversation_id: str = Field(..., min_length=1, max_length=128)
     context: ChatContext = Field(default_factory=ChatContext)
     confirmation: Optional[ChatConfirmation] = None
@@ -190,8 +190,8 @@ class ChatRequest(BaseModel):
         if self.confirmation is None and not message_text and not images:
             raise ValueError("message cannot be blank when confirmation is null")
 
-        if self.confirmation is not None and self.message and len(self.message) > 1000:
-            raise ValueError("message must be <= 1000 characters")
+        if self.confirmation is not None and self.message and len(self.message) > 2000:
+            raise ValueError("message must be <= 2000 characters")
 
         return self
 
@@ -280,23 +280,47 @@ async def chat_stream(
     async def event_generator():
         yield _encode_sse({"type": "start", "timestamp": datetime.now().isoformat()})
 
-        try:
-            if request.confirmation is not None:
-                async for event in _handle_confirmation_turn(request, db):
-                    yield _encode_sse(event)
-            else:
-                async for event in _handle_agent_turn(request, db):
-                    yield _encode_sse(event)
-        except Exception as exc:
-            logger.error("Streaming chat request failed: user_id=%s error=%s", request.user_id, exc, exc_info=True)
-            yield _encode_sse(
-                _done_event(
-                    final_state="error",
-                    reply="",
-                    error_code="STREAM_INTERNAL_ERROR",
-                    error_message=f"Chat request failed: {exc}",
+        # 2026-10-02: 大模型首字延迟可达 40s+，App 读超时 30s 会断连。
+        # 在等待期间每 12s 发送 SSE 注释行(": keepalive")保活，App 端解析器会忽略它。
+        queue: asyncio.Queue = asyncio.Queue()
+
+        async def run_turn():
+            try:
+                if request.confirmation is not None:
+                    async for event in _handle_confirmation_turn(request, db):
+                        await queue.put(("event", event))
+                else:
+                    async for event in _handle_agent_turn(request, db):
+                        await queue.put(("event", event))
+            except Exception as exc:
+                logger.error("Streaming chat request failed: user_id=%s error=%s", request.user_id, exc, exc_info=True)
+                await queue.put(
+                    (
+                        "event",
+                        _done_event(
+                            final_state="error",
+                            reply="",
+                            error_code="STREAM_INTERNAL_ERROR",
+                            error_message=f"Chat request failed: {exc}",
+                        ),
+                    )
                 )
-            )
+            finally:
+                await queue.put(("stop", None))
+
+        turn_task = asyncio.create_task(run_turn())
+        try:
+            while True:
+                try:
+                    kind, event = await asyncio.wait_for(queue.get(), timeout=12.0)
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+                    continue
+                if kind == "stop":
+                    break
+                yield _encode_sse(event)
+        finally:
+            turn_task.cancel()
 
     return StreamingResponse(
         event_generator(),
@@ -937,13 +961,16 @@ def _normalize_message(message: str, image_data_urls: List[str]) -> str:
 
 async def _build_agent_messages(user_message: str, context: str, valid_images: List[str]) -> List[Dict[str, Any]]:
     system_prompt = (
-        "你是一位温暖、富有同理心的日记助手，擅长倾听和陪伴。\n\n"
+        "你是小嘉然，一位温暖、富有同理心又真正有用的日记助手，擅长倾听、陪伴，也擅长解决实际问题。\n\n"
         "【核心原则】\n"
-        "1. 倾听优先：先理解用户的感受，再给予回应。不要急于给建议或解决方案。\n"
-        "2. 多轮对话：心理咨询和情感支持需要通过多轮对话深入了解。不要一轮就给出完整答案或建议列表。\n"
-        "3. 引导探索：用开放式问题帮助用户思考和表达，如'能再多说说吗'、'那一刻你是什么感受'、'你希望发生什么'。\n"
-        "4. 共情回应：先确认和回应用户的情绪，再讨论具体问题。\n"
-        "5. 个性化关怀：结合用户的日记内容给出有针对性的回应。\n\n"
+        "1. 先判断用户要什么：\n"
+        "   - 情绪倾诉（难过、焦虑、压力大等）→ 先共情倾听，再温和引导，不急着讲道理。\n"
+        "   - 实际问题（牙疼怎么办、失眠怎么缓解、怎么安排时间等）→ 直接给出具体、可操作、完整的答案，\n"
+        "     可以分点列出步骤、注意事项和什么情况该就医/求助，像一个既专业又贴心的朋友。\n"
+        "   - 两者混合时：先一句话接住情绪，然后马上给实用帮助。\n"
+        "2. 回答要充实：用户问了具体问题，就要给出足够详细、真正能用的内容，不要只回一两句空话，\n"
+        "   也不要只回反问句。反问只能作为补充，不能代替答案。\n"
+        "3. 个性化关怀：结合用户的日记内容给出有针对性的回应。\n\n"
         "【什么时候调用工具】\n"
         "- 页面跳转：用户想打开某个页面时，立即使用对应的客户端动作工具（无需确认）\n"
         "  · '打开白噪音'/'播放白噪音'/'听下雨声' → open_white_noise\n"
@@ -955,16 +982,15 @@ async def _build_agent_messages(user_message: str, context: str, valid_images: L
         "  · 查询日记 → search_diaries / get_recent_summaries\n"
         "  · 创建待办 → create_todo（需确认）\n\n"
         "【对话风格】\n"
-        "- 语气温暖、自然，像朋友聊天一样\n"
+        "- 语气温暖、自然，像朋友聊天一样，可以适度使用emoji\n"
         "- 避免过于正式或说教\n"
         "- 回应要有具体性，不要泛泛而谈\n"
         "- 短确认（'好的'、'嗯'、'ok'）直接回应即可\n"
         "- 遇到明确操作请求时，先引导确认需求，再用工具执行\n"
         "- 遇到用户情绪低落时，给予更多耐心和倾听\n\n"
         "【特别注意】\n"
-        "- 如果用户只是倾诉，专注于倾听和共情\n"
-        "- 如果用户寻求建议，用提问引导他们自己找到答案\n"
-        "- 除非用户明确要求，否则不要一口气给出多个建议\n"
+        "- 用户倾诉情绪时，专注倾听和共情，不硬塞建议\n"
+        "- 用户寻求实际帮助时，直接给出完整、具体、可操作的方案，不要藏着掖着等他追问\n"
         "- 保持对话的自然流畅，不要机械地堆砌规则"
     )
 
@@ -973,7 +999,7 @@ async def _build_agent_messages(user_message: str, context: str, valid_images: L
         f"日记摘要上下文：\n{context}\n\n"
         "根据用户的消息，决定是直接回应还是调用工具。"
         "如果用户情绪低落或倾诉为主，先给予共情和倾听。"
-        "如果用户询问具体信息或请求操作，再使用相应工具。"
+        "如果用户询问实际问题或具体信息，直接给出充实、可操作的完整答案；需要操作时再使用相应工具。"
     )
 
     base64_images = await _resolve_images_to_base64(valid_images)
@@ -1019,9 +1045,10 @@ async def _stream_llm_events(
     payload: Dict[str, Any] = {
         "model": model,
         "messages": sanitized_messages,
-        "stream": True,
+        # 2026-10-02: Ark 流式接口在本环境长时间无响应，改为非流式一次性获取
+        "stream": False,
         "temperature": 0.4,
-        "max_tokens": 500,
+        "max_tokens": 1500,
     }
     if tools:
         payload["tools"] = tools
@@ -1057,10 +1084,29 @@ async def _stream_llm_events(
             accumulated_text = ""
             pending_tool_calls: Dict[int, Dict[str, Any]] = {}
 
+            # 2026-10-02: 非流式分支——一次性读取完整 JSON 后直接结算
+            if not payload.get("stream"):
+                raw = await response.aread()
+                data = json.loads(raw.decode(errors="replace"))
+                choices = data.get("choices") or []
+                if choices:
+                    msg = choices[0].get("message") or {}
+                    accumulated_text = msg.get("content") or ""
+                    for tc in msg.get("tool_calls") or []:
+                        idx = len(pending_tool_calls)
+                        fn = tc.get("function") or {}
+                        pending_tool_calls[idx] = {
+                            "id": tc.get("id", ""),
+                            "name": fn.get("name", ""),
+                            "arguments": fn.get("arguments", ""),
+                        }
+                async for ev in _finalize_stream_content(accumulated_text, pending_tool_calls):
+                    yield ev
+                return
+
             async for line in response.aiter_lines():
                 line = line.strip()
                 with _open_chat_debug_log() as _dbg_f:
-                    import json
                     _dbg_f.write(json.dumps({"sessionId":"1d9790","location":"chat.py:_stream_llm_events:raw_line","message":"raw_sse_line","data":{"line_len":len(line),"line_preview":line[:200] if line else ""}})+"\n")
                 if not line or not line.startswith("data: "):
                     continue
@@ -1230,16 +1276,24 @@ async def _fetch_url_as_base64(url: str) -> Optional[str]:
     if _is_data_uri(url):
         return url
 
+    # 模拟器发来的 10.0.2.2 是"宿主机"的别名，只有模拟器内部能解析；
+    # 后端要下载需换成本机回环地址，否则云端模型拿到这个内网 URL 也下载不了。
+    fetch_url = url
+    lowered = url.lower()
+    if "://10.0.2.2" in lowered:
+        fetch_url = url.replace("://10.0.2.2", "://127.0.0.1", 1)
+
     try:
         async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
-            response = await client.get(url)
+            response = await client.get(fetch_url)
             response.raise_for_status()
             content_type = response.headers.get("content-type", "image/jpeg")
             b64_data = base64.b64encode(response.content).decode("utf-8")
             return f"data:{content_type};base64,{b64_data}"
     except Exception as exc:
         logger.warning("Failed to fetch image URL %s for base64 conversion: %s", url, exc)
-        return url
+        # 下载失败的图片直接丢弃，避免把不可达的内网 URL 透传给云端模型导致整轮 400
+        return None
 
 
 async def _resolve_images_to_base64(image_data_urls: List[str]) -> List[str]:
@@ -1326,7 +1380,7 @@ async def _call_llm(
                 {"role": "user", "content": content},
             ],
             temperature=0.7,
-            max_tokens=500,
+            max_tokens=1500,
         )
 
     try:

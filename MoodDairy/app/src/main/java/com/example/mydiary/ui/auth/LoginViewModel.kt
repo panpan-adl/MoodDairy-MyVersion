@@ -75,6 +75,12 @@ class LoginViewModel @Inject constructor(
      */
     fun login() {
         viewModelScope.launch {
+            // 前置校验：与后端要求一致（密码至少6位），避免触发422校验错误
+            if (_password.value.length < 6) {
+                _loginState.value = LoginState.Error("密码至少需要 6 位，请重新输入")
+                return@launch
+            }
+
             userRepository.login(
                 username = _username.value.trim(),
                 password = _password.value

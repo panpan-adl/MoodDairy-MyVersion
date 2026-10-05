@@ -366,10 +366,14 @@ class ChatViewModel @Inject constructor(
     private suspend fun streamReply(request: ChatRequest, assistantTimestamp: Long) {
         withContext(Dispatchers.IO) {
             // 去掉日志等拦截器以免干扰 SSE；保留 JWT 认证
+            // AI 生成较慢（可能超过 1 分钟），超时放宽到 180 秒，配合后端心跳保活
             val streamingClient = okHttpClient.newBuilder().apply {
                 interceptors().clear()
                 networkInterceptors().clear()
                 addInterceptor(authInterceptor)
+                connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                readTimeout(180, java.util.concurrent.TimeUnit.SECONDS)
+                writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
             }.build()
 
             val body = gson.toJson(request)
