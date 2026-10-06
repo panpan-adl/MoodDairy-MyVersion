@@ -83,7 +83,7 @@ class SocialSearchClient:
 
         Args:
             keyword: Search keyword
-            platform: Target platform (None = 自动组合：小红书/抖音/B站/知乎)
+            platform: Target platform (None = 自动组合：仅免费平台 B站/知乎)
             limit: Max results per platform
 
         Returns:
@@ -100,11 +100,9 @@ class SocialSearchClient:
         if cached is not None:
             return cached
 
-        # 默认自动组合：小红书+抖音（付费余额）和 B站+知乎（可用免费额度）；
-        # 快手/微博仅在用户/模型明确指定时才请求，避免产生预期外费用。
+        # 默认自动组合只含免费平台（B站+知乎，走 TikHub 免费额度）；
+        # 小红书/抖音/快手/微博均为付费接口，只有用户/模型明确指定平台时才请求，避免预期外扣费。
         targets: List[Platform] = [platform] if platform else [
-            Platform.XHS,
-            Platform.DOUYIN,
             Platform.BILIBILI,
             Platform.ZHIHU,
         ]
@@ -296,7 +294,8 @@ def _build_mock_results(
     if platform is not None:
         wanted = [platform]
     else:
-        wanted = [Platform.XHS, Platform.DOUYIN, Platform.BILIBILI, Platform.ZHIHU]
+        # 与真实调度保持一致：auto 只兜底免费平台
+        wanted = [Platform.BILIBILI, Platform.ZHIHU]
 
     per_platform = max(1, limit // len(wanted)) if len(wanted) > 1 else limit
 

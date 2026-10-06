@@ -472,7 +472,7 @@ async def _exec_search_social_content(
             error="MISSING_KEYWORD",
         )
 
-    # Parse platform（both/auto 均为默认自动组合）
+    # Parse platform（auto/未知值 → None，由 client 展开为免费平台 B站+知乎；付费平台需显式指定）
     _PLATFORM_MAP = {
         "xhs": Platform.XHS,
         "xiaohongshu": Platform.XHS,
@@ -756,7 +756,9 @@ TOOL_REGISTRY: Dict[str, ToolDefinition] = {
             "例如：'搜一下小红书的冥想教程'、'B站有没有助眠白噪音'、'知乎上大家怎么缓解焦虑'、"
             "'找找快手的搞笑视频'、'看看微博上大家在聊什么'、'有没有什么美食攻略'。"
             "返回内容卡片列表，包含标题、封面图、作者、点赞数和跳转链接。"
-            "未指定平台时默认综合搜索小红书/抖音/B站/知乎；用户明确提到快手或微博时才传 kuaishou/weibo。"
+            "注意：小红书/抖音/快手/微博是付费搜索（会消耗用户账户余额），"
+            "只有用户明确点名该平台时才能传对应值；"
+            "未指定平台时用 auto，仅搜索免费的 B站和知乎，绝不可以默认搜付费平台。"
         ),
         mode="read_only",
         requires_confirmation=False,
@@ -777,9 +779,10 @@ TOOL_REGISTRY: Dict[str, ToolDefinition] = {
                     "enum": ["auto", "xhs", "douyin", "bilibili", "zhihu", "kuaishou", "weibo"],
                     "default": "auto",
                     "description": (
-                        "目标平台：auto=自动综合（小红书+抖音+B站+知乎，默认）；"
-                        "xhs=小红书，douyin=抖音，bilibili=B站，zhihu=知乎，"
-                        "kuaishou=快手，weibo=微博。用户点名某平台时传对应值。"
+                        "目标平台：auto=自动综合（仅 B站+知乎，免费，默认）；"
+                        "xhs=小红书（付费），douyin=抖音（付费），bilibili=B站（免费），zhihu=知乎（免费），"
+                        "kuaishou=快手（付费），weibo=微博（付费）。"
+                        "付费平台只有在用户明确点名时才能传，用户没点名一律用 auto。"
                     )
                 },
                 "limit": {

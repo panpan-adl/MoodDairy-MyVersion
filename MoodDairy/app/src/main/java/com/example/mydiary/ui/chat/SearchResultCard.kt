@@ -244,7 +244,7 @@ fun VipUnlockCard(
     val isNoKey = errorCode == "NO_KEY" || errorCode == null
     val title = if (isNoKey) "绑定 TikHub 密钥，解锁全网搜索" else "TikHub 余额不足，去充值后继续搜索"
     val subtitle = if (isNoKey) {
-        "免费注册，用你自己的账号付费搜索小红书 / 抖音 / B站 / 知乎 / 快手 / 微博"
+        "免费注册，B站、知乎免费搜；小红书 / 抖音 / 快手 / 微博约 $0.01/次"
     } else {
         "搜索约 $0.01/次，支持支付宝 / 微信付款"
     }
