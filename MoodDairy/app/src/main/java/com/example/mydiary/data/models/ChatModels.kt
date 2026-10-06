@@ -1,4 +1,4 @@
-﻿package com.example.mydiary.data.models
+package com.example.mydiary.data.models
 
 import com.google.gson.JsonObject
 import com.google.gson.annotations.SerializedName
@@ -10,6 +10,16 @@ data class ChatMessage(
     val imageUris: List<String> = emptyList(),
     val timestamp: Long = System.currentTimeMillis(),
     val isStreaming: Boolean = false,
+    @SerializedName("social_search_results")
+    val socialSearchResults: List<SocialSearchItem>? = null,
+    @SerializedName("social_search_keyword")
+    val socialSearchKeyword: String? = null,
+    /** 搜索功能被锁定（未绑定密钥/余额不足），true 时显示引导卡片 */
+    @SerializedName("social_search_locked")
+    val socialSearchLocked: Boolean = false,
+    /** 锁定原因：NO_KEY=未绑定密钥，NO_BALANCE=余额不足 */
+    @SerializedName("social_search_error_code")
+    val socialSearchErrorCode: String? = null,
 )
 
 data class ChatContext(
@@ -111,6 +121,14 @@ data class ChatStreamEvent(
     val services: List<ChatServiceAction>? = null,
     @SerializedName("auto_actions")
     val autoActions: List<ChatServiceAction>? = null,
+    @SerializedName("keyword")
+    val keyword: String? = null,
+    @SerializedName("platform")
+    val platform: String? = null,
+    @SerializedName("items")
+    val items: List<SocialSearchItem>? = null,
+    @SerializedName("locked")
+    val locked: Boolean? = null,
 )
 
 data class ChatServiceAction(
@@ -128,6 +146,27 @@ data class ChatServiceAction(
     val autoStart: Boolean = false,
 )
 
+data class SocialSearchItem(
+    @SerializedName("platform")
+    val platform: String,
+    @SerializedName("note_id")
+    val noteId: String,
+    @SerializedName("title")
+    val title: String,
+    @SerializedName("description")
+    val description: String = "",
+    @SerializedName("cover_url")
+    val coverUrl: String? = null,
+    @SerializedName("url")
+    val url: String,
+    @SerializedName("author_name")
+    val authorName: String? = null,
+    @SerializedName("like_count")
+    val likeCount: Int = 0,
+    @SerializedName("content_type")
+    val contentType: String? = null,
+)
+
 data class DiarySummarySimple(
     @SerializedName("diary_id")
     val diaryId: Long,
@@ -141,4 +180,39 @@ data class DiarySummarySimple(
     val primaryEmotion: String,
     @SerializedName("emotion_score")
     val emotionScore: Int,
+)
+
+/** 社交搜索（TikHub）账户开通状态 */
+data class SocialSearchStatus(
+    @SerializedName("configured")
+    val configured: Boolean = false,
+    @SerializedName("bound")
+    val bound: Boolean = false,
+    @SerializedName("unlocked")
+    val unlocked: Boolean = false,
+    @SerializedName("balance")
+    val balance: Double = 0.0,
+    @SerializedName("free_credit")
+    val freeCredit: Double = 0.0,
+    @SerializedName("total")
+    val total: Double = 0.0,
+    @SerializedName("email")
+    val email: String? = null,
+    @SerializedName("key_status")
+    val keyStatus: String? = null,
+    @SerializedName("billing_url")
+    val billingUrl: String? = null,
+    @SerializedName("register_url")
+    val registerUrl: String? = null,
+    @SerializedName("api_keys_url")
+    val apiKeysUrl: String? = null,
+    @SerializedName("message")
+    val message: String? = null,
+    @SerializedName("error_code")
+    val errorCode: String? = null,
+)
+
+data class BindTikHubKeyRequest(
+    @SerializedName("api_key")
+    val apiKey: String,
 )

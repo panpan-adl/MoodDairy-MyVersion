@@ -13,6 +13,9 @@ from app.models.schemas import CreateDiaryRequest, UpdateDiaryRequest
 from app.models.todo_schemas import CreateTodoRequest
 from app.services.diary_service import DiaryService
 from app.services.extraction_service import ExtractionService
+from app.services.netease_music import search_songs as netease_search_songs
+from app.services.social_search import Platform, get_social_search_client
+from app.services.social_search.tikhub_provider import SocialSearchError
 from app.services.todo_service import TodoService
 
 
@@ -419,6 +422,164 @@ async def _exec_open_todo_create(
     )
 
 
+async def _exec_search_social_content(
+    arguments: Dict[str, Any],
+    db: AsyncSession,
+    user_id: int,
+    conversation_id: str,
+) -> ToolExecutionResult:
+    """Search social content from Xiaohongshu/Douyin/Bilibili/Zhihu/Kuaishou/Weibo using the user's OWN TikHub key."""
+    del conversation_id
+
+    platform_raw = arguments.get("platform", "auto")
+    limit_raw = arguments.get("limit", 8)
+    limit = max(1, min(20, int(limit_raw)))
+
+    from app.config import settings
+    from app.services.social_search import key_service
+
+    if not settings.social_search_enabled:
+        return ToolExecutionResult(
+            ok=False,
+            tool="search_social_content",
+            mode="read_only",
+            summary="搜索服务未开启",
+            data={"items": []},
+            error="SOCIAL_SEARCH_NOT_CONFIGURED",
+        )
+
+    # BYOK：取当前用户自己绑定的 TikHub 密钥（未绑定时优先提示绑定，即使模型没传关键词）
+    client, _record = await key_service.get_user_search_client(db, user_id)
+    if client is None:
+        return ToolExecutionResult(
+            ok=False,
+            tool="search_social_content",
+            mode="read_only",
+            summary="用户尚未绑定 TikHub API 密钥",
+            data={"items": [], "platform": platform_raw, "error_code": "NO_KEY"},
+            error="NO_KEY",
+        )
+
+    # 兼容部分模型把参数名写成 query（与日记搜索工具混淆的情况）
+    keyword = str(arguments.get("keyword") or arguments.get("query") or "").strip()
+    if not keyword:
+        return ToolExecutionResult(
+            ok=False,
+            tool="search_social_content",
+            mode="read_only",
+            summary="缺少搜索关键词，请带上用户想搜索的关键词后重试",
+            data={"items": [], "platform": platform_raw, "error_code": "MISSING_KEYWORD"},
+            error="MISSING_KEYWORD",
+        )
+
+    # Parse platform（both/auto 均为默认自动组合）
+    _PLATFORM_MAP = {
+        "xhs": Platform.XHS,
+        "xiaohongshu": Platform.XHS,
+        "小红书": Platform.XHS,
+        "douyin": Platform.DOUYIN,
+        "抖音": Platform.DOUYIN,
+        "bilibili": Platform.BILIBILI,
+        "bili": Platform.BILIBILI,
+        "b站": Platform.BILIBILI,
+        "哔哩哔哩": Platform.BILIBILI,
+        "zhihu": Platform.ZHIHU,
+        "知乎": Platform.ZHIHU,
+        "kuaishou": Platform.KUAISHOU,
+        "ks": Platform.KUAISHOU,
+        "快手": Platform.KUAISHOU,
+        "weibo": Platform.WEIBO,
+        "wb": Platform.WEIBO,
+        "微博": Platform.WEIBO,
+    }
+    platform = _PLATFORM_MAP.get(str(platform_raw).strip().lower())
+
+    try:
+        items = await client.search(keyword=keyword, platform=platform, limit=limit)
+
+        return ToolExecutionResult(
+            ok=True,
+            tool="search_social_content",
+            mode="read_only",
+            summary=f"找到 {len(items)} 条关于「{keyword}」的相关内容",
+            data={
+                "keyword": keyword,
+                "platform": platform_raw,
+                "items": [item.model_dump() for item in items],
+                "count": len(items),
+            },
+        )
+    except SocialSearchError as e:
+        return ToolExecutionResult(
+            ok=False,
+            tool="search_social_content",
+            mode="read_only",
+            summary=f"搜索失败: {str(e)}",
+            data={"items": [], "keyword": keyword, "platform": platform_raw, "error_code": e.code},
+            error=e.code,
+        )
+    except Exception as e:
+        return ToolExecutionResult(
+            ok=False,
+            tool="search_social_content",
+            mode="read_only",
+            summary=f"搜索失败: {str(e)}",
+            data={"items": [], "keyword": keyword, "platform": platform_raw, "error_code": "SEARCH_ERROR"},
+            error=str(e),
+        )
+
+
+async def _exec_search_music(
+    arguments: Dict[str, Any],
+    db: AsyncSession,
+    user_id: int,
+    conversation_id: str,
+) -> ToolExecutionResult:
+    """搜索网易云音乐歌曲，免费接口，无需用户绑定任何密钥。"""
+    del db, user_id, conversation_id
+
+    keyword = str(arguments.get("keyword") or arguments.get("query") or "").strip()
+    limit_raw = arguments.get("limit", 6)
+    limit = max(1, min(10, int(limit_raw)))
+
+    if not keyword:
+        return ToolExecutionResult(
+            ok=False,
+            tool="search_music",
+            mode="read_only",
+            summary="缺少搜索关键词，请带上用户想听的歌名、歌手或曲风后重试",
+            data={"items": [], "platform": "netease", "error_code": "MISSING_KEYWORD"},
+            error="MISSING_KEYWORD",
+        )
+
+    try:
+        items = await netease_search_songs(keyword, limit=limit)
+        if not items:
+            return ToolExecutionResult(
+                ok=True,
+                tool="search_music",
+                mode="read_only",
+                summary=f"没有找到与「{keyword}」相关的歌曲",
+                data={"keyword": keyword, "platform": "netease", "items": [], "count": 0},
+            )
+        return ToolExecutionResult(
+            ok=True,
+            tool="search_music",
+            mode="read_only",
+            summary=f"找到 {len(items)} 首与「{keyword}」相关的歌曲",
+            data={"keyword": keyword, "platform": "netease", "items": items, "count": len(items)},
+        )
+    except Exception as e:
+        return ToolExecutionResult(
+            ok=False,
+            tool="search_music",
+            mode="read_only",
+            summary=f"歌曲搜索失败: {str(e)}",
+            data={"items": [], "keyword": keyword, "platform": "netease", "error_code": "SEARCH_ERROR"},
+            error=str(e),
+        )
+
+
 TOOL_REGISTRY: Dict[str, ToolDefinition] = {
     "create_diary": ToolDefinition(
         name="create_diary",
@@ -587,6 +748,88 @@ TOOL_REGISTRY: Dict[str, ToolDefinition] = {
         },
         executor=_exec_open_todo_create,
     ),
+    "search_social_content": ToolDefinition(
+        name="search_social_content",
+        description=(
+            "全网搜索国内主流社交平台内容（小红书、抖音、B站、知乎、快手、微博）。"
+            "当用户想查找生活方式、教程攻略、测评、灵感、治愈内容，或明确指定平台时使用。"
+            "例如：'搜一下小红书的冥想教程'、'B站有没有助眠白噪音'、'知乎上大家怎么缓解焦虑'、"
+            "'找找快手的搞笑视频'、'看看微博上大家在聊什么'、'有没有什么美食攻略'。"
+            "返回内容卡片列表，包含标题、封面图、作者、点赞数和跳转链接。"
+            "未指定平台时默认综合搜索小红书/抖音/B站/知乎；用户明确提到快手或微博时才传 kuaishou/weibo。"
+        ),
+        mode="read_only",
+        requires_confirmation=False,
+        display_name="全网搜索",
+        parameters={
+            "type": "object",
+            "properties": {
+                "keyword": {
+                    "type": "string",
+                    "description": (
+                        "【必填】搜索关键词，禁止留空。必须从用户消息中提取具体主题，"
+                        "例如：冥想教程、治愈视频、猫咪视频、美食推荐、穿搭分享、助眠白噪音。"
+                        "即使用户只说'搜一下''帮我找'，也要结合上下文把主题作为关键词传入。"
+                    )
+                },
+                "platform": {
+                    "type": "string",
+                    "enum": ["auto", "xhs", "douyin", "bilibili", "zhihu", "kuaishou", "weibo"],
+                    "default": "auto",
+                    "description": (
+                        "目标平台：auto=自动综合（小红书+抖音+B站+知乎，默认）；"
+                        "xhs=小红书，douyin=抖音，bilibili=B站，zhihu=知乎，"
+                        "kuaishou=快手，weibo=微博。用户点名某平台时传对应值。"
+                    )
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 20,
+                    "default": 8,
+                    "description": "返回条数，默认 8"
+                }
+            },
+            "required": ["keyword"],
+            "additionalProperties": False,
+        },
+        executor=_exec_search_social_content,
+    ),
+    "search_music": ToolDefinition(
+        name="search_music",
+        description=(
+            "搜索网易云音乐的歌曲（免费接口，无需任何密钥）。"
+            "当用户想听歌、让你推荐歌曲、歌手、曲风、歌单，或想听音乐放松时使用。"
+            "例如：'推荐几首周杰伦的歌'、'我想听点助眠的纯音乐'、'有没有适合难过时听的歌'、"
+            "'放几首轻快的歌'、'来点钢琴曲'。"
+            "返回歌曲卡片列表，包含歌名、歌手、专辑封面和网易云歌曲链接，用户点开即可跳转到歌曲页面。"
+        ),
+        mode="read_only",
+        requires_confirmation=False,
+        display_name="歌曲搜索",
+        parameters={
+            "type": "object",
+            "properties": {
+                "keyword": {
+                    "type": "string",
+                    "description": (
+                        "【必填】搜索关键词，禁止留空。从用户消息中提取歌名、歌手名或曲风，"
+                        "例如：周杰伦、助眠纯音乐、轻快的歌、钢琴曲、治愈系。"
+                    )
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10,
+                    "default": 6,
+                    "description": "返回歌曲数量，默认 6"
+                }
+            },
+            "required": ["keyword"],
+            "additionalProperties": False,
+        },
+        executor=_exec_search_music,
+    ),
 }
 
 
@@ -595,7 +838,16 @@ def get_tool_definition(tool_name: str) -> Optional[ToolDefinition]:
 
 
 def get_tool_schemas() -> List[Dict[str, Any]]:
-    return [tool.openai_schema() for tool in TOOL_REGISTRY.values()]
+    from app.config import settings
+
+    schemas: List[Dict[str, Any]] = []
+    for tool in TOOL_REGISTRY.values():
+        # BYOK 模式：只要功能开启就暴露给模型；用户自己的密钥是否已绑定在执行期判断
+        if tool.name == "search_social_content":
+            if not settings.social_search_enabled:
+                continue
+        schemas.append(tool.openai_schema())
+    return schemas
 
 
 async def execute_tool(

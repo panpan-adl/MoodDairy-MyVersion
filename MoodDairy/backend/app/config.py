@@ -36,6 +36,17 @@ class Settings(BaseSettings):
     keyword_extraction_enabled: bool = True
     ark_model_name: Optional[str] = None
 
+    # Social Search (TikHub)
+    social_search_enabled: bool = False
+    social_search_provider: str = "tikhub"
+    tikhub_api_key: Optional[str] = None
+    tikhub_base_url: str = "https://api.tikhub.dev"
+    tikhub_timeout_seconds: float = 15.0
+    social_search_default_limit: int = 8
+    social_search_max_limit: int = 20
+    social_search_cache_ttl_seconds: int = 300
+    social_search_rate_limit_per_minute: int = 20
+
     @model_validator(mode="after")
     def validate_oss_config(self):
         """Validate OSS settings when OSS mode is enabled."""

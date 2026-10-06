@@ -7,6 +7,7 @@ import base64
 import json
 import logging
 import os
+import re
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
@@ -49,10 +50,61 @@ _FC_BEGIN = "<|FunctionCallBegin|>"
 _FC_END = "<|FunctionCallEnd|>"
 
 
+def _parse_tool_text_tags(text: str) -> tuple[str, List[Dict[str, str]]]:
+    """兼容部分模型直接写 <tool_name key="value"> 或 <tool_name>{"json"}</tool_name> 形式的调用。"""
+    if not text or "<" not in text:
+        return text, []
+
+    from app.agent.tools import TOOL_REGISTRY
+
+    names = sorted(TOOL_REGISTRY.keys(), key=len, reverse=True)
+    if not names:
+        return text, []
+    name_alt = "|".join(re.escape(n) for n in names)
+    # 开标签 + 属性；可选闭合标签及标签体
+    tag_re = re.compile(
+        r"<\s*(" + name_alt + r")\b([^>]*)>(?:(.*?)</\s*\1\s*>)?",
+        re.DOTALL,
+    )
+    attr_re = re.compile(
+        r"""([A-Za-z_][\w]*)\s*=\s*(?:"([^"]*)"|'([^']*)')""",
+    )
+
+    calls: List[Dict[str, str]] = []
+
+    def _replace(match: "re.Match[str]") -> str:
+        name = match.group(1)
+        attrs = match.group(2) or ""
+        body = (match.group(3) or "").strip()
+
+        params: Dict[str, Any] = {}
+        for key, dq, sq in attr_re.findall(attrs):
+            params[key] = dq if dq else sq
+        if body.startswith("{"):
+            try:
+                parsed = json.loads(body)
+                if isinstance(parsed, dict):
+                    params = parsed
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+        calls.append(
+            {
+                "id": f"texttag-{len(calls)}",
+                "name": name,
+                "arguments": json.dumps(params, ensure_ascii=False),
+            }
+        )
+        return ""
+
+    clean = tag_re.sub(_replace, text).strip()
+    return clean, calls
+
+
 def _parse_embedded_function_calls(text: str) -> tuple[str, List[Dict[str, str]]]:
     """从正文中剥离 <|FunctionCallBegin|>...<|FunctionCallEnd|>，并解析为工具调用列表。"""
-    if not text or _FC_BEGIN not in text:
-        return text.strip(), []
+    if not text:
+        return text, []
 
     calls: List[Dict[str, str]] = []
     out_parts: List[str] = []
@@ -93,6 +145,12 @@ def _parse_embedded_function_calls(text: str) -> tuple[str, List[Dict[str, str]]
 
     out_parts.append(rest)
     clean = "".join(out_parts).strip()
+
+    # 兼容裸写的 <tool_name ...> 文本标签
+    if "<" in clean:
+        clean, tag_calls = _parse_tool_text_tags(clean)
+        calls.extend(tag_calls)
+
     return clean, calls
 
 
@@ -876,6 +934,21 @@ async def _handle_agent_turn(request: ChatRequest, db: AsyncSession):
                     "timestamp": datetime.now().isoformat(),
                 }
 
+            # 社交搜索工具：成功发结果卡片，失败（余额不足/未配置）发锁定充值卡片
+            # 歌曲搜索工具：网易云免费接口，直接发歌曲卡片，永不锁定
+            if tool_name in ("search_social_content", "search_music"):
+                yield {
+                    "type": "search_results",
+                    "tool_call_id": tool_call_id,
+                    "keyword": result.data.get("keyword"),
+                    "platform": result.data.get("platform"),
+                    "items": result.data.get("items", []),
+                    "locked": (not result.ok)
+                    and result.data.get("error_code") in ("NO_KEY", "NO_BALANCE"),
+                    "error_code": result.data.get("error_code"),
+                    "timestamp": datetime.now().isoformat(),
+                }
+
             messages.append(
                 {
                     "role": "tool",
@@ -980,7 +1053,19 @@ async def _build_agent_messages(user_message: str, context: str, valid_images: L
         "- 数据操作：用户需要创建/查询日记、待办时使用\n"
         "  · 创建日记 → create_diary（需确认）\n"
         "  · 查询日记 → search_diaries / get_recent_summaries\n"
-        "  · 创建待办 → create_todo（需确认）\n\n"
+        "  · 创建待办 → create_todo（需确认）\n"
+        "- 内容搜索：用户想搜小红书/抖音/B站/知乎/快手/微博上的内容、教程、灵感时使用 search_social_content\n"
+        "  · 例如：'搜一下小红书的冥想教程'、'找找抖音上治愈系视频'、'B站有没有助眠白噪音'、'知乎上大家怎么缓解焦虑'、'看看快手上的搞笑视频'、'微博上最近在聊什么'\n"
+        "  · 用户指定平台时填对应 platform（xhs/douyin/bilibili/zhihu/kuaishou/weibo），未指定则默认 auto（小红书+抖音+B站+知乎综合搜索）\n"
+        "  · 调用后用一句话总结（如'我帮你找到了 N 条相关内容'），不要罗列所有标题，搜索结果会以卡片形式展示\n"
+        "  · 只要用户表达找视频/笔记/问答/教程/攻略/灵感的意图（如'搜一下'、'找找'、'小红书有没有'、'抖音上'、'B站上'、'知乎怎么说'、'推荐几个链接'），必须实际调用 search_social_content，不要仅凭自己的知识回答\n"
+        "  · 若工具返回 ok=false 且 error_code=NO_KEY，用温柔的一句话告诉用户：这个功能需要绑定自己的 TikHub 密钥（免费注册，注册即送少量体验额度），点击下方卡片按指引操作即可，不要假装自己已经搜过\n"
+        "  · 若工具返回 ok=false 且 error_code=NO_BALANCE，用温柔的一句话告诉用户：TikHub 账户余额不足，点击下方卡片跳转到官方充值页充值后即可继续搜索（约 $0.01/次），不要假装自己已经搜过\n"
+        "  · 若工具返回其他错误，简短说明暂时没搜到并建议稍后再试\n"
+        "- 歌曲推荐：用户想听歌、让你推荐歌曲/歌手/曲风、想用音乐调节心情时使用 search_music（网易云音乐，免费）\n"
+        "  · 例如：'推荐几首周杰伦的歌'、'我想听点助眠的纯音乐'、'有没有适合难过时听的歌'、'来点轻快的歌'\n"
+        "  · 只要用户表达想听歌/让你推歌的意图，必须实际调用 search_music，不要仅凭自己的知识列歌名\n"
+        "  · 调用后用一句温暖的话总结（如'我给你挑了几首歌，点开卡片就能去网易云听啦'），不要罗列所有歌名，歌曲会以卡片形式展示\n\n"
         "【对话风格】\n"
         "- 语气温暖、自然，像朋友聊天一样，可以适度使用emoji\n"
         "- 避免过于正式或说教\n"

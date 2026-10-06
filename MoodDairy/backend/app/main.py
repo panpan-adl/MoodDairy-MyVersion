@@ -18,6 +18,7 @@ from app.drawing import drawing_router
 from app.drawing.generator_config import GeneratorConfig
 from app.routers import chat, diaries, face_emotion, insights, media, music, todos, users, voice
 from app.routers import diary_search, diary_summaries
+from app.routers import social_search_router
 from app.security.middleware import JWTAuthMiddleware
 from app.security.log_filter import install_sensitive_log_filter
 from app.utils.error_handler import handle_exception
@@ -73,6 +74,15 @@ async def lifespan(app: FastAPI):
             print("Database connection check failed.")
     except Exception as exc:
         print(f"Database initialization error: {exc}")
+
+    # BYOK：确保用户 TikHub 密钥表存在
+    try:
+        from app.services.social_search.key_service import ensure_table
+
+        await ensure_table()
+        print("user_tikhub_keys table is ready.")
+    except Exception as exc:
+        print(f"Failed to ensure user_tikhub_keys table: {exc}")
 
     # 初始化绘图配置（从环境变量读取）
     GeneratorConfig.init_from_env()
@@ -173,6 +183,7 @@ app.include_router(todos.router)
 app.include_router(face_emotion.router)
 app.include_router(music.router)
 app.include_router(drawing_router)
+app.include_router(social_search_router.router)
 
 # 静态文件由 StaticMediaBypassMiddleware 在中间件最外层短路分发，无需再 mount：
 # 既绕过 BaseHTTPMiddleware 对 FileResponse 分块体的截断，也避免 401 影响 ExoPlayer 直连。

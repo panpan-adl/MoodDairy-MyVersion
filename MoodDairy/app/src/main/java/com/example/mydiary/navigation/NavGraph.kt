@@ -38,6 +38,7 @@ import com.example.mydiary.ui.todo.TodoCreateScreen
 import com.example.mydiary.ui.achievement.AchievementScreen
 import com.example.mydiary.ui.achievement.ShopScreen
 import com.example.mydiary.ui.timer.PomodoroTimerScreen
+import com.example.mydiary.ui.vip.RechargeScreen
 import com.example.mydiary.whitenoise.WhiteNoiseScreen
 import com.example.mydiary.whitenoise.WhiteNoiseManager
 import com.example.mydiary.whitenoise.WhiteNoiseSoundList
@@ -72,6 +73,7 @@ object Routes {
     const val ACHIEVEMENT = "achievement"
     const val SHOP = "shop"
     const val POMODORO_TIMER = "pomodoro_timer"
+    const val RECHARGE = "recharge"
 
     fun diaryEditor(date: LocalDate, diaryId: Long? = null): String {
         return if (diaryId != null) {
@@ -270,6 +272,9 @@ fun NavGraph(
                     userId = userId,
                     onNavigateToLive2D = {
                         navController.navigate(Routes.LIVE2D)
+                    },
+                    onNavigateToRecharge = {
+                        navController.navigate(Routes.RECHARGE)
                     },
                     onClientAction = { action ->
                         when (action.action) {
@@ -693,6 +698,12 @@ fun NavGraph(
                 },
                 onSessionComplete = { sessions ->
                 }
+            )
+        }
+
+        composable(Routes.RECHARGE) {
+            RechargeScreen(
+                onNavigateBack = { navController.popBackStack() },
             )
         }
     }

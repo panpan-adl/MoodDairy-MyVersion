@@ -10,3 +10,16 @@ local.properties
 # IDE
 .idea/
 .vscode/
+.trae/
+
+# Python virtual environments
+.venv/
+**/.venv/
+venv/
+**/venv/
+
+# Logs
+*.log
+
+# Backend user uploads (runtime data)
+MoodDairy/backend/uploads/

@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.mydiary.capture.EmotionCaptureController
 import com.example.mydiary.data.local.ChatHistoryStorage
 import com.example.mydiary.data.local.EmotionCapturePrefs
+import com.example.mydiary.data.local.VipPrefs
 import com.example.mydiary.data.models.ChatConfirmation
 import com.example.mydiary.data.models.ChatContext
 import com.example.mydiary.data.models.ChatMessage
@@ -63,6 +64,7 @@ class ChatViewModel @Inject constructor(
     private val emotionCaptureController: EmotionCaptureController,
     private val emotionSignalRepository: EmotionSignalRepository,
     private val emotionCapturePrefs: EmotionCapturePrefs,
+    private val vipPrefs: VipPrefs,
     private val musicWidgetController: MusicWidgetController,
     @Named("shortTimeout") private val okHttpClient: OkHttpClient,
     private val authInterceptor: AuthInterceptor,
@@ -106,6 +108,10 @@ class ChatViewModel @Inject constructor(
 
     /** 表情识别功能开关 */
     val emotionCaptureEnabled: StateFlow<Boolean> = emotionCapturePrefs.enabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    /** 是否已开通会员（解锁全网内容搜索），本地缓存，以后端实时状态为准 */
+    val isVip: StateFlow<Boolean> = vipPrefs.isVip
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     /** 是否需要弹出授权弹窗（DataStore 加载完成且尚未询问过时为 true，避免初始帧闪弹窗） */
@@ -505,7 +511,19 @@ class ChatViewModel @Inject constructor(
                 // 过程态不写入气泡，最终由 done 中的 reply 展示（如 **完成**）
             }
             "tool_result" -> {
-                // 同上，避免 [工具结果] 等调试信息出现在聊天区
+                // 搜索结果/锁定状态由 search_results 事件统一处理
+            }
+            "search_results" -> {
+                // 以后端事件为准：locked=true（未绑定密钥/余额不足）时显示引导卡片
+                if (event.locked == true) {
+                    attachSearchLockedToMessage(assistantTimestamp, event.errorCode)
+                } else {
+                    attachSearchResultsToMessage(
+                        timestamp = assistantTimestamp,
+                        keyword = event.keyword,
+                        items = event.items,
+                    )
+                }
             }
             "emotion_signal" -> {
                 Log.d(
@@ -586,6 +604,49 @@ class ChatViewModel @Inject constructor(
         )
     }
 
+    /**
+     * 将社交搜索结果挂到助手气泡上。
+     */
+    private fun attachSearchResultsToMessage(
+        timestamp: Long,
+        keyword: String?,
+        items: List<com.example.mydiary.data.models.SocialSearchItem>?,
+    ) {
+        updateMessages(
+            _messages.value.map { message ->
+                if (message.timestamp == timestamp) {
+                    message.copy(
+                        socialSearchResults = items,
+                        socialSearchKeyword = keyword,
+                        socialSearchLocked = false,
+                        socialSearchErrorCode = null,
+                    )
+                } else {
+                    message
+                }
+            },
+        )
+    }
+
+    /**
+     * 标记助手气泡为「搜索功能锁定」，UI 显示开通会员卡片。
+     */
+    private fun attachSearchLockedToMessage(timestamp: Long, errorCode: String?) {
+        updateMessages(
+            _messages.value.map { message ->
+                if (message.timestamp == timestamp) {
+                    message.copy(
+                        socialSearchLocked = true,
+                        socialSearchResults = null,
+                        socialSearchErrorCode = errorCode,
+                    )
+                } else {
+                    message
+                }
+            },
+        )
+    }
+
     private fun updateMessages(messages: List<ChatMessage>) {
         _messages.value = messages
         if (userId != 0L) {
@@ -629,11 +690,7 @@ class ChatViewModel @Inject constructor(
             onResult = { label, confidence, duration ->
                 viewModelScope.launch {
                     if (generation != emotionCaptureGeneration) return@launch
-                    val response = emotionSignalRepository.report(label, confidence, duration)
-                    if (_isEmotionCapturing.value && generation == emotionCaptureGeneration) response?.serviceBundle?.let { event ->
-                        handleServiceBundleEvent(event)
-                        _faceEmotionPrompt.value = _serviceBundles.value.lastOrNull { it.bundleId == event.bundleId }
-                    }
+                    emotionSignalRepository.report(label, confidence)
                 }
             },
             onObservation = { label, confidence ->

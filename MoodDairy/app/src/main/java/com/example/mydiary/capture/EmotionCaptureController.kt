@@ -14,12 +14,14 @@ class EmotionCaptureController @Inject constructor() {
     /**
      * 开始采集
      * @param lifecycleOwner 生命周期所有者
-     * @param callback 回调：情绪标签、置信度
+     * @param onResult 最终结果回调：情绪标签、置信度、持续时长（秒）
+     * @param onObservation 过程观测回调：情绪标签、置信度
      * @return 是否成功启动
      */
     fun start(
         lifecycleOwner: LifecycleOwner,
-        callback: (label: String, confidence: Float) -> Unit
+        onResult: (label: String, confidence: Float, durationSec: Float) -> Unit,
+        onObservation: (label: String, confidence: Float) -> Unit,
     ): Boolean {
         // TODO: 实现摄像头表情采集逻辑
         return false

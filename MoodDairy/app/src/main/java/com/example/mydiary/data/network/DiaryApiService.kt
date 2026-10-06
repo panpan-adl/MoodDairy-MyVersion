@@ -378,6 +378,27 @@ interface DiaryApiService {
     ): Response<MusicRecommendationResponse>
 
     /**
+     * 查询社交搜索会员开通状态（TikHub 真实余额）
+     * GET /social-search/status
+     */
+    @GET("social-search/status")
+    suspend fun getSocialSearchStatus(): Response<SocialSearchStatus>
+
+    /**
+     * 绑定当前用户自己的 TikHub API Key
+     * POST /social-search/bind-key
+     */
+    @POST("social-search/bind-key")
+    suspend fun bindSocialSearchKey(@Body body: BindTikHubKeyRequest): Response<SocialSearchStatus>
+
+    /**
+     * 解绑当前用户的 TikHub API Key
+     * POST /social-search/unbind
+     */
+    @POST("social-search/unbind")
+    suspend fun unbindSocialSearchKey(): Response<SocialSearchStatus>
+
+    /**
      * 查询 ASR 转写状态
      * GET /voice/asr-status
      * 

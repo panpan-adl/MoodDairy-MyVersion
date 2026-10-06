@@ -13,6 +13,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,10 +50,13 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -107,6 +111,7 @@ import java.util.Locale
 fun ChatScreen(
     userId: Long,
     onNavigateToLive2D: () -> Unit = {},
+    onNavigateToRecharge: () -> Unit = {},
     onClientAction: (ChatClientAction) -> Unit = {},
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
@@ -124,6 +129,7 @@ fun ChatScreen(
     val errorMessage by viewModel.errorMessage.collectAsState()
     val emotionConsent by viewModel.emotionConsentGranted.collectAsState()
     val emotionEnabled by viewModel.emotionCaptureEnabled.collectAsState()
+    val isVip by viewModel.isVip.collectAsState()
     val shouldAskEmotionConsent by viewModel.shouldAskEmotionConsent.collectAsState()
     val isEmotionCapturing by viewModel.isEmotionCapturing.collectAsState()
     val listState = rememberLazyListState()
@@ -280,15 +286,22 @@ fun ChatScreen(
         }
     }
 
-    LaunchedEffect(messages.size) {
+    val lastMessage = messages.lastOrNull()
+    LaunchedEffect(
+        messages.size,
+        lastMessage?.socialSearchLocked,
+        lastMessage?.socialSearchResults?.size,
+    ) {
         if (messages.isNotEmpty()) {
             val targetIndex = messages.lastIndex
             val lastVisibleIndex = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
             val shouldAnimate = lastVisibleIndex >= targetIndex - 3
             if (shouldAnimate) {
                 listState.animateScrollToItem(targetIndex)
+                // 最新消息可能比一屏还高（含搜索卡片），继续滚到内容最底部
+                listState.animateScrollBy(4000f)
             } else {
-                listState.scrollToItem(targetIndex)
+                listState.scrollToItem(targetIndex, Int.MAX_VALUE)
             }
         }
     }
@@ -309,6 +322,8 @@ fun ChatScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             ChatTopBar(
                 onNavigateToLive2D = onNavigateToLive2D,
+                onNavigateToRecharge = onNavigateToRecharge,
+                isVip = isVip,
                 isEmotionCapturing = isEmotionCapturing,
             )
             if (isEmotionCapturing) {
@@ -391,10 +406,10 @@ fun ChatScreen(
                 items(
                     items = messages,
                     key = { message ->
-                        "${message.timestamp}-${message.isFromUser}-${message.content.hashCode()}-${message.imageUris.size}-${message.isStreaming}"
+                        "${message.timestamp}-${message.isFromUser}-${message.content.hashCode()}-${message.imageUris.size}-${message.isStreaming}-${message.socialSearchResults?.size ?: 0}-${message.socialSearchLocked}"
                     },
                 ) { message ->
-                    ChatMessageItem(message = message)
+                    ChatMessageItem(message = message, onNavigateToRecharge = onNavigateToRecharge)
                 }
             }
 
@@ -615,6 +630,8 @@ private fun EditPlanDialog(
 @Composable
 private fun ChatTopBar(
     onNavigateToLive2D: () -> Unit = {},
+    onNavigateToRecharge: () -> Unit = {},
+    isVip: Boolean = false,
     isEmotionCapturing: Boolean = false,
 ) {
     Surface(
@@ -672,12 +689,36 @@ private fun ChatTopBar(
                 Spacer(modifier = Modifier.width(8.dp))
             }
 
-            IconButton(onClick = { }) {
-                Icon(
-                    imageVector = Icons.Outlined.MoreVert,
-                    contentDescription = "more",
-                    tint = TextSecondary,
-                )
+            var menuExpanded by remember { mutableStateOf(false) }
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(
+                        imageVector = Icons.Outlined.MoreVert,
+                        contentDescription = "more",
+                        tint = TextSecondary,
+                    )
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        text = {
+                            Text("全网搜索 · 密钥账户")
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = null,
+                                tint = Color(0xFFFF6B81),
+                            )
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            onNavigateToRecharge()
+                        },
+                    )
+                }
             }
         }
     }
@@ -777,7 +818,8 @@ private fun serviceActionIcon(action: String, id: String): ImageVector {
 }
 
 @Composable
-private fun ChatMessageItem(message: ChatMessage) {
+private fun ChatMessageItem(message: ChatMessage, onNavigateToRecharge: () -> Unit = {}) {
+    Column(modifier = Modifier.fillMaxWidth()) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (message.isFromUser) Arrangement.End else Arrangement.Start,
@@ -859,6 +901,34 @@ private fun ChatMessageItem(message: ChatMessage) {
                 )
             }
         }
+    }
+
+    // 社交搜索结果卡片：AI 消息附带，显示在气泡下方
+    if (!message.isFromUser && !message.socialSearchResults.isNullOrEmpty()) {
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(modifier = Modifier.fillMaxWidth()) {
+            // 留出头像位置对齐气泡
+            Spacer(modifier = Modifier.width(44.dp))
+            SocialSearchResultsRow(
+                keyword = message.socialSearchKeyword,
+                items = message.socialSearchResults.orEmpty(),
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+
+    // 搜索功能锁定：未绑定密钥/余额不足时显示引导卡片
+    if (!message.isFromUser && message.socialSearchLocked) {
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Spacer(modifier = Modifier.width(44.dp))
+            VipUnlockCard(
+                onRecharge = onNavigateToRecharge,
+                modifier = Modifier.weight(1f),
+                errorCode = message.socialSearchErrorCode,
+            )
+        }
+    }
     }
 }
 

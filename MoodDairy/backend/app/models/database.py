@@ -319,3 +319,21 @@ class SecurityAuditLog(Base):
     ip_address = Column(String(64))
     detail = Column(Text)
     created_at = Column(TIMESTAMP, default=datetime.now)
+
+
+class UserTikhubKey(Base):
+    """用户自己的 TikHub API 密钥（BYOK：谁用谁充值、谁扣费）。"""
+    __tablename__ = "user_tikhub_keys"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
+    # 经 field_crypto 加密存储，格式 enc:v1:...
+    api_key_encrypted = Column(Text, nullable=False)
+    tikhub_email = Column(String(200))
+    balance = Column(DECIMAL(10, 4), default=0)
+    free_credit = Column(DECIMAL(10, 4), default=0)
+    key_status = Column(String(50))
+    account_disabled = Column(SmallInteger, default=0)
+    created_at = Column(TIMESTAMP, default=datetime.now)
+    updated_at = Column(TIMESTAMP, default=datetime.now, onupdate=datetime.now)
+    last_synced_at = Column(TIMESTAMP)
