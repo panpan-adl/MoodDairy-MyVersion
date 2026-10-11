@@ -2,11 +2,17 @@ package com.example.mydiary.data.models
 
 import com.google.gson.annotations.SerializedName
 
-/**
- * 摄像头表情识别上报请求体
- */
 data class FaceEmotionReportRequest(
-    @SerializedName("label") val label: String,
-    @SerializedName("confidence") val confidence: Float,
-    @SerializedName("timestamp") val timestamp: Long = System.currentTimeMillis()
+    @SerializedName("emotion")
+    val emotion: String,
+
+    @SerializedName("confidence")
+    val confidence: Float,
+
+    @SerializedName("captured_at")
+    val capturedAt: String, // ISO-8601 格式
+    @SerializedName("sustained_negative_ms")
+    val sustainedNegativeMs: Long = 0L,
+    @SerializedName("facial_expression")
+    val facialExpression: String? = null,
 )

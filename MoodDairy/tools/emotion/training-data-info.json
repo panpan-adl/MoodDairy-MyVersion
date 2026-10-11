@@ -1,0 +1,9 @@
+{
+  "images": "https://www.kaggle.com/datasets/deadskull7/fer2013",
+  "images_api": "https://www.kaggle.com/api/v1/datasets/download/deadskull7/fer2013",
+  "image_archive_sha256": "0053fdef247c8db3c1967c7a81898485eaa1d75489f43493fb4d8fa727f14698",
+  "annotations": "https://github.com/microsoft/FERPlus",
+  "annotation_sha256": "9206e20d62f56475939f516847d61753e4860caeac9718b560129541b776fc2c",
+  "base_model_sha256": "7863032d8c0c0bc259aa0dd7b8ebf6b607af454e7a0ea82be2b37767914ecd0f",
+  "notes": "Training uses majority-eligible FER+ distributions in Android class order; original FER labels are not training targets. Images, cached embeddings and generated model runs are git-ignored."
+}

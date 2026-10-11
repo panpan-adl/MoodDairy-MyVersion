@@ -37,6 +37,7 @@ _MOOD_MAP = {
 }
 
 DEFAULT_MOOD = "calm"
+SUPPORTED_MOODS = {"healing", "calm", "release", "happy", "energetic"}
 
 
 def normalize_mood(emotion: str | None) -> str:
@@ -47,6 +48,8 @@ def normalize_mood(emotion: str | None) -> str:
     """
     if not emotion:
         return DEFAULT_MOOD
+    if str(emotion).strip().lower() in SUPPORTED_MOODS:
+        return str(emotion).strip().lower()
     return _MOOD_MAP.get(str(emotion).strip().lower(), DEFAULT_MOOD) or _MOOD_MAP.get(
         str(emotion).strip(), DEFAULT_MOOD
     )

@@ -193,3 +193,6 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+
+from app.routers.personal_videos import router as personal_videos_router
+app.include_router(personal_videos_router)

@@ -417,6 +417,16 @@ async def _handle_confirmation_turn(request: ChatRequest, db: AsyncSession):
         )
         return
 
+    if plan.tool == "search_social_content":
+        if confirmation.edited_arguments and confirmation.edited_arguments != plan.arguments:
+            yield _done_event(final_state="error", error_code="SEARCH_PLAN_CHANGED", error_message="搜索条件已改变，请重新生成并确认费用")
+            return
+        try:
+            await plan_store.claim_search_confirmation(db, plan.plan_id, confirmation.approved)
+        except PlanStoreError as exc:
+            yield _done_event(final_state="error", error_code=exc.code, error_message=exc.message)
+            return
+
     if not confirmation.approved:
         await plan_store.mark_cancelled(db, plan.plan_id)
         cancellation_text = "已取消本次操作。"
@@ -450,6 +460,8 @@ async def _handle_confirmation_turn(request: ChatRequest, db: AsyncSession):
                 db=db,
                 user_id=request.user_id,
                 conversation_id=request.conversation_id,
+                user_message=plan.request_message,
+                charge_confirmed=plan.tool == "search_social_content",
             ),
             timeout=TOOL_EXECUTION_TIMEOUT_SECONDS,
         )
@@ -522,6 +534,9 @@ async def _handle_confirmation_turn(request: ChatRequest, db: AsyncSession):
         "result": result.for_model(),
         "timestamp": datetime.now().isoformat(),
     }
+
+    if plan.tool == "search_social_content":
+        yield {"type":"search_results", "tool_call_id":plan.plan_id, "keyword":result.data.get("keyword"), "platform":result.data.get("platform"), "items":result.data.get("items", []), "locked":not result.ok and result.data.get("error_code") in ("NO_KEY", "NO_BALANCE", "INVALID_KEY"), "error_code":result.data.get("error_code"), "timestamp":datetime.now().isoformat()}
 
     reply = await _generate_tool_followup_reply(
         original_user_message=plan.request_message,
@@ -795,7 +810,11 @@ async def _handle_agent_turn(request: ChatRequest, db: AsyncSession):
                 )
                 return
 
-            if definition.mode == "operation":
+            if tool_name == "search_social_content":
+                from app.services.social_search.charge_policy import prepare_search_arguments
+                arguments = prepare_search_arguments(arguments, request.message or "")
+
+            if definition.mode == "operation" or definition.requires_confirmation:
                 if operation_calls >= MAX_OPERATION_CALLS_PER_TURN:
                     message = "本轮最多执行 1 次操作类工具，请确认后再继续下一步。"
                     for chunk in _chunk_text(message):
@@ -873,6 +892,7 @@ async def _handle_agent_turn(request: ChatRequest, db: AsyncSession):
                         db=db,
                         user_id=request.user_id,
                         conversation_id=request.conversation_id,
+                        user_message=request.message or "",
                     ),
                     timeout=TOOL_EXECUTION_TIMEOUT_SECONDS,
                 )
@@ -936,7 +956,7 @@ async def _handle_agent_turn(request: ChatRequest, db: AsyncSession):
 
             # 社交搜索工具：成功发结果卡片，失败（余额不足/未配置）发锁定充值卡片
             # 歌曲搜索工具：网易云免费接口，直接发歌曲卡片，永不锁定
-            if tool_name in ("search_social_content", "search_music"):
+            if tool_name in ("search_social_content", "search_music", "search_personal_videos"):
                 yield {
                     "type": "search_results",
                     "tool_call_id": tool_call_id,
@@ -1054,10 +1074,12 @@ async def _build_agent_messages(user_message: str, context: str, valid_images: L
         "  · 创建日记 → create_diary（需确认）\n"
         "  · 查询日记 → search_diaries / get_recent_summaries\n"
         "  · 创建待办 → create_todo（需确认）\n"
+        "- 个人视频找回：用户说以前点赞、喜欢、收藏的视频时，优先使用 search_personal_videos，提炼关键词和同义词；仅搜索已导入记录，没有记录时引导进入密钥管理页的个人视频导入区域，不要求在聊天中发送Cookie。\n"
         "- 内容搜索：用户想搜小红书/抖音/B站/知乎/快手/微博上的内容、教程、灵感时使用 search_social_content\n"
+        "  · 必须直接调用 search_social_content 来生成后端费用确认卡片。此时不会请求 TikHub 或扣费，用户之后会点击卡片确认。禁止用普通聊天文字代替卡片询问是否确认。\n"
         "  · 例如：'搜一下小红书的冥想教程'、'找找抖音上治愈系视频'、'B站有没有助眠白噪音'、'知乎上大家怎么缓解焦虑'、'看看快手上的搞笑视频'、'微博上最近在聊什么'\n"
         "  · 用户指定平台时填对应 platform（xhs/douyin/bilibili/zhihu/kuaishou/weibo），未指定则默认 auto\n"
-        "  · 费用规则（必须严格遵守）：B站(bilibili)和知乎(zhihu)免费；小红书(xhs)、抖音(douyin)、快手(kuaishou)、微博(weibo)是付费搜索。auto 只搜免费的 B站+知乎，绝不能默认搜付费平台；只有用户明确说出平台名（如'小红书上''抖音上''快手上''微博上'）时才能传对应的付费 platform\n"
+        "  · 费用规则（必须严格遵守）：全网搜索必须先生成费用确认卡片，用户确认后才执行；实际费用及免费额度适用范围以 TikHub 为准。B站(bilibili)和知乎(zhihu)也可能消耗接口额度；小红书(xhs)、抖音(douyin)、快手(kuaishou)、微博(weibo)是付费搜索。auto 只搜 B站+知乎，绝不能默认搜付费平台；只有用户明确说出平台名（如'小红书上''抖音上''快手上''微博上'）时才能传对应的付费 platform\n"
         "  · 调用后用一句话总结（如'我帮你找到了 N 条相关内容'），不要罗列所有标题，搜索结果会以卡片形式展示\n"
         "  · 只要用户表达找视频/笔记/问答/教程/攻略/灵感的意图（如'搜一下'、'找找'、'小红书有没有'、'抖音上'、'B站上'、'知乎怎么说'、'推荐几个链接'），必须实际调用 search_social_content，不要仅凭自己的知识回答\n"
         "  · 若工具返回 ok=false 且 error_code=NO_KEY，用温柔的一句话告诉用户：这个功能需要绑定自己的 TikHub 密钥（免费注册，注册即送少量体验额度），点击下方卡片按指引操作即可，不要假装自己已经搜过\n"

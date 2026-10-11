@@ -78,7 +78,7 @@ fun SocialSearchResultsRow(
 @Composable
 private fun SocialSearchCard(item: SocialSearchItem) {
     val context = LocalContext.current
-    val platformLabel = when (item.platform) {
+    val platformLabel = item.recordSource ?: when (item.platform) {
         "douyin" -> "抖音"
         "bilibili" -> "B站"
         "zhihu" -> "知乎"

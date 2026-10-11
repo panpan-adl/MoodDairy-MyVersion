@@ -1,0 +1,21 @@
+{
+  "target": [
+    "sad recall",
+    "angry recall"
+  ],
+  "comparison": [
+    "b2_baseline",
+    "b2_flip",
+    "afew_candidate"
+  ],
+  "required_data": "User-authorized labeled local-camera face crops from separate sessions/people; include neutral/happy negatives; no automatic recording.",
+  "selection_rule": "Do not promote candidate without held-out sad/angry recall and neutral/happy false-positive comparison and Android latency measurements.",
+  "training_status": "No labeled training dataset supplied; no new weights trained.",
+  "static_evaluation": "python tools/emotion/evaluate.py --dataset tools/emotion/datasets/held_out.csv --output tools/emotion/evaluations/comparison.json",
+  "csv_columns": [
+    "path",
+    "label",
+    "person_id"
+  ],
+  "runtime_note": "PC synthetic smoke only verifies graph, outputs and runtime. Android latency and end-to-end accuracy still require measurement."
+}

@@ -1,0 +1,284 @@
+{
+  "model": "EmotiEffLib EfficientNet-B2 with FER+ classifier fine-tune",
+  "file": "enet_b2_7.onnx",
+  "repository": "https://github.com/sb-ai-lab/EmotiEffLib",
+  "revision": "520a051c64cd191521e5934655314e769a319684",
+  "source": "https://raw.githubusercontent.com/sb-ai-lab/EmotiEffLib/520a051c64cd191521e5934655314e769a319684/models/affectnet_emotions/onnx/enet_b2_7.onnx",
+  "sha256": "a9f282e093c582cf25f5a4af7ca2ce116525b038e7ad068839f0e066f781aa5c",
+  "license": "Apache-2.0; see EmotiEffLib-LICENSE.txt",
+  "input": "float32 [1,3,260,260], RGB/255, mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225]",
+  "output": "7 logits; apply softmax",
+  "labels": [
+    "angry",
+    "disgust",
+    "fear",
+    "happy",
+    "neutral",
+    "sad",
+    "surprise"
+  ],
+  "benchmark_note": "Parent model author benchmark does not apply to these updated weights. See local_training.",
+  "runtime_pipeline": [
+    "ML Kit accurate detection and eye landmarks",
+    "square crop with 10 percent context; eye roll alignment 2-25 degrees",
+    "original and horizontal flip probability average",
+    "3-frame full probability distribution average; 6-second gap resets history"
+  ],
+  "local_accuracy_status": "Trained and evaluated on filtered/deduplicated FER+ static grayscale images. Local RGB camera accuracy has not been measured.",
+  "parent_model": "EmotiEffLib EfficientNet-B2 AffectNet-7",
+  "parent_model_sha256": "7863032d8c0c0bc259aa0dd7b8ebf6b607af454e7a0ea82be2b37767914ecd0f",
+  "parent_author_reported_affectnet7_accuracy_percent": 66.34,
+  "local_training": {
+    "training": "frozen EfficientNet-B2 backbone; genuinely optimized 7-class linear classifier",
+    "trained_parameters": 9863,
+    "seed": 20261010,
+    "selected_epoch": 28,
+    "temperature": 0.8,
+    "dataset_sha256": "0053fdef247c8db3c1967c7a81898485eaa1d75489f43493fb4d8fa727f14698",
+    "annotations_sha256": "9206e20d62f56475939f516847d61753e4860caeac9718b560129541b776fc2c",
+    "split_sizes": {
+      "Training": 24181,
+      "PublicTest": 2949,
+      "PrivateTest": 2865
+    },
+    "removed": {
+      "ambiguous_or_outside_7_classes": 4276,
+      "exact_duplicates": 1616
+    },
+    "test_baseline": {
+      "n": 2865,
+      "accuracy": 0.6680628272251309,
+      "macro_f1": 0.525818755619495,
+      "per_class": {
+        "angry": {
+          "support": 240,
+          "recall": 0.7375,
+          "precision": 0.4041095890410959,
+          "f1": 0.5221238938053097
+        },
+        "disgust": {
+          "support": 12,
+          "recall": 0.3333333333333333,
+          "precision": 0.06666666666666667,
+          "f1": 0.1111111111111111
+        },
+        "fear": {
+          "support": 70,
+          "recall": 0.9857142857142858,
+          "precision": 0.20414201183431951,
+          "f1": 0.338235294117647
+        },
+        "happy": {
+          "support": 858,
+          "recall": 0.8321678321678322,
+          "precision": 0.938239159001314,
+          "f1": 0.8820259419394688
+        },
+        "neutral": {
+          "support": 1051,
+          "recall": 0.5775451950523312,
+          "precision": 0.8797101449275362,
+          "f1": 0.6973004020677771
+        },
+        "sad": {
+          "support": 354,
+          "recall": 0.5480225988700564,
+          "precision": 0.6024844720496895,
+          "f1": 0.5739644970414202
+        },
+        "surprise": {
+          "support": 280,
+          "recall": 0.5321428571428571,
+          "precision": 0.58203125,
+          "f1": 0.5559701492537313
+        }
+      },
+      "neutral_to_negative_rate": 0.3549000951474786,
+      "nonnegative_to_negative_rate": 0.25216994061215164,
+      "soft_label_nll": 1.0401734113693237,
+      "confusion_matrix": [
+        [
+          177,
+          18,
+          34,
+          4,
+          6,
+          0,
+          1
+        ],
+        [
+          5,
+          4,
+          1,
+          1,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          69,
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          12,
+          9,
+          34,
+          714,
+          18,
+          4,
+          67
+        ],
+        [
+          201,
+          8,
+          41,
+          36,
+          607,
+          123,
+          35
+        ],
+        [
+          41,
+          19,
+          43,
+          5,
+          48,
+          194,
+          4
+        ],
+        [
+          2,
+          2,
+          116,
+          1,
+          10,
+          0,
+          149
+        ]
+      ]
+    },
+    "test_retrained": {
+      "n": 2865,
+      "accuracy": 0.8366492146596859,
+      "macro_f1": 0.7210737232862116,
+      "per_class": {
+        "angry": {
+          "support": 240,
+          "recall": 0.8833333333333333,
+          "precision": 0.7210884353741497,
+          "f1": 0.7940074906367042
+        },
+        "disgust": {
+          "support": 12,
+          "recall": 0.25,
+          "precision": 0.3,
+          "f1": 0.2727272727272727
+        },
+        "fear": {
+          "support": 70,
+          "recall": 0.6857142857142857,
+          "precision": 0.64,
+          "f1": 0.6620689655172415
+        },
+        "happy": {
+          "support": 858,
+          "recall": 0.9230769230769231,
+          "precision": 0.9565217391304348,
+          "f1": 0.9395017793594307
+        },
+        "neutral": {
+          "support": 1051,
+          "recall": 0.7716460513796385,
+          "precision": 0.9021134593993326,
+          "f1": 0.8317948717948719
+        },
+        "sad": {
+          "support": 354,
+          "recall": 0.788135593220339,
+          "precision": 0.625560538116592,
+          "f1": 0.6975
+        },
+        "surprise": {
+          "support": 280,
+          "recall": 0.9,
+          "precision": 0.805111821086262,
+          "f1": 0.8499156829679595
+        }
+      },
+      "neutral_to_negative_rate": 0.1874405328258801,
+      "nonnegative_to_negative_rate": 0.107811786203746,
+      "soft_label_nll": 0.7052223682403564,
+      "confusion_matrix": [
+        [
+          212,
+          2,
+          4,
+          2,
+          7,
+          7,
+          6
+        ],
+        [
+          4,
+          3,
+          0,
+          1,
+          1,
+          2,
+          1
+        ],
+        [
+          4,
+          0,
+          48,
+          0,
+          2,
+          5,
+          11
+        ],
+        [
+          8,
+          1,
+          3,
+          792,
+          20,
+          10,
+          24
+        ],
+        [
+          49,
+          2,
+          3,
+          26,
+          811,
+          143,
+          17
+        ],
+        [
+          13,
+          2,
+          4,
+          5,
+          49,
+          279,
+          2
+        ],
+        [
+          4,
+          0,
+          13,
+          2,
+          9,
+          0,
+          252
+        ]
+      ]
+    },
+    "limits": "FER+ is static 48x48 grayscale data; private split has no person IDs. This does not establish local RGB camera accuracy or temporal suggestion accuracy."
+  }
+}

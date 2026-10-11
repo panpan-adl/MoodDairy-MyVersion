@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.database import ChatAgentPlan
@@ -129,6 +129,17 @@ class PlanStore:
 
     async def mark_cancelled(self, db: AsyncSession, plan_id: str) -> None:
         await self._update_status(db, plan_id, "cancelled", error_code=None, error_message=None)
+
+    async def claim_search_confirmation(self, db: AsyncSession, plan_id: str, approved: bool) -> None:
+        """Atomically claim a pending search to prevent duplicate purchases."""
+        result = await db.execute(update(ChatAgentPlan).where(
+            ChatAgentPlan.plan_id == plan_id,
+            ChatAgentPlan.status == "pending",
+            ChatAgentPlan.expires_at > self._now(),
+        ).values(status="executing" if approved else "cancelled", confirmed_at=self._now()))
+        await db.commit()
+        if result.rowcount != 1:
+            raise PlanStoreError("PLAN_NOT_PENDING", "搜索已确认、取消或过期，请勿重复提交")
 
     async def mark_executed(self, db: AsyncSession, plan_id: str) -> None:
         await self._update_status(db, plan_id, "executed", error_code=None, error_message=None, set_executed=True)

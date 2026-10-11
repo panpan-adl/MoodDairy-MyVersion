@@ -78,6 +78,7 @@ fun ProfileScreen(
     onNavigateToPomodoro: () -> Unit,
     onNavigateToGrowthPortrait: () -> Unit,
     onLogout: () -> Unit,
+    onNavigateToVideoLibrary: () -> Unit = {},
     shouldRefresh: Boolean = false,
     viewModel: ProfileViewModel = hiltViewModel(),
 ) {
@@ -159,6 +160,10 @@ fun ProfileScreen(
                             .verticalScroll(scrollState)
                             .padding(16.dp),
                     ) {
+                        Button(onClick = onNavigateToVideoLibrary, modifier = Modifier.fillMaxWidth()) {
+                            Text("个人视频记忆库 / TikHub 密钥")
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(16.dp),

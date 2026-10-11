@@ -164,13 +164,17 @@ async def refresh_status(db: AsyncSession, user_id: int) -> Dict[str, Any]:
         return await build_status(None, None)
 
     plain = await get_plain_key(record)
-    if not plain:
+    if not plain or plain == "[decryption_failed]":
         return await build_status(None, None)
 
     try:
         info = await get_social_search_client_for_key(plain).get_balance()
     except SocialSearchError as e:
         logger.warning("TikHub status refresh failed for user %s: %s", user_id, e.code)
+        if e.code == "INVALID_KEY":
+            status = await _cached_status(record, "TikHub 密钥已失效，请解绑后重新绑定")
+            status.update(unlocked=False, error_code="INVALID_KEY")
+            return status
         return await _cached_status(record, "暂时无法连接 TikHub，显示的是上次同步的余额")
     except Exception as e:  # noqa: BLE001
         logger.warning("TikHub status refresh error for user %s: %s", user_id, e)
@@ -189,6 +193,6 @@ async def get_user_search_client(
     if record is None:
         return None, None
     plain = await get_plain_key(record)
-    if not plain:
+    if not plain or plain == "[decryption_failed]":
         return None, None
     return get_social_search_client_for_key(plain), record

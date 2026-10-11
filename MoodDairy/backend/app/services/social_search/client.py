@@ -89,16 +89,14 @@ class SocialSearchClient:
         Returns:
             Combined list of search results
         """
-        # Check rate limit
-        if not await self._rate_limiter.acquire():
-            logger.warning("Social search rate limit exceeded")
-            raise SocialSearchError("Rate limit exceeded")
-
         # Check cache
         cache_key = self._make_cache_key(keyword, platform, limit)
         cached = await self._get_from_cache(cache_key)
         if cached is not None:
             return cached
+
+        if not await self._rate_limiter.acquire():
+            raise SocialSearchError("搜索过于频繁，请稍后重试", code="RATE_LIMITED")
 
         # 默认自动组合只含免费平台（B站+知乎，走 TikHub 免费额度）；
         # 小红书/抖音/快手/微博均为付费接口，只有用户/模型明确指定平台时才请求，避免预期外扣费。
@@ -117,20 +115,17 @@ class SocialSearchClient:
 
         # Perform search
         results: List[SocialSearchItem] = []
-        balance_errors: List[str] = []
+        errors: List[SocialSearchError] = []
 
         async def _run_one(coro):
             try:
                 res = await coro
                 return res.items
             except SocialSearchError as e:
-                if e.code == "NO_BALANCE":
-                    balance_errors.append(str(e))
-                else:
-                    logger.error(f"Social search provider error [{e.code}]: {e}")
+                errors.append(e)
                 return []
             except Exception as e:  # noqa: BLE001
-                logger.error(f"Social search failed: {e}")
+                errors.append(SocialSearchError("平台搜索暂时失败，请稍后重试", code="PROVIDER_ERROR"))
                 return []
 
         for target in targets:
@@ -139,19 +134,15 @@ class SocialSearchClient:
                 results.extend(await _run_one(method(keyword, limit)))
 
         # 余额不足：不兜底 mock，直接上抛（前端引导用户真实充值）
-        if not results and balance_errors:
-            raise SocialSearchError(balance_errors[0], code="NO_BALANCE")
+        if not results and errors:
+            raise errors[0]
 
         # Sort by like count (descending)
         results.sort(key=lambda x: x.like_count, reverse=True)
 
-        # Mock 兜底：网络/解析等非余额类失败时返回演示数据
-        if not results:
-            logger.info(f"Social search returned empty for '{keyword}', using mock demo data")
-            results = _build_mock_results(keyword, platform, limit)
-
         # Cache result
-        await self._set_cache(cache_key, results)
+        if not errors:
+            await self._set_cache(cache_key, results)
 
         logger.info(f"Social search completed: {len(results)} results for '{keyword}'")
         return results
@@ -224,100 +215,3 @@ def drop_user_client(api_key: str) -> None:
     _user_clients.pop(api_key, None)
 
 
-# ============================================================================
-# Mock 演示数据（真实 API 不可用时兜底，仅用于学生项目演示）
-# ============================================================================
-_MOCK_COVERS = [
-    "https://picsum.photos/seed/mood1/400/300",
-    "https://picsum.photos/seed/mood2/400/300",
-    "https://picsum.photos/seed/mood3/400/300",
-    "https://picsum.photos/seed/mood4/400/300",
-    "https://picsum.photos/seed/mood5/400/300",
-    "https://picsum.photos/seed/mood6/400/300",
-]
-
-_MOCK_PLATFORM_META = {
-    Platform.XHS: {
-        "authors": ["治愈系小日常", "心情研究所", "慢生活日记", "光与盐", "云上漫步"],
-        "url": "https://www.xiaohongshu.com/explore/mock_{pfx}_{i}",
-        "title": "{keyword}｜第{n}篇治愈笔记",
-        "desc": "关于{keyword}的一些心得体会，希望能给你带来一点温暖。",
-        "video": False,
-    },
-    Platform.DOUYIN: {
-        "authors": ["情绪治愈馆", "心理疗愈师", "晚安电台", "正念冥想", "暖心日常"],
-        "url": "https://www.douyin.com/video/mock_{pfx}_{i}",
-        "title": "{keyword} 治愈视频 #{n}",
-        "desc": "一个关于{keyword}的短视频，愿你今天也被温柔以待。",
-        "video": True,
-    },
-    Platform.BILIBILI: {
-        "authors": ["冥想自习室", "心理学科普站", "放松白噪音", "治愈放映厅"],
-        "url": "https://www.bilibili.com/video/mock_{pfx}_{i}",
-        "title": "【{keyword}】完整引导版 #{n}",
-        "desc": "关于{keyword}的长视频，慢慢看，陪你放松下来。",
-        "video": True,
-    },
-    Platform.ZHIHU: {
-        "authors": ["心理咨询师小然", "情绪观察者", "答主慢慢来", "树洞管理员"],
-        "url": "https://www.zhihu.com/question/mock_{pfx}_{i}",
-        "title": "关于{keyword}，我认真回答了 #{n}",
-        "desc": "从心理学角度聊聊{keyword}，希望对你有帮助。",
-        "video": False,
-    },
-    Platform.KUAISHOU: {
-        "authors": ["暖心大侄子", "乡村慢生活", "快乐源泉", "睡前一笑"],
-        "url": "https://www.kuaishou.com/short-video/mock_{pfx}_{i}",
-        "title": "{keyword} 快手小视频 #{n}",
-        "desc": "来自快手的{keyword}内容，简单真实，看着看着就放松了。",
-        "video": True,
-    },
-    Platform.WEIBO: {
-        "authors": ["每日治愈播报", "情绪树洞菌", "暖心收集站", "晚安博主"],
-        "url": "https://m.weibo.cn/detail/mock_{pfx}_{i}",
-        "title": "#{keyword}# 微博动态 #{n}",
-        "desc": "关于{keyword}的一条微博，愿你被世界温柔以待。",
-        "video": False,
-    },
-}
-
-_MOCK_LIKES = [1280, 3560, 892, 5400, 2100, 6700]
-_MOCK_COMMENTS = [86, 230, 45, 410, 156, 320]
-
-
-def _build_mock_results(
-    keyword: str,
-    platform: Optional[Platform],
-    limit: int,
-) -> List[SocialSearchItem]:
-    """生成演示用的搜索结果，封面用 picsum 占位图。"""
-    if platform is not None:
-        wanted = [platform]
-    else:
-        # 与真实调度保持一致：auto 只兜底免费平台
-        wanted = [Platform.BILIBILI, Platform.ZHIHU]
-
-    per_platform = max(1, limit // len(wanted)) if len(wanted) > 1 else limit
-
-    items: List[SocialSearchItem] = []
-    for pf in wanted:
-        meta = _MOCK_PLATFORM_META[pf]
-        for i in range(per_platform):
-            pfx = pf.value
-            items.append(
-                SocialSearchItem(
-                    platform=pf,
-                    note_id=f"mock_{pfx}_{i}",
-                    title=meta["title"].format(keyword=keyword, n=i + 1),
-                    description=meta["desc"].format(keyword=keyword),
-                    cover_url=_MOCK_COVERS[(len(items)) % len(_MOCK_COVERS)],
-                    url=meta["url"].format(pfx=pfx, i=i),
-                    author_name=meta["authors"][i % len(meta["authors"])],
-                    like_count=_MOCK_LIKES[i % len(_MOCK_LIKES)],
-                    comment_count=_MOCK_COMMENTS[i % len(_MOCK_COMMENTS)],
-                    content_type="video" if meta["video"] else "normal",
-                )
-            )
-
-    items.sort(key=lambda x: x.like_count, reverse=True)
-    return items[:limit]

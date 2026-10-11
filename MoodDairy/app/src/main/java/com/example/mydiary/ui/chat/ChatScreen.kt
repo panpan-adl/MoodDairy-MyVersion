@@ -12,6 +12,8 @@ import android.speech.SpeechRecognizer
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -83,6 +85,13 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -566,18 +575,18 @@ private fun PendingPlanSection(
                     if (plan.preview.isNotBlank()) {
                         Text(text = "内容预览：${plan.preview}", color = TextSecondary, fontSize = 13.sp)
                     }
-                    Text(text = "参数：${plan.argumentsJson}", color = TextSecondary, fontSize = 12.sp)
+                    if (plan.tool != "search_social_content") Text(text = "参数：${plan.argumentsJson}", color = TextSecondary, fontSize = 12.sp)
                     plan.expiresAt?.let { expiresAt ->
                         Text(text = "过期时间：$expiresAt", color = TextTertiary, fontSize = 11.sp)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = { onConfirm(plan) }) {
-                            Text("确认")
+                            Text(if (plan.tool == "search_social_content") "同意费用并搜索" else "确认")
                         }
                         TextButton(onClick = { onCancel(plan) }) {
                             Text("取消")
                         }
-                        TextButton(onClick = { onEdit(plan) }) {
+                        if (plan.tool != "search_social_content") TextButton(onClick = { onEdit(plan) }) {
                             Icon(
                                 imageVector = Icons.Default.Edit,
                                 contentDescription = "edit_plan",
@@ -1040,7 +1049,22 @@ private fun ChatInputBar(
                     enabled = true,
                     modifier = Modifier
                         .weight(1f)
-                        .padding(horizontal = 8.dp),
+                        .padding(horizontal = 8.dp)
+                        .onPreviewKeyEvent { event ->
+                            val isEnter = event.key == Key.Enter || event.key == Key.NumPadEnter
+                            if (isEnter && !event.isShiftPressed) {
+                                if (event.type == KeyEventType.KeyDown &&
+                                    event.nativeKeyEvent.repeatCount == 0 &&
+                                    enabled &&
+                                    (inputText.isNotBlank() || selectedImageUris.isNotEmpty())
+                                ) {
+                                    onSend()
+                                }
+                                true
+                            } else {
+                                false
+                            }
+                        },
                     placeholder = {
                         Text(
                             text = if (enabled) "输入消息..." else "正在回复中，可以先输入...",
@@ -1056,7 +1080,16 @@ private fun ChatInputBar(
                         disabledContainerColor = Color.Transparent,
                     ),
                     shape = RoundedCornerShape(24.dp),
-                    singleLine = true,
+                    singleLine = false,
+                    maxLines = 4,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(
+                        onSend = {
+                            if (enabled && (inputText.isNotBlank() || selectedImageUris.isNotEmpty())) {
+                                onSend()
+                            }
+                        },
+                    ),
                 )
 
                 val canSend = inputText.isNotBlank() || selectedImageUris.isNotEmpty()

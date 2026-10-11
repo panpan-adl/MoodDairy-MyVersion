@@ -444,6 +444,7 @@ fun NavGraph(
             }
 
             ProfileScreen(
+                onNavigateToVideoLibrary = { navController.navigate(Routes.RECHARGE) },
                 shouldRefresh = shouldRefresh,
                 onNavigateToEditProfile = {
                     navController.navigate(Routes.EDIT_PROFILE)

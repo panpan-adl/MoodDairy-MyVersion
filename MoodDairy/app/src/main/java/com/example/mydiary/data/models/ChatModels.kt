@@ -147,6 +147,7 @@ data class ChatServiceAction(
 )
 
 data class SocialSearchItem(
+    @SerializedName("record_source") val recordSource: String? = null,
     @SerializedName("platform")
     val platform: String,
     @SerializedName("note_id")
@@ -184,6 +185,8 @@ data class DiarySummarySimple(
 
 /** 社交搜索（TikHub）账户开通状态 */
 data class SocialSearchStatus(
+    @SerializedName("stale")
+    val stale: Boolean = false,
     @SerializedName("configured")
     val configured: Boolean = false,
     @SerializedName("bound")

@@ -433,10 +433,17 @@ async def _exec_search_social_content(
 
     platform_raw = arguments.get("platform", "auto")
     limit_raw = arguments.get("limit", 8)
-    limit = max(1, min(20, int(limit_raw)))
+    try:
+        limit = max(1, min(20, int(limit_raw)))
+    except (TypeError, ValueError, OverflowError):
+        limit = 8
 
     from app.config import settings
     from app.services.social_search import key_service
+    from app.services.social_search.charge_policy import search_charge_confirmed
+
+    if not search_charge_confirmed.get():
+        return ToolExecutionResult(ok=False, tool="search_social_content", mode="read_only", summary="请先确认本次平台搜索的接口费用", data={"items":[], "error_code":"CHARGE_CONFIRMATION_REQUIRED"}, error="CHARGE_CONFIRMATION_REQUIRED")
 
     if not settings.social_search_enabled:
         return ToolExecutionResult(
@@ -493,6 +500,10 @@ async def _exec_search_social_content(
         "微博": Platform.WEIBO,
     }
     platform = _PLATFORM_MAP.get(str(platform_raw).strip().lower())
+    from app.services.social_search.charge_policy import allowed_paid_platform, user_search_message
+    if not allowed_paid_platform(platform, user_search_message.get()):
+        platform = None
+        platform_raw = "auto"
 
     try:
         items = await client.search(keyword=keyword, platform=platform, limit=limit)
@@ -580,7 +591,26 @@ async def _exec_search_music(
         )
 
 
+async def _exec_search_personal_videos(arguments, db, user_id, conversation_id):
+    import asyncio
+    from app.services import personal_videos
+    query=str(arguments.get("keyword") or arguments.get("query") or "").strip()
+    terms=arguments.get("terms") or []
+    if not isinstance(terms,list): terms=[]
+    platform=arguments.get("platform")
+    if platform not in ("douyin","bilibili"): platform=None
+    items=await asyncio.to_thread(personal_videos.search,user_id,query,terms,platform,6)
+    return ToolExecutionResult(ok=True,tool="search_personal_videos",mode="read_only",summary=f"在个人导入记录中找到 {len(items)} 条候选视频",data={"keyword":query,"platform":platform or "personal","items":items,"count":len(items)})
+
+
 TOOL_REGISTRY: Dict[str, ToolDefinition] = {
+    "search_personal_videos": ToolDefinition(
+        name="search_personal_videos",
+        description="用户想找回以前喜欢、点赞、收藏或导入过的视频时使用。只搜索当前用户导入的抖音喜欢和B站收藏，不搜索全网，不调用收费接口。将模糊描述提炼成多个关键词或同义词传入terms。没有结果时说明可能尚未导入或内容信息不足，不编造结果，不声称B站收藏是点赞。",
+        mode="read_only",requires_confirmation=False,display_name="找回个人视频",
+        parameters={"type":"object","properties":{"keyword":{"type":"string"},"terms":{"type":"array","items":{"type":"string"},"maxItems":12},"platform":{"type":"string","enum":["auto","douyin","bilibili"]}},"required":["keyword"],"additionalProperties":False},
+        executor=_exec_search_personal_videos,
+    ),
     "create_diary": ToolDefinition(
         name="create_diary",
         description="Create a diary entry for the current user.",
@@ -756,13 +786,14 @@ TOOL_REGISTRY: Dict[str, ToolDefinition] = {
             "例如：'搜一下小红书的冥想教程'、'B站有没有助眠白噪音'、'知乎上大家怎么缓解焦虑'、"
             "'找找快手的搞笑视频'、'看看微博上大家在聊什么'、'有没有什么美食攻略'。"
             "返回内容卡片列表，包含标题、封面图、作者、点赞数和跳转链接。"
+            "本轮调用此工具只生成后端费用确认卡片，不立即搜索或扣费。请直接调用工具生成卡片，禁止先用文字询问用户是否确认。"
             "注意：小红书/抖音/快手/微博是付费搜索（会消耗用户账户余额），"
             "只有用户明确点名该平台时才能传对应值；"
-            "未指定平台时用 auto，仅搜索免费的 B站和知乎，绝不可以默认搜付费平台。"
+            "未指定平台时用 auto，仅搜索 B站和知乎。所有平台搜索均需用户确认接口费用；实际计费以 TikHub 为准。"
         ),
         mode="read_only",
-        requires_confirmation=False,
-        display_name="全网搜索",
+        requires_confirmation=True,
+        display_name="确认平台搜索及接口费用",
         parameters={
             "type": "object",
             "properties": {
@@ -779,8 +810,8 @@ TOOL_REGISTRY: Dict[str, ToolDefinition] = {
                     "enum": ["auto", "xhs", "douyin", "bilibili", "zhihu", "kuaishou", "weibo"],
                     "default": "auto",
                     "description": (
-                        "目标平台：auto=自动综合（仅 B站+知乎，免费，默认）；"
-                        "xhs=小红书（付费），douyin=抖音（付费），bilibili=B站（免费），zhihu=知乎（免费），"
+                        "目标平台：auto=自动综合（仅 B站+知乎，默认）；"
+                        "xhs=小红书，douyin=抖音，bilibili=B站，zhihu=知乎，"
                         "kuaishou=快手（付费），weibo=微博（付费）。"
                         "付费平台只有在用户明确点名时才能传，用户没点名一律用 auto。"
                     )
@@ -859,15 +890,28 @@ async def execute_tool(
     db: AsyncSession,
     user_id: int,
     conversation_id: str,
+    user_message: str = "",
+    charge_confirmed: bool = False,
 ) -> ToolExecutionResult:
     definition = get_tool_definition(tool_name)
     if not definition:
         raise ValueError(f"unknown tool: {tool_name}")
 
-    return await definition.executor(arguments, db, user_id, conversation_id)
+    from app.services.social_search.charge_policy import user_search_message, search_charge_confirmed
+    context_token = user_search_message.set(user_message)
+    charge_token = search_charge_confirmed.set(charge_confirmed)
+    try:
+        return await definition.executor(arguments, db, user_id, conversation_id)
+    finally:
+        user_search_message.reset(context_token)
+        search_charge_confirmed.reset(charge_token)
 
 
 def build_tool_plan_preview(tool_name: str, arguments: Dict[str, Any]) -> str:
+    if tool_name == "search_social_content":
+        names = {"auto":"B站、知乎", "xhs":"小红书", "douyin":"抖音", "bilibili":"B站", "zhihu":"知乎", "kuaishou":"快手", "weibo":"微博"}
+        target = arguments.get("platform", "auto")
+        return f"搜索：{arguments.get('keyword', '')}\n平台：{names.get(target, target)}\n最多 {2 if target == 'auto' else 1} 次 TikHub 请求；可能消耗体验额度或账户余额，价格以 TikHub 接口市场为准。取消不会发起搜索请求。"
     if tool_name == "create_diary":
         content = str(arguments.get("content", "")).strip()
         return content[:120]

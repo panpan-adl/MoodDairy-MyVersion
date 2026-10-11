@@ -687,16 +687,22 @@ class ChatViewModel @Inject constructor(
         _faceEmotionStatus.value = "等待摄像头识别"
         val started = emotionCaptureController.start(
             lifecycleOwner,
-            onResult = { label, confidence, duration ->
+            onResult = { label, confidence, duration, expression ->
                 viewModelScope.launch {
                     if (generation != emotionCaptureGeneration) return@launch
-                    emotionSignalRepository.report(label, confidence)
+                    val response = emotionSignalRepository.report(label, confidence, duration, expression)
+                    if (_isEmotionCapturing.value && generation == emotionCaptureGeneration) response?.serviceBundle?.let { event ->
+                        handleServiceBundleEvent(event)
+                        _faceEmotionPrompt.value = _serviceBundles.value.lastOrNull { it.bundleId == event.bundleId }
+                    }
                 }
             },
             onObservation = { label, confidence ->
                 val name = mapOf("sad" to "难过", "angry" to "生气", "fear" to "害怕", "disgust" to "厌恶",
-                    "happy" to "开心", "surprise" to "惊讶", "neutral" to "中性")[label]
-                _faceEmotionStatus.value = if (name == null) "未检测到人脸，请正对摄像头"
+                    "happy" to "开心", "surprise" to "惊讶", "neutral" to "中性",
+                    "smile" to "微笑", "broad_smile" to "明显笑容", "delighted_surprise" to "惊喜表情")[label]
+                _faceEmotionStatus.value = com.example.mydiary.ml.FaceObservationStatus.message(label)
+                    ?: if (name == null) "正在识别表情"
                     else "识别：$name · ${(confidence * 100).toInt()}%" + if (confidence < 0.40f) "（置信度不足）" else ""
             },
         )

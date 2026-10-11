@@ -127,8 +127,8 @@ class RechargeViewModel @Inject constructor(
                 val resp = apiService.bindSocialSearchKey(BindTikHubKeyRequest(apiKey))
                 val body = resp.body()
                 if (resp.isSuccessful && body != null) {
-                    _status.value = body
                     if (body.bound) {
+                        _status.value = body
                         _toast.tryEmit(
                             if (body.unlocked) "密钥绑定成功，可以开始全网搜索啦"
                             else "密钥绑定成功，账户余额不足，请先充值",
@@ -194,7 +194,7 @@ fun RechargeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("全网搜索 · 账户", color = Color.White) },
+                title = { Text("视频记忆库 · TikHub 账户", color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, "返回", tint = Color.White)
@@ -218,6 +218,7 @@ fun RechargeScreen(
         ) {
             val bound = status?.bound == true
             val unlocked = status?.unlocked == true
+            androidx.compose.runtime.LaunchedEffect(bound) { if (bound) apiKeyInput = "" }
 
             // 顶部状态 Banner
             Box(
@@ -240,7 +241,8 @@ fun RechargeScreen(
                         Text(
                             when {
                                 unlocked -> "TikHub 已连接 · 可全网搜索"
-                                bound -> "TikHub 已连接 · 余额不足"
+                                bound && status?.errorCode == "INVALID_KEY" -> "TikHub 密钥已失效"
+                                bound -> "TikHub 已连接 · 查看可用额度"
                                 else -> "绑定你的 TikHub 密钥"
                             },
                             color = Color.White,
@@ -261,7 +263,7 @@ fun RechargeScreen(
                     if (!bound) {
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            "搜索由 TikHub 官方按次计费（约 $0.01/次），心语不经手费用",
+                            "搜索调用前会提示确认，接口价格与体验额度适用范围以 TikHub 为准",
                             color = Color.White.copy(alpha = 0.82f),
                             fontSize = 11.sp,
                         )
@@ -293,6 +295,7 @@ fun RechargeScreen(
                 )
             }
 
+            PersonalVideoImportPanel(keyBound = bound)
             Spacer(Modifier.height(28.dp))
         }
     }
@@ -314,6 +317,7 @@ private fun BoundAccountContent(
             colors = CardDefaults.cardColors(containerColor = Color.White),
         ) {
             Column(modifier = Modifier.padding(18.dp)) {
+                if (status?.stale == true) Text(status.message ?: "当前显示上次同步的余额，请刷新后查看实时额度。", color = Color(0xFFB26A00), fontSize = 12.sp)
                 if (status?.unlocked != true) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
@@ -324,7 +328,7 @@ private fun BoundAccountContent(
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            "付费余额为 0，暂时无法搜索（免费体验额度不能用于该接口）",
+                            "付费余额不足或密钥不可用，部分接口可能受限；体验额度适用范围请在 TikHub 查看。",
                             fontSize = 12.sp,
                             color = Color(0xFFB26A00),
                         )
@@ -427,7 +431,7 @@ private fun UnboundContent(
                 GuideStep(
                     step = 2,
                     title = "给账户充值",
-                    desc = "搜索约 $0.01/次，充 $5 约可搜 500 次，支持支付宝 / 微信",
+                    desc = "先查看目标接口价格与体验额度范围，按需充值",
                     actionText = "去充值",
                     onAction = onOpenBilling,
                 )
@@ -453,6 +457,7 @@ private fun UnboundContent(
                 OutlinedTextField(
                     value = apiKeyInput,
                     onValueChange = onApiKeyChange,
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth(),
                     placeholder = { Text("形如 q88jMNtM… 的一长串字符", fontSize = 13.sp) },
                     minLines = 2,

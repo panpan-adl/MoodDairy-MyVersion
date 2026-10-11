@@ -90,14 +90,22 @@ class TikHubProvider(BaseSocialSearchProvider):
                 else:
                     response = await client.get(url, headers=headers, params=params)
                 response.raise_for_status()
-                return response.json()
+                try:
+                    payload = response.json()
+                except ValueError:
+                    raise SocialSearchError("接口返回格式不正确，请稍后重试", code="INVALID_RESPONSE") from None
+                if not isinstance(payload, dict):
+                    raise SocialSearchError("接口返回格式不正确，请稍后重试", code="INVALID_RESPONSE")
+                if payload.get("code") not in (None, 0, 200):
+                    raise SocialSearchError("TikHub 拒绝本次请求，请检查密钥权限与账户状态", code="PROVIDER_ERROR")
+                return payload
             except httpx.HTTPStatusError as e:
                 status = e.response.status_code
                 if status == 402:
                     raise SocialSearchError("账户余额不足，请先充值 TikHub", code="NO_BALANCE")
                 if status == 401:
                     raise SocialSearchError("TikHub API Key 无效", code="INVALID_KEY")
-                logger.error(f"TikHub API error {status}: {e.response.text[:300]}")
+                logger.error("TikHub API error status=%s", status)
                 raise SocialSearchError(f"API error: {status}")
             except httpx.HTTPError as e:
                 logger.error(f"TikHub API network error: {e}")
@@ -166,12 +174,8 @@ class TikHubProvider(BaseSocialSearchProvider):
 
         items: List[SocialSearchItem] = []
         # App V2 search 返回的笔记列表可能在 data.notes / data.items / data 直接是列表
-        raw_notes = (
-            (data.get("data") or {}).get("notes")
-            or (data.get("data") or {}).get("items")
-            or (data.get("data") if isinstance(data.get("data"), list) else None)
-            or []
-        )
+        payload = data.get("data")
+        raw_notes = payload if isinstance(payload, list) else (payload.get("notes") or payload.get("items") or []) if isinstance(payload, dict) else []
 
         for note in raw_notes[:limit]:
             try:
@@ -217,10 +221,10 @@ class TikHubProvider(BaseSocialSearchProvider):
             url=url,
             author_name=author.get("nickname", ""),
             author_avatar=(author.get("avatar_thumb") or {}).get("url_list", [None])[0] if author.get("avatar_thumb") else None,
-            like_count=int(statistics.get("digg_count", 0)),
-            comment_count=int(statistics.get("comment_count", 0)),
-            share_count=int(statistics.get("share_count", 0)),
-            publish_time=raw.get("create_time"),
+            like_count=_as_int(statistics.get("digg_count")),
+            comment_count=_as_int(statistics.get("comment_count")),
+            share_count=_as_int(statistics.get("share_count")),
+            publish_time=str(raw.get("create_time") or ""),
             content_type="video",
         )
 
@@ -238,16 +242,14 @@ class TikHubProvider(BaseSocialSearchProvider):
         data = await self._request(endpoint, json_body=body, method="POST")
 
         items: List[SocialSearchItem] = []
-        raw_awemes = (
-            (data.get("data") or {}).get("aweme_list")
-            or (data.get("data") or {}).get("data")
-            or (data.get("data") if isinstance(data.get("data"), list) else None)
-            or []
-        )
+        payload = data.get("data")
+        raw_awemes = payload if isinstance(payload, list) else (payload.get("aweme_list") or payload.get("data") or []) if isinstance(payload, dict) else []
 
         for aweme in raw_awemes[:limit]:
             try:
-                items.append(self._normalize_douyin_item(aweme))
+                raw = aweme.get("aweme_info") or aweme
+                if raw.get("aweme_id") or raw.get("id"):
+                    items.append(self._normalize_douyin_item(raw))
             except Exception as e:
                 logger.warning(f"Failed to normalize Douyin item: {e}")
                 continue
@@ -299,13 +301,27 @@ class TikHubProvider(BaseSocialSearchProvider):
         }
         data = await self._request(endpoint, params=params)
 
-        raw_items = ((data.get("data") or {}).get("data") or {}).get("result") or []
-        items: List[SocialSearchItem] = []
+        payload = data.get("data") or {}
+        payload = payload.get("data") or payload
+        raw_items = payload.get("result") or []
+        expanded = []
         for raw in raw_items:
+            if not isinstance(raw, dict):
+                continue
+            if (raw.get("result_type") or raw.get("type")) != "video":
+                continue
+            if isinstance(raw.get("data"), list):
+                expanded.extend({**item, "type":"video"} for item in raw["data"] if isinstance(item, dict))
+            else:
+                expanded.append(raw)
+        items: List[SocialSearchItem] = []
+        for raw in expanded:
             if (raw.get("result_type") or raw.get("type")) != "video":
                 continue
             try:
-                items.append(self._normalize_bilibili_item(raw))
+                item = self._normalize_bilibili_item(raw)
+                if item.note_id and item.url:
+                    items.append(item)
             except Exception as e:  # noqa: BLE001
                 logger.warning(f"Failed to normalize Bilibili item: {e}")
                 continue
@@ -569,6 +585,10 @@ class TikHubProvider(BaseSocialSearchProvider):
 
         user_data = data.get("user_data") or {}
         key_data = data.get("api_key_data") or {}
+        if not isinstance(user_data, dict) or not user_data or not isinstance(key_data, dict):
+            raise SocialSearchError("无法验证 TikHub 账户信息，密钥未绑定", code="INVALID_RESPONSE")
+        if key_data.get("api_key_status") in (0, "0", False):
+            raise SocialSearchError("TikHub API Key 已停用", code="INVALID_KEY")
         balance = float(user_data.get("balance") or 0.0)
         free_credit = float(user_data.get("free_credit") or 0.0)
         return {
