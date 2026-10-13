@@ -7,6 +7,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,6 +21,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Checklist
@@ -45,6 +50,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -95,7 +101,7 @@ fun MainScreen(
     var showQuickActions by remember { mutableStateOf(false) }
 
     val startDestination = remember {
-        if (sessionManager.isLoggedIn()) Routes.CALENDAR else Routes.LOGIN
+        if (sessionManager.isLoggedIn()) Routes.TODAY else Routes.LOGIN
     }
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -141,7 +147,7 @@ fun MainScreen(
                         contentColor = Color.White,
                         shape = CircleShape,
                         modifier = Modifier
-                            .offset(y = (-28).dp)
+                            .offset(y = 0.dp)
                             .size(56.dp)
                     ) {
                         Icon(
@@ -152,7 +158,7 @@ fun MainScreen(
                     }
                 }
             },
-            floatingActionButtonPosition = FabPosition.Center
+            floatingActionButtonPosition = FabPosition.End
         ) { innerPadding ->
             Box(modifier = Modifier.padding(innerPadding)) {
                 NavGraph(
@@ -234,86 +240,40 @@ private fun QuickActionSheet(
 
 @Composable
 fun BottomNavBar(navController: NavController, currentRoute: String?) {
+    val tabs = listOf(
+        Triple(Routes.TODAY, "今天", Icons.Filled.Home to Icons.Outlined.Home),
+        Triple(Routes.CHAT, "助手", Icons.Filled.Chat to Icons.Outlined.Chat),
+        Triple(Routes.CALENDAR, "记录", Icons.Filled.DateRange to Icons.Outlined.DateRange),
+        Triple(Routes.EXPLORE, "发现", Icons.Filled.Explore to Icons.Outlined.Explore),
+        Triple(Routes.PROFILE, "我的", Icons.Filled.Person to Icons.Outlined.Person)
+    )
     BottomAppBar(
         containerColor = Color.White.copy(alpha = 0.95f),
         tonalElevation = 8.dp,
-        modifier = Modifier
-            .height(64.dp)
-            .border(
-                width = 1.dp,
-                color = Color.White.copy(alpha = 0.6f),
-                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
-            ),
+        modifier = Modifier.height(64.dp),
         actions = {
-            BottomBarIcon(
-                selected = currentRoute == Routes.CALENDAR,
-                selectedIcon = Icons.Filled.DateRange,
-                unselectedIcon = Icons.Outlined.DateRange,
-                description = "日历",
-                onClick = {
-                    navController.navigate(Routes.CALENDAR) {
-                        popUpTo(navController.graph.startDestinationId) {
-                            saveState = true
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                tabs.forEach { (route, label, icons) ->
+                    BottomBarIcon(
+                        selected = currentRoute == route,
+                        selectedIcon = icons.first,
+                        unselectedIcon = icons.second,
+                        description = label,
+                        onClick = {
+                            navController.navigate(route) {
+                                popUpTo(Routes.TODAY) { saveState = true }
+                                launchSingleTop = true
+                                // A direct shortcut can save its stack under the home destination.
+                                // Returning home must show Today, rather than restoring that stack.
+                                restoreState = route != Routes.TODAY
+                            }
                         }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
+                    )
                 }
-            )
-
-            BottomBarIcon(
-                selected = currentRoute == Routes.CHAT,
-                selectedIcon = Icons.Filled.Chat,
-                unselectedIcon = Icons.Outlined.Chat,
-                description = "对话",
-                onClick = {
-                    navController.navigate(Routes.CHAT) {
-                        popUpTo(navController.graph.startDestinationId) {
-                            saveState = true
-                        }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                }
-            )
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            BottomBarIcon(
-                selected = currentRoute == Routes.EXPLORE,
-                selectedIcon = Icons.Filled.Explore,
-                unselectedIcon = Icons.Outlined.Explore,
-                description = "发现",
-                onClick = {
-                    navController.navigate(Routes.EXPLORE) {
-                        popUpTo(navController.graph.startDestinationId) {
-                            saveState = true
-                        }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                }
-            )
-
-            BottomBarIcon(
-                selected = currentRoute == Routes.PROFILE,
-                selectedIcon = Icons.Filled.Person,
-                unselectedIcon = Icons.Outlined.Person,
-                description = "我的",
-                onClick = {
-                    navController.navigate(Routes.PROFILE) {
-                        popUpTo(navController.graph.startDestinationId) {
-                            saveState = true
-                        }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                }
-            )
+            }
         }
     )
 }
-
 @Composable
 private fun BottomBarIcon(
     selected: Boolean,
@@ -326,11 +286,14 @@ private fun BottomBarIcon(
         onClick = onClick,
         modifier = Modifier.size(56.dp)
     ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Icon(
             imageVector = if (selected) selectedIcon else unselectedIcon,
             contentDescription = description,
-            modifier = Modifier.size(28.dp),
-            tint = if (selected) Color(0xFF9AEDCF) else Color(0xFF9E9E9E)
+            modifier = Modifier.size(24.dp),
+            tint = if (selected) Color(0xFF44866A) else Color(0xFF9E9E9E)
         )
+        Text(description, style = MaterialTheme.typography.labelSmall, color = if (selected) Color(0xFF44866A) else Color(0xFF777777))
+        }
     }
 }

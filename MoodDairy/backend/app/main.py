@@ -17,7 +17,7 @@ from app.database import check_db_connection, close_db, init_db
 from app.drawing import drawing_router
 from app.drawing.generator_config import GeneratorConfig
 from app.routers import chat, diaries, face_emotion, insights, media, music, todos, users, voice
-from app.routers import diary_search, diary_summaries
+from app.routers import diary_search, diary_summaries, personal_agent
 from app.routers import social_search_router
 from app.security.middleware import JWTAuthMiddleware
 from app.security.log_filter import install_sensitive_log_filter
@@ -179,6 +179,7 @@ app.include_router(voice.router)
 app.include_router(users.router)
 app.include_router(chat.router)
 app.include_router(todos.router)
+app.include_router(personal_agent.router)
 app.include_router(face_emotion.router)
 app.include_router(music.router)
 app.include_router(drawing_router)

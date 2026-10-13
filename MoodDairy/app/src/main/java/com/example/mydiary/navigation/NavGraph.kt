@@ -15,6 +15,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.navigation
 import androidx.navigation.navArgument
 import com.example.mydiary.data.local.SessionManager
+import com.example.mydiary.ui.agent.TodayScreen
 import com.example.mydiary.ui.auth.LoginScreen
 import com.example.mydiary.ui.auth.RegisterScreen
 import com.example.mydiary.ui.calendar.CalendarScreen
@@ -52,6 +53,7 @@ private const val TAG = "DiaryNavDebug"
 object Routes {
     const val LOGIN = "login"
     const val REGISTER = "register"
+    const val TODAY = "today"
     const val CALENDAR = "calendar"
     const val CHAT = "chat"
     const val EXPLORE = "explore"
@@ -119,6 +121,7 @@ fun NavGraph(
     val currentRoute = navBackStackEntry?.destination?.route
 
     val protectedRoutes = listOf(
+        Routes.TODAY,
         Routes.CALENDAR,
         Routes.CHAT,
         Routes.EXPLORE,
@@ -179,7 +182,7 @@ fun NavGraph(
                     }
                 },
                 onLoginSuccess = {
-                    navController.navigate(Routes.CALENDAR) {
+                    navController.navigate(Routes.TODAY) {
                         popUpTo(Routes.LOGIN) { inclusive = true }
                     }
                 }
@@ -192,13 +195,21 @@ fun NavGraph(
                     navController.popBackStack()
                 },
                 onRegisterSuccess = {
-                    navController.navigate(Routes.CALENDAR) {
+                    navController.navigate(Routes.TODAY) {
                         popUpTo(Routes.LOGIN) { inclusive = true }
                     }
                 }
             )
         }
 
+        composable(Routes.TODAY) {
+            TodayScreen(
+                onOpenAssistant = { navController.navigate(Routes.CHAT) },
+                onOpenRecords = { navController.navigate(Routes.CALENDAR) },
+                onOpenDiary = { id -> navController.navigate(Routes.diaryEditor(LocalDate.now(), id)) },
+                onOpenFocus = { navController.navigate(Routes.POMODORO_TIMER) }
+            )
+        }
         composable(Routes.CALENDAR) { backStackEntry ->
             val calendarViewModel: CalendarViewModel = hiltViewModel()
             val shouldRefresh = backStackEntry.savedStateHandle.get<Boolean>("calendar_refresh") == true
@@ -635,7 +646,7 @@ fun NavGraph(
                         if (editorEntry != null) {
                             navController.popBackStack(drawingFlowRoute, inclusive = true)
                         } else {
-                            navController.navigate(Routes.CALENDAR) {
+                            navController.navigate(Routes.TODAY) {
                                 popUpTo(drawingFlowRoute) { inclusive = true }
                                 launchSingleTop = true
                                 restoreState = true
@@ -644,7 +655,7 @@ fun NavGraph(
                     },
                     onNavigateToCalendar = {
                         resultViewModel.clearSavedMediaItems()
-                        navController.navigate(Routes.CALENDAR) {
+                        navController.navigate(Routes.TODAY) {
                             popUpTo(drawingFlowRoute) { inclusive = true }
                             launchSingleTop = true
                             restoreState = true

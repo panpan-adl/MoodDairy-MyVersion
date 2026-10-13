@@ -6095,3 +6095,6 @@ CubismSdkForJava-5-r.4.1/**/.transforms/
 # Required build and test inputs
 !gradle/wrapper/gradle-wrapper.jar
 !backend/requirements.txt
+
+# Personal agent local runtime data
+/backend/data/
