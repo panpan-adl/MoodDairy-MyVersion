@@ -61,8 +61,16 @@ def decrypt_diary_fields(diary) -> None:
     """Decrypt title/content on a Diary ORM instance in place."""
     if diary is None:
         return
-    diary.title = decrypt_field(diary.title)
-    diary.content = decrypt_field(diary.content)
+    from sqlalchemy import inspect
+    from sqlalchemy.orm.attributes import set_committed_value
+
+    for field in ("title", "content"):
+        value = decrypt_field(getattr(diary, field))
+        if inspect(diary, raiseerr=False) is not None:
+            # Decoding for display must never dirty encrypted database fields.
+            set_committed_value(diary, field, value)
+        else:
+            setattr(diary, field, value)
 
 
 def encrypt_diary_fields(title: Optional[str], content: Optional[str]) -> tuple[Optional[str], Optional[str]]:

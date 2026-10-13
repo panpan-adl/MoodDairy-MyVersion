@@ -163,10 +163,13 @@ class VideoService:
             result = await self.client.get_video_task_status(task_id)
             # 视频渲染成功：异步配乐，替换为带音轨的 URL
             if result.get("status") == "succeeded" and result.get("video_url"):
-                from .video_audio_mixer import add_background_music
-                result["video_url"] = await add_background_music(
-                    task_id, result["video_url"]
-                )
+                try:
+                    from .video_audio_mixer import add_background_music
+                    result["video_url"] = await add_background_music(
+                        task_id, result["video_url"]
+                    )
+                except Exception as exc:
+                    logger.warning("Optional background music unavailable: %s", exc)
             return result
         except VolcengineAPIError as e:
             logger.error(f"获取视频状态失败: {e}")

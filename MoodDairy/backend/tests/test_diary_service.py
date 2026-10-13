@@ -37,7 +37,7 @@ class TestCreateDiary:
 
         mock_result = MagicMock()
         mock_result.scalar_one = MagicMock(
-            return_value=MagicMock(id=1, media_items=[], user_id=1, content=sample_create_diary_data["content"])
+            return_value=MagicMock(id=1, media_items=[], user_id=1, title=sample_create_diary_data["title"], content=sample_create_diary_data["content"])
         )
         mock_db_session.execute = AsyncMock(return_value=mock_result)
 
@@ -63,7 +63,7 @@ class TestCreateDiary:
 
         mock_result = MagicMock()
         mock_result.scalar_one = MagicMock(
-            return_value=MagicMock(id=1, media_items=[], user_id=1, content=request.content)
+            return_value=MagicMock(id=1, media_items=[], user_id=1, title=request.title, content=request.content)
         )
         mock_db_session.execute = AsyncMock(return_value=mock_result)
 

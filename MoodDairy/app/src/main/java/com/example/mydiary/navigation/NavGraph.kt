@@ -501,7 +501,7 @@ fun NavGraph(
             ) { backStackEntry ->
                 val testId = backStackEntry.arguments?.getString("test_id") ?: ""
                 val parentRoute = "test_graph/$testId"
-                val parentEntry = remember(testId) {
+                val parentEntry = remember(backStackEntry, testId) {
                     navController.getBackStackEntry(parentRoute)
                 }
                 TestScreen(
@@ -525,7 +525,7 @@ fun NavGraph(
             ) { backStackEntry ->
                 val testId = backStackEntry.arguments?.getString("test_id") ?: ""
                 val parentRoute = "test_graph/$testId"
-                val parentEntry = remember(testId) {
+                val parentEntry = remember(backStackEntry, testId) {
                     navController.getBackStackEntry(parentRoute)
                 }
                 TestResultScreen(

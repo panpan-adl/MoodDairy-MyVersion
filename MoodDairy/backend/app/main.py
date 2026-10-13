@@ -50,7 +50,7 @@ class StaticMediaBypassMiddleware:
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http":
             path = scope.get("path", "")
-            if path.startswith("/media/"):
+            if path.startswith("/media/") and path != "/media/upload":
                 await self._server.handle(scope, receive, send, path[len("/media/"):])
                 return
             if path.startswith("/uploads/"):
@@ -112,7 +112,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 # 最后注册 → 位于中间件栈最外层，静态媒体在此短路，不经过任何 BaseHTTPMiddleware
-app.add_middleware(StaticMediaBypassMiddleware)
 
 
 @app.middleware("http")
@@ -196,3 +195,6 @@ if __name__ == "__main__":
 
 from app.routers.personal_videos import router as personal_videos_router
 app.include_router(personal_videos_router)
+
+# Static responses bypass the BaseHTTPMiddleware stream wrappers.
+app.add_middleware(StaticMediaBypassMiddleware)

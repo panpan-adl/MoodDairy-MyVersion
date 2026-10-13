@@ -32,7 +32,7 @@ class TestDrawingServiceInit:
         from app.drawing.drawing_service import DrawingService
         
         assert len(DrawingService.ENHANCE_BASE_PROMPT) > 0
-        assert "简笔画" in DrawingService.ENHANCE_BASE_PROMPT
+        assert "sketch" in DrawingService.ENHANCE_BASE_PROMPT
 
 
 class TestGenerateFromText:
@@ -55,7 +55,7 @@ class TestGenerateFromText:
         
         assert result["image_url"] == "https://example.com/result.png"
         assert "美丽的日落" in result["prompt_used"]
-        assert "水彩" in result["prompt_used"]
+        assert "watercolor" in result["prompt_used"]
         
         mock_client.text_to_image.assert_called_once()
     
@@ -70,11 +70,11 @@ class TestGenerateFromText:
         service = DrawingService(client=mock_client)
         
         result = await service.generate_from_text(prompt="风景", style="oil")
-        assert "油画" in result["prompt_used"]
+        assert "oil painting" in result["prompt_used"]
         
         mock_client.text_to_image.reset_mock()
         result = await service.generate_from_text(prompt="风景", style="cartoon")
-        assert "卡通" in result["prompt_used"]
+        assert "cartoon" in result["prompt_used"]
     
     @pytest.mark.asyncio
     async def test_generate_from_text_error_handling(self):
@@ -90,7 +90,7 @@ class TestGenerateFromText:
         with pytest.raises(DrawingServiceError) as exc_info:
             await service.generate_from_text(prompt="测试")
         
-        assert "生成画作失败" in str(exc_info.value)
+        assert "Failed to generate drawing" in str(exc_info.value)
 
 
 class TestEnhanceSketch:
@@ -112,7 +112,7 @@ class TestEnhanceSketch:
         )
         
         assert result["image_url"] == "https://example.com/enhanced.png"
-        assert "简笔画" in result["prompt_used"]
+        assert "sketch" in result["prompt_used"]
         assert "添加更多细节" in result["prompt_used"]
     
     @pytest.mark.asyncio
@@ -130,7 +130,7 @@ class TestEnhanceSketch:
         )
         
         assert result["image_url"] == "https://example.com/enhanced.png"
-        assert "简笔画" in result["prompt_used"]
+        assert "sketch" in result["prompt_used"]
 
 
 class TestBuildDiaryPrompt:
@@ -149,8 +149,8 @@ class TestBuildDiaryPrompt:
         )
         
         assert "今天心情不好" in prompt
-        assert "治愈" in prompt or "希望" in prompt or "积极" in prompt
-        assert "水彩" in prompt
+        assert "healing" in prompt and "hope" in prompt
+        assert "watercolor" in prompt
     
     def test_build_diary_prompt_without_emotion_transform(self):
         """测试不带情绪转换的提示词"""
@@ -165,8 +165,8 @@ class TestBuildDiaryPrompt:
         )
         
         assert "今天心情不好" in prompt
-        assert "忠实还原" in prompt
-        assert "油画" in prompt
+        assert "illustration inspired by" in prompt and "healing" not in prompt
+        assert "oil painting" in prompt
     
     def test_build_diary_prompt_truncates_long_content(self):
         """测试长内容被截断"""

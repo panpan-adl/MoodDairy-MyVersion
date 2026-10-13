@@ -119,7 +119,7 @@ class DiaryEmbeddingService:
                 .where(Diary.id == diary_id)
             )
             result = await self.db.execute(stmt)
-            diary = result.scalar_one_or_none()
+            diary = result.unique().scalar_one_or_none()
 
             if diary is None:
                 logger.warning("Diary %s not found for embedding", diary_id)
@@ -130,6 +130,9 @@ class DiaryEmbeddingService:
             if not force and diary.embedding_status == "succeeded":
                 logger.info("Diary %s already embedded, skipping (use force=True to re-embed)", diary_id)
                 return True
+
+            from app.security.field_crypto import decrypt_diary_fields
+            decrypt_diary_fields(diary)
 
             # Build text content
             text = _build_diary_text(diary)
