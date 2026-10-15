@@ -310,12 +310,12 @@ async def _exec_open_white_noise(
     conversation_id: str,
 ) -> ToolExecutionResult:
     del arguments, db, user_id, conversation_id
-    action = {"action": "open_white_noise", "payload": {"source": "chat_agent"}}
+    action = {"action": "open_relax", "payload": {"source": "chat_agent"}}
     return ToolExecutionResult(
         ok=True,
         tool="open_white_noise",
         mode="client_action",
-        summary="已准备打开白噪音页面",
+        summary="可以选择音乐或白噪音，点击后再播放",
         data=action,
         client_action=action,
     )
@@ -327,16 +327,15 @@ async def _exec_open_test_hub(
     user_id: int,
     conversation_id: str,
 ) -> ToolExecutionResult:
-    del arguments, db, user_id, conversation_id
-    action = {"action": "open_test_hub", "payload": {"source": "chat_agent"}}
-    return ToolExecutionResult(
-        ok=True,
-        tool="open_test_hub",
-        mode="client_action",
-        summary="已准备打开测试中心",
-        data=action,
-        client_action=action,
-    )
+    del db, user_id, conversation_id
+    from app.agent.support_intents import TESTS
+    test_id = arguments.get("test_id")
+    if test_id and test_id not in TESTS:
+        raise ValueError("未知测试，请选择现有测试")
+    action = {"action": "offer_tests", "payload": {"test_id": test_id or "", "history": "true" if arguments.get("history") else "false"}}
+    return ToolExecutionResult(ok=True, tool="open_test_hub", mode="client_action",
+        summary="点击下方卡片选择测试；结果仅供自我探索参考。", data=action, client_action=action)
+
 
 
 async def _exec_open_drawing(
@@ -398,28 +397,10 @@ async def _exec_open_diary_editor(
     )
 
 
-async def _exec_open_todo_create(
-    arguments: Dict[str, Any],
-    db: AsyncSession,
-    user_id: int,
-    conversation_id: str,
-) -> ToolExecutionResult:
-    del db, user_id, conversation_id
-
-    payload: Dict[str, Any] = {"source": "chat_agent"}
-
-    todo_date = _parse_date(arguments.get("todo_date"), date_type.today())
-    payload["todo_date"] = todo_date.isoformat()
-
-    action = {"action": "open_todo_create", "payload": payload}
-    return ToolExecutionResult(
-        ok=True,
-        tool="open_todo_create",
-        mode="client_action",
-        summary=f"已准备打开待办创建页面（{todo_date.isoformat()}）",
-        data=action,
-        client_action=action,
-    )
+async def _exec_open_todo_create(arguments, db, user_id, conversation_id):
+    action = {"action": "open_today", "payload": {"source": "chat_agent"}}
+    return ToolExecutionResult(ok=True, tool="open_todo_create", mode="client_action",
+        summary="我们可以在今天页面理清安排，按自己的精力规划。", data=action, client_action=action)
 
 
 async def _exec_search_social_content(
@@ -445,6 +426,12 @@ async def _exec_search_social_content(
     if not search_charge_confirmed.get():
         return ToolExecutionResult(ok=False, tool="search_social_content", mode="read_only", summary="请先确认本次平台搜索的接口费用", data={"items":[], "error_code":"CHARGE_CONFIRMATION_REQUIRED"}, error="CHARGE_CONFIRMATION_REQUIRED")
 
+    from app.agent.support_intents import is_psychology_search, resource_label
+    from app.services.social_search.charge_policy import user_search_message
+    if not is_psychology_search(user_search_message.get()):
+        return ToolExecutionResult(ok=False, tool="search_social_content", mode="read_only",
+            summary="我可以帮你找心理相关书籍、纪录片、科普或放松内容。请说说想了解的主题。",
+            data={"items": [], "error_code": "OUT_OF_SCOPE"}, error="OUT_OF_SCOPE")
     if not settings.social_search_enabled:
         return ToolExecutionResult(
             ok=False,
@@ -516,7 +503,7 @@ async def _exec_search_social_content(
             data={
                 "keyword": keyword,
                 "platform": platform_raw,
-                "items": [item.model_dump() for item in items],
+                "items": [dict(item.model_dump(), resource_kind=resource_label(item.title, item.description)) for item in items],
                 "count": len(items),
             },
         )
@@ -591,26 +578,7 @@ async def _exec_search_music(
         )
 
 
-async def _exec_search_personal_videos(arguments, db, user_id, conversation_id):
-    import asyncio
-    from app.services import personal_videos
-    query=str(arguments.get("keyword") or arguments.get("query") or "").strip()
-    terms=arguments.get("terms") or []
-    if not isinstance(terms,list): terms=[]
-    platform=arguments.get("platform")
-    if platform not in ("douyin","bilibili"): platform=None
-    items=await asyncio.to_thread(personal_videos.search,user_id,query,terms,platform,6)
-    return ToolExecutionResult(ok=True,tool="search_personal_videos",mode="read_only",summary=f"在个人导入记录中找到 {len(items)} 条候选视频",data={"keyword":query,"platform":platform or "personal","items":items,"count":len(items)})
-
-
 TOOL_REGISTRY: Dict[str, ToolDefinition] = {
-    "search_personal_videos": ToolDefinition(
-        name="search_personal_videos",
-        description="用户想找回以前喜欢、点赞、收藏或导入过的视频时使用。只搜索当前用户导入的抖音喜欢和B站收藏，不搜索全网，不调用收费接口。将模糊描述提炼成多个关键词或同义词传入terms。没有结果时说明可能尚未导入或内容信息不足，不编造结果，不声称B站收藏是点赞。",
-        mode="read_only",requires_confirmation=False,display_name="找回个人视频",
-        parameters={"type":"object","properties":{"keyword":{"type":"string"},"terms":{"type":"array","items":{"type":"string"},"maxItems":12},"platform":{"type":"string","enum":["auto","douyin","bilibili"]}},"required":["keyword"],"additionalProperties":False},
-        executor=_exec_search_personal_videos,
-    ),
     "create_diary": ToolDefinition(
         name="create_diary",
         description="Create a diary entry for the current user.",
@@ -716,20 +684,22 @@ TOOL_REGISTRY: Dict[str, ToolDefinition] = {
     ),
     "open_white_noise": ToolDefinition(
         name="open_white_noise",
-        description="Ask the client app to open white noise page.",
+        description="提供统一放松入口，用户点击后选择音乐或白噪音，不自动播放。",
         mode="client_action",
         requires_confirmation=False,
-        display_name="打开白噪音",
+        display_name="放松一下",
         parameters={"type": "object", "properties": {}, "additionalProperties": False},
         executor=_exec_open_white_noise,
     ),
     "open_test_hub": ToolDefinition(
         name="open_test_hub",
-        description="Ask the client app to open test hub page.",
+        description="用户明确想做测试时提供可点击入口。可指定 test_id；未指定时在聊天中提供测试选择，不自动跳转。",
         mode="client_action",
         requires_confirmation=False,
-        display_name="打开测试中心",
-        parameters={"type": "object", "properties": {}, "additionalProperties": False},
+        display_name="选择心理与自我探索测试",
+        parameters={"type": "object", "properties": {
+            "test_id": {"type": "string", "enum": ["mbti_simplified_v1", "animal_personality_v1", "phq9_v1", "gad7_v1", "holland_simplified_v1", "daily_mood_v1"]},
+            "history": {"type": "boolean"}}, "additionalProperties": False},
         executor=_exec_open_test_hub,
     ),
     "open_drawing": ToolDefinition(
@@ -768,7 +738,7 @@ TOOL_REGISTRY: Dict[str, ToolDefinition] = {
         description="Ask the client app to open the todo creation page.",
         mode="client_action",
         requires_confirmation=False,
-        display_name="打开待办创建页",
+        display_name="理清今天的安排",
         parameters={
             "type": "object",
             "properties": {
@@ -781,15 +751,10 @@ TOOL_REGISTRY: Dict[str, ToolDefinition] = {
     "search_social_content": ToolDefinition(
         name="search_social_content",
         description=(
-            "全网搜索国内主流社交平台内容（小红书、抖音、B站、知乎、快手、微博）。"
-            "当用户想查找生活方式、教程攻略、测评、灵感、治愈内容，或明确指定平台时使用。"
-            "例如：'搜一下小红书的冥想教程'、'B站有没有助眠白噪音'、'知乎上大家怎么缓解焦虑'、"
-            "'找找快手的搞笑视频'、'看看微博上大家在聊什么'、'有没有什么美食攻略'。"
-            "返回内容卡片列表，包含标题、封面图、作者、点赞数和跳转链接。"
-            "本轮调用此工具只生成后端费用确认卡片，不立即搜索或扣费。请直接调用工具生成卡片，禁止先用文字询问用户是否确认。"
-            "注意：小红书/抖音/快手/微博是付费搜索（会消耗用户账户余额），"
-            "只有用户明确点名该平台时才能传对应值；"
-            "未指定平台时用 auto，仅搜索 B站和知乎。所有平台搜索均需用户确认接口费用；实际计费以 TikHub 为准。"
+            "仅查找用户明确请求的心理书籍、纪录片、心理科普与放松相关内容。普通情绪倾诉不搜索。"
+            "返回平台来源和跳转链接，不承诺完整作品；区分书评、书籍介绍、纪录片解说。"
+            "直接调用以生成费用确认卡片，用户确认前不请求平台或扣费。"
+            "未指定平台用 auto（B站和知乎）；其他付费平台仅在用户明确点名时选择，费用以 TikHub 为准。"
         ),
         mode="read_only",
         requires_confirmation=True,
@@ -801,7 +766,7 @@ TOOL_REGISTRY: Dict[str, ToolDefinition] = {
                     "type": "string",
                     "description": (
                         "【必填】搜索关键词，禁止留空。必须从用户消息中提取具体主题，"
-                        "例如：冥想教程、治愈视频、猫咪视频、美食推荐、穿搭分享、助眠白噪音。"
+                        "例如：心理书籍、情绪纪录片、冥想教程、助眠白噪音。"
                         "即使用户只说'搜一下''帮我找'，也要结合上下文把主题作为关键词传入。"
                     )
                 },
@@ -867,6 +832,12 @@ TOOL_REGISTRY: Dict[str, ToolDefinition] = {
 }
 
 
+TOOL_REGISTRY["open_relax"] = ToolDefinition(
+    name="open_relax", description="提供放松一下入口，用户点击后选择音乐或白噪音，不自动播放。",
+    mode="client_action", requires_confirmation=False, display_name="放松一下",
+    parameters={"type": "object", "properties": {}, "additionalProperties": False}, executor=_exec_open_white_noise)
+
+
 def get_tool_definition(tool_name: str) -> Optional[ToolDefinition]:
     return TOOL_REGISTRY.get(tool_name)
 
@@ -876,6 +847,8 @@ def get_tool_schemas() -> List[Dict[str, Any]]:
 
     schemas: List[Dict[str, Any]] = []
     for tool in TOOL_REGISTRY.values():
+        if tool.name == "create_todo":
+            continue
         # BYOK 模式：只要功能开启就暴露给模型；用户自己的密钥是否已绑定在执行期判断
         if tool.name == "search_social_content":
             if not settings.social_search_enabled:

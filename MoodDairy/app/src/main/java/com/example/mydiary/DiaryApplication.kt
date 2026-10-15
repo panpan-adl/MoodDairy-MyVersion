@@ -11,6 +11,12 @@ import dagger.hilt.android.HiltAndroidApp
 class DiaryApplication : Application() {
     override fun onCreate() {
         super.onCreate()
-        // 应用初始化逻辑
+        // A device token issued by the retired computer service cannot authenticate
+        // against the original account server. Keep diaries/drafts, reset only that session.
+        val retiredConnection = com.example.mydiary.data.local.SecurePreferences.create(this, "local_computer_secure")
+        if (retiredConnection.contains("url")) {
+            com.example.mydiary.data.local.SessionManager(this).clearSession()
+            retiredConnection.edit().clear().commit()
+        }
     }
 }

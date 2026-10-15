@@ -30,6 +30,7 @@ oss2>=2.18.0
 
 python-dotenv==1.0.0
 Pillow==10.1.0
+tzdata>=2024.1
 
 # Security
 passlib[bcrypt]==1.7.4

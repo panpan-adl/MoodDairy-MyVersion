@@ -45,6 +45,7 @@ private enum class TodaySection(val title: String, val icon: ImageVector) {
     REVIEW("晚间复盘", Icons.Outlined.NightsStay)
 }
 internal data class TodayActions(
+    val history: () -> Unit = {}, val toggleHistorical: (AgentTask) -> Unit = {}, val bringToToday: (AgentTask) -> Unit = {},
     val refresh: () -> Unit = {}, val record: (String) -> Unit = {},
     val energy: (String) -> Unit = {}, val minutes: (Int) -> Unit = {},
     val generatePlan: () -> Unit = {}, val saveRecord: () -> Unit = {}, val manualPlan: () -> Unit = {},
@@ -54,11 +55,11 @@ internal data class TodayActions(
     val toggle: (AgentTask) -> Unit = {}, val postpone: (AgentTask) -> Unit = {},
     val reflection: (String) -> Unit = {}, val generateReview: () -> Unit = {},
     val review: (String) -> Unit = {}, val saveReview: () -> Unit = {}, val clearNotice: () -> Unit = {},
-    val assistant: () -> Unit = {}, val records: () -> Unit = {}, val openDiary: (Long) -> Unit = {}, val focus: () -> Unit = {}
+    val assistant: () -> Unit = {}, val records: () -> Unit = {}, val openDiary: (Long) -> Unit = {}
 )
 @Composable
 fun TodayScreen(onOpenAssistant: () -> Unit, onOpenRecords: () -> Unit, onOpenDiary: (Long) -> Unit,
-                onOpenFocus: () -> Unit, viewModel: TodayViewModel = hiltViewModel()) {
+                viewModel: TodayViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val lifecycle = LocalLifecycleOwner.current
     DisposableEffect(lifecycle, viewModel) {
@@ -68,6 +69,7 @@ fun TodayScreen(onOpenAssistant: () -> Unit, onOpenRecords: () -> Unit, onOpenDi
     }
     LaunchedEffect(viewModel) { viewModel.refresh() }
     TodayDashboard(state, TodayActions(
+        history = viewModel::loadHistory, toggleHistorical = viewModel::toggleHistorical, bringToToday = viewModel::bringToToday,
         refresh = viewModel::refresh, record = viewModel::updateRecord, energy = viewModel::updateEnergy,
         minutes = viewModel::updateMinutes, generatePlan = viewModel::generatePlan, saveRecord = viewModel::saveRecord,
         manualPlan = viewModel::manualPlan, editDraft = viewModel::editDraft, addDraft = viewModel::addDraft,
@@ -75,7 +77,7 @@ fun TodayScreen(onOpenAssistant: () -> Unit, onOpenRecords: () -> Unit, onOpenDi
         toggle = viewModel::toggle, postpone = viewModel::postpone, reflection = viewModel::updateReflection,
         generateReview = viewModel::generateReview, review = viewModel::updateReview, saveReview = viewModel::saveReview,
         clearNotice = viewModel::clearNotice, assistant = onOpenAssistant, records = onOpenRecords,
-        openDiary = onOpenDiary, focus = onOpenFocus))
+        openDiary = onOpenDiary))
 }
 @Composable
 internal fun TodayDashboard(state: TodayState, actions: TodayActions) {
@@ -108,7 +110,7 @@ internal fun TodayDashboard(state: TodayState, actions: TodayActions) {
             Column(Modifier.weight(1f)) {
                 Text("今天", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                 val dateLabel = runCatching { LocalDate.parse(state.date).format(DateTimeFormatter.ofPattern("M月d日  EEEE", Locale.CHINA)) }.getOrDefault(state.date)
-                Text("$dateLabel · 工作、学习与生活", fontSize = 12.sp, color = TextSecondary)
+                Text("$dateLabel · 理清安排，给心情留些余地", fontSize = 12.sp, color = TextSecondary)
             }
             IconButton(onClick = actions.refresh, enabled = !state.busy) { Icon(Icons.Outlined.Refresh, "刷新今日任务", tint = PrimaryDark) }
         }
@@ -243,7 +245,7 @@ internal fun TodayDashboard(state: TodayState, actions: TodayActions) {
                     item(key = "taskFilters") {
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text("今日任务", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                            Text("专注做好眼前一件事，完成后记得打勾。", fontSize = 12.sp, color = TextSecondary)
+                            Text("按自己的节奏，一次完成一件小事。", fontSize = 12.sp, color = TextSecondary)
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 (linkedMapOf("all" to "全部") + domainNames).forEach { (key, label) ->
                                     SelectionPill(label, filter == key, Modifier.weight(1f)) { filter = key }
@@ -289,12 +291,24 @@ internal fun TodayDashboard(state: TodayState, actions: TodayActions) {
                             if (!task.isDone) {
                                 HorizontalDivider(color = DividerColor)
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    TextButton(onClick = actions.focus, colors = ButtonDefaults.textButtonColors(contentColor = PrimaryDark)) {
-                                        Icon(Icons.Outlined.PlayCircle, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("开始专注", fontSize = 13.sp)
-                                    }
                                     TextButton(onClick = { actions.postpone(task) }, enabled = !state.busy, colors = ButtonDefaults.textButtonColors(contentColor = TextSecondary)) { Text("延期到明天", fontSize = 13.sp) }
                                 }
                             }
+                        }
+                    }
+                    item(key = "historyEntry") {
+                        TextButton(onClick = actions.history, enabled = !state.busy) { Text("查看以往任务") }
+                    }
+                    if (state.historyLoaded && state.historicalTasks.isEmpty()) item { Text("还没有以往任务", color = TextSecondary) }
+                    if (state.historyLoaded) items(state.historicalTasks, key = { "history_${it.id}" }) { task ->
+                        AgentPanel {
+                            Text("${task.date} · ${domainNames[task.domain]}", color = TextSecondary, fontSize = 12.sp)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(task.isDone, { actions.toggleHistorical(task) }, enabled = !state.busy)
+                                Text(task.title, Modifier.weight(1f), color = TextPrimary)
+                            }
+                            if (task.nextStep.isNotBlank()) Text(task.nextStep, color = TextSecondary)
+                            if (!task.isDone) TextButton(onClick = { actions.bringToToday(task) }, enabled = !state.busy) { Text("安排到今天") }
                         }
                     }
                 }

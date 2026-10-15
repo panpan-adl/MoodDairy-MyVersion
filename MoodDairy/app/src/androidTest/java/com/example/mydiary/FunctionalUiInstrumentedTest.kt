@@ -95,7 +95,7 @@ class FunctionalUiInstrumentedTest {
                 Routes.CALENDAR, Routes.CHAT, Routes.EXPLORE, Routes.GROWTH_PORTRAIT,
                 Routes.HIGHLIGHTS, Routes.LITTLE_JOYS, Routes.DIARY_SEARCH,
                 Routes.PROFILE, Routes.EDIT_PROFILE, Routes.TEST_HUB,
-                Routes.ACHIEVEMENT, Routes.SHOP, Routes.POMODORO_TIMER,
+                Routes.TODAY, Routes.RELAX,
                 Routes.RECHARGE, Routes.WHITE_NOISE, Routes.drawing(),
                 Routes.todoCreate(LocalDate.now()), Routes.diaryEditor(LocalDate.now())
             )

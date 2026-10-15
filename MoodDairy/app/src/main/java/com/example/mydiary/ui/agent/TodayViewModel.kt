@@ -15,6 +15,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import java.time.LocalDate
 import java.util.UUID
 import javax.inject.Inject
+import javax.inject.Named
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,6 +31,8 @@ data class TodayState(
     val plan: AgentPlan? = null,
     val planRequestId: String = UUID.randomUUID().toString(),
     val tasks: List<AgentTask> = emptyList(),
+    val historicalTasks: List<AgentTask> = emptyList(),
+    val historyLoaded: Boolean = false,
     val reflection: String = "",
     val review: String = "",
     val reviewRequestId: String = UUID.randomUUID().toString(),
@@ -43,6 +46,7 @@ data class TodayState(
 @HiltViewModel
 class TodayViewModel @Inject constructor(
     private val api: DiaryApiService,
+    @Named("longTimeout") private val aiApi: DiaryApiService,
     private val users: UserRepository,
     @ApplicationContext context: Context
 ) : ViewModel() {
@@ -110,7 +114,7 @@ class TodayViewModel @Inject constructor(
         }
         action {
             val s = _state.value
-            val plan = call { api.agentPlan(AgentPlanRequest(s.date, s.record, s.energy, s.availableMinutes)) }
+            val plan = call { aiApi.agentPlan(AgentPlanRequest(s.date, s.record, s.energy, s.availableMinutes)) }
             _state.update { it.copy(plan = plan, planRequestId = UUID.randomUUID().toString()) }
         }
     }
@@ -165,7 +169,7 @@ class TodayViewModel @Inject constructor(
     fun updateReflection(value: String) { _state.update { it.copy(reflection = value.take(6000)) }; persist() }
     fun generateReview() = action {
         val s = _state.value
-        val review = call { api.agentReview(AgentReviewRequest(s.date, s.reflection)) }
+        val review = call { aiApi.agentReview(AgentReviewRequest(s.date, s.reflection)) }
         _state.update { it.copy(review = review.content, savedReviewId = null, reviewRequestId = UUID.randomUUID().toString()) }
     }
     fun updateReview(value: String) {
@@ -180,4 +184,19 @@ class TodayViewModel @Inject constructor(
         }
     }
     fun clearNotice() { _state.update { it.copy(error = null, message = null) } }
+
+    fun loadHistory() = action {
+        val history = call { api.agentTaskHistory() }
+        _state.update { it.copy(historicalTasks = history, historyLoaded = true) }
+    }
+
+    fun toggleHistorical(task: AgentTask) = action {
+        val updated = call { api.agentUpdateTask(task.id, AgentTaskUpdate(isDone = !task.isDone)) }
+        _state.update { s -> s.copy(historicalTasks = s.historicalTasks.map { if (it.id == updated.id) updated else it }) }
+    }
+
+    fun bringToToday(task: AgentTask) = action {
+        val updated = call { api.agentUpdateTask(task.id, AgentTaskUpdate(date = _state.value.date)) }
+        _state.update { s -> s.copy(tasks = s.tasks + updated, historicalTasks = s.historicalTasks.filterNot { it.id == updated.id }) }
+    }
 }

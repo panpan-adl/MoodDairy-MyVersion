@@ -95,6 +95,11 @@ lint/tmp/
 # Environment variables
 .env
 **/.env
+.env.local
+**/.env.local
+backend/.local/
+backend/local-data/
+backend/uploads/
 
 # Cubism SDK build files
 CubismSdkForJava-5-r.4.1/**/build/
@@ -6095,6 +6100,7 @@ CubismSdkForJava-5-r.4.1/**/.transforms/
 # Required build and test inputs
 !gradle/wrapper/gradle-wrapper.jar
 !backend/requirements.txt
+!backend/requirements-local.txt
 
 # Personal agent local runtime data
 /backend/data/

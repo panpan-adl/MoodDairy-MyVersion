@@ -35,12 +35,8 @@ import com.example.mydiary.ui.search.DiarySearchScreen
 import com.example.mydiary.ui.test.TestHubScreen
 import com.example.mydiary.ui.test.TestScreen
 import com.example.mydiary.ui.test.TestResultScreen
-import com.example.mydiary.ui.todo.TodoCreateScreen
-import com.example.mydiary.ui.achievement.AchievementScreen
-import com.example.mydiary.ui.achievement.ShopScreen
-import com.example.mydiary.ui.timer.PomodoroTimerScreen
 import com.example.mydiary.ui.vip.RechargeScreen
-import com.example.mydiary.whitenoise.WhiteNoiseScreen
+import com.example.mydiary.ui.relax.RelaxScreen
 import com.example.mydiary.whitenoise.WhiteNoiseManager
 import com.example.mydiary.whitenoise.WhiteNoiseSoundList
 import com.example.mydiary.ui.live2d.Live2DScreen
@@ -70,11 +66,9 @@ object Routes {
     const val TEST_RESULT = "test_result/{test_id}"
     const val DRAWING = "drawing_flow?diary_id={diary_id}&prompt={prompt}"
     const val DRAWING_RESULT = "drawing_result/{image_url}?diary_id={diary_id}"
+    const val RELAX = "relax"
     const val WHITE_NOISE = "white_noise"
     const val LIVE2D = "live2d"
-    const val ACHIEVEMENT = "achievement"
-    const val SHOP = "shop"
-    const val POMODORO_TIMER = "pomodoro_timer"
     const val RECHARGE = "recharge"
 
     fun diaryEditor(date: LocalDate, diaryId: Long? = null): String {
@@ -119,6 +113,16 @@ fun NavGraph(
     val navDebugLog = remember { java.io.File(context.filesDir, "debug_nav.log") }
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    LaunchedEffect(Unit) {
+        val activity = context as? android.app.Activity
+        val id = activity?.intent?.getLongExtra("memory_diary_id", -1) ?: -1
+        val day = activity?.intent?.getStringExtra("memory_diary_date")
+        if (id > 0 && day != null && sessionManager.isLoggedIn()) {
+            activity?.intent?.removeExtra("memory_diary_id")
+            activity?.intent?.removeExtra("memory_diary_date")
+            runCatching { navController.navigate(Routes.diaryEditor(LocalDate.parse(day), id)) }
+        }
+    }
 
     val protectedRoutes = listOf(
         Routes.TODAY,
@@ -139,9 +143,8 @@ fun NavGraph(
         Routes.DRAWING,
         Routes.DRAWING_RESULT,
         Routes.WHITE_NOISE,
+        Routes.RELAX,
         Routes.LIVE2D,
-        Routes.ACHIEVEMENT,
-        Routes.POMODORO_TIMER
     )
 
     LaunchedEffect(currentRoute) {
@@ -206,8 +209,7 @@ fun NavGraph(
             TodayScreen(
                 onOpenAssistant = { navController.navigate(Routes.CHAT) },
                 onOpenRecords = { navController.navigate(Routes.CALENDAR) },
-                onOpenDiary = { id -> navController.navigate(Routes.diaryEditor(LocalDate.now(), id)) },
-                onOpenFocus = { navController.navigate(Routes.POMODORO_TIMER) }
+                onOpenDiary = { id -> navController.navigate(Routes.diaryEditor(LocalDate.now(), id)) }
             )
         }
         composable(Routes.CALENDAR) { backStackEntry ->
@@ -246,24 +248,9 @@ fun NavGraph(
             )
         }
 
-        composable(
-            route = Routes.TODO_CREATE,
-            arguments = listOf(
-                navArgument("date") { type = NavType.StringType }
-            )
-        ) { backStackEntry ->
-            val dateString = backStackEntry.arguments?.getString("date")
-            val date = dateString?.let { LocalDate.parse(it) } ?: LocalDate.now()
-            TodoCreateScreen(
-                date = date,
-                onNavigateBack = { navController.popBackStack() },
-                onSaved = {
-                    navController.previousBackStackEntry
-                        ?.savedStateHandle
-                        ?.set("calendar_refresh", true)
-                    navController.popBackStack()
-                }
-            )
+        // Compatibility for old in-app links: task management now lives in Today.
+        composable(Routes.TODO_CREATE, arguments = listOf(navArgument("date") { type = NavType.StringType })) {
+            LaunchedEffect(Unit) { navController.navigate(Routes.TODAY) { popUpTo(Routes.TODO_CREATE) { inclusive = true }; launchSingleTop = true } }
         }
 
         composable(Routes.DIARY_SEARCH) {
@@ -289,19 +276,8 @@ fun NavGraph(
                     },
                     onClientAction = { action ->
                         when (action.action) {
-                            "open_white_noise" -> navController.navigate(Routes.WHITE_NOISE)
-                            "play_white_noise" -> {
-                                val soundId = action.payload["sound_id"] ?: "rain"
-                                val volume = action.payload["volume"]?.toFloatOrNull()?.coerceIn(0f, 1f) ?: 0.45f
-                                val sound = WhiteNoiseSoundList.getAllSounds()
-                                    .firstOrNull { it.id == soundId }
-                                    ?: WhiteNoiseSoundList.getAllSounds().firstOrNull { it.id == "white_noise" }
-                                if (sound != null) {
-                                    WhiteNoiseManager.getInstance().setVolume(sound.id, volume)
-                                    WhiteNoiseManager.getInstance().playSound(context, sound)
-                                }
-                            }
-                            "open_test_hub" -> navController.navigate(Routes.TEST_HUB)
+                            "open_relax", "open_music", "open_white_noise", "play_white_noise" -> navController.navigate(Routes.RELAX)
+                            "open_test_hub", "open_test_history" -> navController.navigate(Routes.TEST_HUB)
                             "open_test" -> {
                                 val testId = action.payload["test_id"]
                                 if (testId.isNullOrBlank()) {
@@ -329,13 +305,8 @@ fun NavGraph(
                                     navController.navigate(Routes.diaryEditor(LocalDate.now(), diaryId))
                                 }
                             }
-                            "open_todo_create" -> {
-                                val dateStr = action.payload["todo_date"]
-                                val date = dateStr?.let {
-                                    runCatching { LocalDate.parse(it) }.getOrNull()
-                                } ?: LocalDate.now()
-                                navController.navigate(Routes.todoCreate(date))
-                            }
+                            "open_todo_create", "open_today" -> navController.navigate(Routes.TODAY) { launchSingleTop = true }
+
                         }
                     }
                 )
@@ -350,10 +321,6 @@ fun NavGraph(
 
         composable(Routes.EXPLORE) {
             ExploreScreen(
-                onNavigateToTestHub = { navController.navigate(Routes.TEST_HUB) },
-                onNavigateToTest = { testId ->
-                    navController.navigate(Routes.test(testId))
-                },
                 onNavigateToGrowthPortrait = {
                     navController.navigate(Routes.GROWTH_PORTRAIT)
                 },
@@ -367,9 +334,6 @@ fun NavGraph(
                     val route = Routes.diaryEditor(LocalDate.now(), diaryId)
                     Log.d(TAG, "Navigate to diary: diaryId=$diaryId, route=$route")
                     navController.navigate(route)
-                },
-                onNavigateToWhiteNoise = {
-                    navController.navigate(Routes.WHITE_NOISE)
                 }
             )
         }
@@ -455,17 +419,12 @@ fun NavGraph(
             }
 
             ProfileScreen(
-                onNavigateToVideoLibrary = { navController.navigate(Routes.RECHARGE) },
+                onNavigateToSearchSettings = { navController.navigate(Routes.RECHARGE) },
                 shouldRefresh = shouldRefresh,
                 onNavigateToEditProfile = {
                     navController.navigate(Routes.EDIT_PROFILE)
                 },
-                onNavigateToAchievement = {
-                    navController.navigate(Routes.ACHIEVEMENT)
-                },
-                onNavigateToPomodoro = {
-                    navController.navigate(Routes.POMODORO_TIMER)
-                },
+
                 onNavigateToGrowthPortrait = {
                     navController.navigate(Routes.GROWTH_PORTRAIT)
                 },
@@ -542,7 +501,7 @@ fun NavGraph(
                 TestResultScreen(
                     testId = testId,
                     onNavigateBack = {
-                        navController.navigate(Routes.EXPLORE) {
+                        navController.navigate(Routes.CHAT) {
                             popUpTo(parentRoute) { inclusive = true }
                             launchSingleTop = true
                             restoreState = true
@@ -668,47 +627,17 @@ fun NavGraph(
             }
         }
 
+        composable(Routes.RELAX) {
+            RelaxScreen(onNavigateBack = { navController.popBackStack() })
+        }
         composable(Routes.WHITE_NOISE) {
-            WhiteNoiseScreen(
-                onNavigateBack = {
-                    navController.popBackStack()
-                }
-            )
+            RelaxScreen(onNavigateBack = { navController.popBackStack() })
         }
 
         composable(Routes.LIVE2D) {
             Live2DScreen(
                 onNavigateBack = {
                     navController.popBackStack()
-                }
-            )
-        }
-
-        composable(Routes.ACHIEVEMENT) {
-            AchievementScreen(
-                onNavigateBack = {
-                    navController.popBackStack()
-                },
-                onNavigateToShop = {
-                    navController.navigate(Routes.SHOP)
-                }
-            )
-        }
-
-        composable(Routes.SHOP) {
-            ShopScreen(
-                onNavigateBack = {
-                    navController.popBackStack()
-                }
-            )
-        }
-
-        composable(Routes.POMODORO_TIMER) {
-            PomodoroTimerScreen(
-                onNavigateBack = {
-                    navController.popBackStack()
-                },
-                onSessionComplete = { sessions ->
                 }
             )
         }

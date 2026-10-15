@@ -1,4 +1,6 @@
 package com.example.mydiary
+import androidx.compose.material3.TextButton
+import com.example.mydiary.ui.theme.TextPrimary
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -65,6 +67,7 @@ import com.example.mydiary.music.MusicWidgetController
 import com.example.mydiary.navigation.NavGraph
 import com.example.mydiary.navigation.Routes
 import com.example.mydiary.ui.theme.MyDiaryTheme
+import com.example.mydiary.ui.layout.KeyboardAwareScaffold
 import dagger.hilt.android.AndroidEntryPoint
 import java.time.LocalDate
 import javax.inject.Inject
@@ -97,6 +100,7 @@ fun MainScreen(
     sessionManager: SessionManager,
     musicWidgetController: MusicWidgetController,
 ) {
+    val memoryContext = androidx.compose.ui.platform.LocalContext.current
     val navController = rememberNavController()
     var showQuickActions by remember { mutableStateOf(false) }
 
@@ -106,6 +110,10 @@ fun MainScreen(
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+
+    androidx.compose.runtime.LaunchedEffect(currentRoute) {
+        if (currentRoute == Routes.LOGIN) com.example.mydiary.whitenoise.WhiteNoiseManager.getInstance().stopAllSounds()
+    }
 
     val showBottomBar = when {
         currentRoute == Routes.LOGIN -> false
@@ -131,9 +139,15 @@ fun MainScreen(
             .fillMaxSize()
             .background(brush = gradientBrush)
     ) {
-        Scaffold(
-            modifier = Modifier.fillMaxSize(),
-            containerColor = Color.Transparent,
+        KeyboardAwareScaffold(
+            hasTopBar = currentRoute == Routes.CHAT,
+            hideNavigationForKeyboard = currentRoute == Routes.CHAT,
+            topBar = {
+                if (currentRoute == Routes.CHAT) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+                    TextButton(onClick = { memoryContext.startActivity(android.content.Intent(memoryContext, com.example.mydiary.memory.MemoryActivity::class.java).putExtra("page", "inbox")) }) { Text("制作未来视频信", color = TextPrimary) }
+                    TextButton(onClick = { memoryContext.startActivity(android.content.Intent(memoryContext, com.example.mydiary.memory.MemoryActivity::class.java).putExtra("page", "room")) }) { Text("布置情绪空间", color = TextPrimary) }
+                }
+            },
             bottomBar = {
                 if (showBottomBar) {
                     BottomNavBar(navController = navController, currentRoute = currentRoute)
@@ -158,24 +172,17 @@ fun MainScreen(
                     }
                 }
             },
-            floatingActionButtonPosition = FabPosition.End
-        ) { innerPadding ->
-            Box(modifier = Modifier.padding(innerPadding)) {
+        ) {
                 NavGraph(
                     navController = navController,
                     startDestination = startDestination,
                     sessionManager = sessionManager
                 )
-            }
         }
 
         if (showQuickActions) {
             QuickActionSheet(
                 onDismiss = { showQuickActions = false },
-                onAddTodo = {
-                    showQuickActions = false
-                    navController.navigate(Routes.todoCreate(getSelectedCalendarDate(navController)))
-                },
                 onCreateDiary = {
                     showQuickActions = false
                     navController.navigate(Routes.diaryEditor(getSelectedCalendarDate(navController)))
@@ -205,7 +212,6 @@ private fun getSelectedCalendarDate(navController: NavController): LocalDate {
 @OptIn(ExperimentalMaterial3Api::class)
 private fun QuickActionSheet(
     onDismiss: () -> Unit,
-    onAddTodo: () -> Unit,
     onCreateDiary: () -> Unit,
     onSearchDiary: () -> Unit
 ) {
@@ -213,13 +219,6 @@ private fun QuickActionSheet(
         onDismissRequest = onDismiss,
         containerColor = Color.White
     ) {
-        ListItem(
-            headlineContent = { Text("添加待办") },
-            leadingContent = { Icon(Icons.Default.Checklist, contentDescription = null) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onAddTodo)
-        )
         ListItem(
             headlineContent = { Text("创建日记") },
             leadingContent = { Icon(Icons.Default.Add, contentDescription = null) },
@@ -250,7 +249,8 @@ fun BottomNavBar(navController: NavController, currentRoute: String?) {
     BottomAppBar(
         containerColor = Color.White.copy(alpha = 0.95f),
         tonalElevation = 8.dp,
-        modifier = Modifier.height(64.dp),
+        // Keep the bar's content height plus its system navigation inset.
+        // A fixed total height clips labels on devices with gesture navigation.
         actions = {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 tabs.forEach { (route, label, icons) ->

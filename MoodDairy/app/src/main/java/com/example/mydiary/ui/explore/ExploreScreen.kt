@@ -33,23 +33,20 @@ import java.time.format.DateTimeFormatter
 /**
  * 发现页面
  * 
- * 包含三个板块：
- * - 测试Hub：心理测试入口（MBTI人格、动物原型、情绪图谱、潜能挖掘）
+ * 回顾个人经历：成长画像、时光信箱、情绪空间、高光时刻与小确幸。
  * - 高光时刻：展示用户标记为高光时刻的日记
  * - 小确幸：展示用户标记为小确幸的日记
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExploreScreen(
-    onNavigateToTestHub: () -> Unit = {},
-    onNavigateToTest: (String) -> Unit = {},
     onNavigateToGrowthPortrait: () -> Unit = {},
     onNavigateToHighlights: () -> Unit = {},
     onNavigateToLittleJoys: () -> Unit = {},
     onNavigateToDiary: (Long) -> Unit = {},
-    onNavigateToWhiteNoise: () -> Unit = {},
     viewModel: ExploreViewModel = hiltViewModel()
 ) {
+    val memoryContext = androidx.compose.ui.platform.LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
     
     Box(
@@ -82,51 +79,29 @@ fun ExploreScreen(
                 )
             }
             
-            // 白噪音板块
             item {
-                ExploreSection(
-                    title = "白噪音",
-                    subtitle = "放松身心，专注当下",
-                    icon = Icons.Outlined.MusicNote,
-                    iconTint = Color(0xFF64B5F6),
-                    onClick = onNavigateToWhiteNoise
-                ) {
-                    WhiteNoisePreview(onNavigateToWhiteNoise = onNavigateToWhiteNoise)
-                }
-            }
-            
-            // 测试Hub板块
-            item {
-                ExploreSection(
-                    title = "测试Hub",
-                    subtitle = "探索你的内心世界",
-                    icon = Icons.Outlined.Psychology,
-                    onClick = onNavigateToTestHub
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        TestHubContent(onNavigateToTest = onNavigateToTest)
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable(onClick = onNavigateToGrowthPortrait),
-                            shape = RoundedCornerShape(14.dp),
-                            colors = CardDefaults.cardColors(containerColor = PaleYellow.copy(alpha = 0.55f)),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(14.dp)) {
-                                Text("成长画像", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = "查看长期情绪曲线、压力波动与积极事件图谱",
-                                    fontSize = 13.sp,
-                                    color = TextSecondary
-                                )
-                            }
+                Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("留给自己的一片天地", style = MaterialTheme.typography.titleLarge, color = TextPrimary)
+                        Text("把此刻写给未来，让经历在房间里有个位置。", color = TextSecondary)
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Button(onClick = { memoryContext.startActivity(android.content.Intent(memoryContext, com.example.mydiary.memory.MemoryActivity::class.java).putExtra("page", "inbox")) }) { Text("时光信箱", color = TextPrimary) }
+                            OutlinedButton(onClick = { memoryContext.startActivity(android.content.Intent(memoryContext, com.example.mydiary.memory.MemoryActivity::class.java).putExtra("page", "room")) }) { Text("情绪空间", color = TextPrimary) }
                         }
                     }
                 }
             }
-            
+            item {
+                ExploreSection(
+                    title = "成长画像",
+                    subtitle = "回看情绪变化、压力波动与积极经历",
+                    icon = Icons.Outlined.ShowChart,
+                    onClick = onNavigateToGrowthPortrait
+                ) {
+                    Text("在记录中慢慢理解自己", color = TextSecondary)
+                }
+            }
+
             // 高光时刻板块
             item {
                 ExploreSection(
@@ -238,182 +213,6 @@ private fun ExploreSection(
             
             // 内容区域
             content()
-        }
-    }
-}
-
-/**
- * 白噪音预览内容
- */
-@Composable
-private fun WhiteNoisePreview(
-    onNavigateToWhiteNoise: () -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        WhiteNoisePreviewCard(
-            icon = "🌧️",
-            name = "雨声",
-            color = Color(0xFF64B5F6),
-            onClick = onNavigateToWhiteNoise,
-            modifier = Modifier.weight(1f)
-        )
-        WhiteNoisePreviewCard(
-            icon = "🌊",
-            name = "海浪",
-            color = Color(0xFF4FC3F7),
-            onClick = onNavigateToWhiteNoise,
-            modifier = Modifier.weight(1f)
-        )
-        WhiteNoisePreviewCard(
-            icon = "🌲",
-            name = "森林",
-            color = Color(0xFF81C784),
-            onClick = onNavigateToWhiteNoise,
-            modifier = Modifier.weight(1f)
-        )
-    }
-}
-
-/**
- * 白噪音预览卡片
- */
-@Composable
-private fun WhiteNoisePreviewCard(
-    icon: String,
-    name: String,
-    color: Color,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .aspectRatio(1f)
-            .clip(RoundedCornerShape(12.dp))
-            .background(color.copy(alpha = 0.15f))
-            .border(
-                width = 1.dp,
-                color = color.copy(alpha = 0.3f),
-                shape = RoundedCornerShape(12.dp)
-            )
-            .clickable(onClick = onClick)
-            .padding(12.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = icon,
-                fontSize = 32.sp
-            )
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            Text(
-                text = name,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                color = TextPrimary,
-                textAlign = TextAlign.Center
-            )
-        }
-    }
-}
-
-/**
- * 测试Hub内容 - 四个测试入口
- */
-@Composable
-private fun TestHubContent(
-    onNavigateToTest: (String) -> Unit = {}
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        TestItem(
-            title = "MBTI人格",
-            icon = Icons.Outlined.GridView,
-            testId = "mbti_simplified_v1",
-            onClick = onNavigateToTest,
-            modifier = Modifier.weight(1f)
-        )
-        TestItem(
-            title = "动物原型",
-            icon = Icons.Outlined.Pets,
-            testId = "animal_personality_v1",
-            onClick = onNavigateToTest,
-            modifier = Modifier.weight(1f)
-        )
-    }
-    
-    Spacer(modifier = Modifier.height(12.dp))
-    
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        TestItem(
-            title = "情绪图谱",
-            icon = Icons.Outlined.Mood,
-            testId = "phq9_v1",
-            onClick = onNavigateToTest,
-            modifier = Modifier.weight(1f)
-        )
-        TestItem(
-            title = "潜能挖掘",
-            icon = Icons.Outlined.Lightbulb,
-            testId = "holland_simplified_v1",
-            onClick = onNavigateToTest,
-            modifier = Modifier.weight(1f)
-        )
-    }
-}
-
-/**
- * 测试项目卡片
- */
-@Composable
-private fun TestItem(
-    title: String,
-    icon: ImageVector,
-    testId: String,
-    onClick: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .aspectRatio(1.2f)
-            .clip(RoundedCornerShape(12.dp))
-            .background(MintGreen.copy(alpha = 0.15f))
-            .clickable { onClick(testId) }
-            .padding(12.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = title,
-                tint = Primary,
-                modifier = Modifier.size(36.dp)
-            )
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            Text(
-                text = title,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = TextPrimary,
-                textAlign = TextAlign.Center
-            )
         }
     }
 }

@@ -355,9 +355,8 @@ class ChatViewModel @Inject constructor(
                     ),
                 )
             }
-            "open_music" -> {
-                // 音乐弹窗/悬浮条由全局控制器管理，跨页面存活
-                musicWidgetController.openRecommendations(action.payload["mood"].orEmpty())
+            "open_music", "open_white_noise", "play_white_noise", "open_relax" -> {
+                _clientActions.tryEmit(ChatClientAction(action = "open_relax", payload = action.payload))
             }
             else -> {
                 _clientActions.tryEmit(
@@ -448,16 +447,7 @@ class ChatViewModel @Inject constructor(
         )
         _serviceBundles.value = (_serviceBundles.value.filterNot { it.bundleId == bundleId } + bundle)
 
-        event.autoActions.orEmpty()
-            .filter { it.autoStart }
-            .forEach { autoAction ->
-                _clientActions.tryEmit(
-                    ChatClientAction(
-                        action = autoAction.action,
-                        payload = autoAction.payload.toStringMap(),
-                    ),
-                )
-            }
+
     }
 
     private fun ChatServiceAction.toUi(): EmotionServiceActionUi {
@@ -469,6 +459,23 @@ class ChatViewModel @Inject constructor(
             payload = payload.toStringMap(),
             autoStart = autoStart,
         )
+    }
+
+    fun performEntryAction(action: ChatServiceAction) = performServiceAction(action.toUi())
+
+    private fun attachEntryActions(timestamp: Long, action: String, payload: Map<String, String>) {
+        val tests = linkedMapOf(
+            "mbti_simplified_v1" to "MBTI 人格探索", "animal_personality_v1" to "动物原型",
+            "phq9_v1" to "情绪自评 PHQ-9", "gad7_v1" to "焦虑自评 GAD-7",
+            "holland_simplified_v1" to "兴趣与潜能探索", "daily_mood_v1" to "每日心情记录")
+        val cards = if (action == "offer_tests" || action == "open_test" || action == "open_test_hub") {
+            val id = payload["test_id"].orEmpty()
+            val selected = if (payload["history"] == "true") emptyMap() else if (id in tests) tests.filterKeys { it == id } else tests
+            selected.map { (testId, title) -> ChatServiceAction(testId, title, "点击开始，结果供自我探索参考", "open_test",
+                JsonObject().apply { addProperty("test_id", testId) }) } +
+                ChatServiceAction("test_history", "查看测试历史", "回顾已有测试记录", "open_test_history")
+        } else listOf(ChatServiceAction("relax", "放松一下", "选择音乐或白噪音，不自动播放", "open_relax"))
+        updateMessages(_messages.value.map { if (it.timestamp == timestamp) it.copy(entryActions = cards) else it })
     }
 
     private fun handleStreamEvent(assistantTimestamp: Long, event: ChatStreamEvent) {
@@ -537,7 +544,9 @@ class ChatViewModel @Inject constructor(
             "client_action" -> {
                 val action = event.action.orEmpty()
                 val payload = event.payload.toStringMap()
-                _clientActions.tryEmit(ChatClientAction(action = action, payload = payload))
+                if (action in setOf("offer_tests", "open_test", "open_test_hub", "open_relax", "open_music", "open_white_noise", "play_white_noise")) {
+                    attachEntryActions(assistantTimestamp, action, payload)
+                } else _clientActions.tryEmit(ChatClientAction(action = action, payload = payload))
             }
             "done" -> {
                 val finalState = event.finalState.orEmpty().lowercase()

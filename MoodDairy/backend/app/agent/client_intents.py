@@ -26,6 +26,16 @@ def match_client_action_intent(message: str) -> Optional[MatchResult]:
     if not c:
         return None
 
+    from app.agent.support_intents import match_test_request, search_arguments
+    test = match_test_request(raw)
+    if test is not None:
+        return ("open_test_hub", test)
+    search = search_arguments(raw)
+    if search:
+        return ("search_social_content", search)
+    if not any(word in c for word in ("不要", "不想", "不用", "取消")) and any(word in c for word in ("想听歌", "听点音乐", "放松一下", "打开音乐", "播放音乐", "推荐歌曲", "推荐几首")):
+        return ("open_relax", {})
+
     today = date.today().isoformat()
     short = len(c) <= 48
     imperative = c.startswith(
@@ -45,6 +55,9 @@ def match_client_action_intent(message: str) -> Optional[MatchResult]:
     if not (short or imperative):
         return None
 
+    if any(word in c for word in ("不要", "不想", "不用", "取消")) and any(word in c for word in ("白噪音", "音乐", "听歌")):
+        return None
+
     # White noise — specific phrases first
     if any(
         k in c
@@ -56,25 +69,11 @@ def match_client_action_intent(message: str) -> Optional[MatchResult]:
             "白噪音页面",
         )
     ):
-        return ("open_white_noise", {})
+        return ("open_relax", {})
     if c in ("白噪音", "白噪声"):
-        return ("open_white_noise", {})
+        return ("open_relax", {})
     if "白噪音" in c and len(c) <= 12:
-        return ("open_white_noise", {})
-
-    # Test hub
-    if any(
-        k in c
-        for k in (
-            "打开测试中心",
-            "测试中心",
-            "心理测试",
-            "做测试",
-            "开始测试",
-            "测评",
-        )
-    ):
-        return ("open_test_hub", {})
+        return ("open_relax", {})
 
     # Drawing
     if any(k in c for k in ("打开画画", "去画画", "画画页面", "简笔画", "涂鸦")):
@@ -94,6 +93,9 @@ def match_client_action_intent(message: str) -> Optional[MatchResult]:
     ):
         return ("open_diary_editor", {"diary_date": today})
 
+    if any(word in c for word in ("安排", "规划", "计划")) and any(word in c for word in ("学习", "工作", "今天", "任务")) and any(word in c for word in ("帮", "想", "请", "打开", "制定")):
+        return ("open_todo_create", {})
+
     # Todo create screen
     if any(
         k in c
@@ -106,6 +108,6 @@ def match_client_action_intent(message: str) -> Optional[MatchResult]:
             "待办列表",
         )
     ):
-        return ("open_todo_create", {"todo_date": today})
+        return ("open_todo_create", {})
 
     return None

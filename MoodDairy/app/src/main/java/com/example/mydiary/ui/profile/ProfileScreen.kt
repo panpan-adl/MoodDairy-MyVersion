@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.example.mydiary.BuildConfig
 import com.example.mydiary.ui.theme.DividerColor
 import com.example.mydiary.ui.theme.Error
 import com.example.mydiary.ui.theme.MintGreen
@@ -74,11 +75,9 @@ import com.example.mydiary.ui.theme.TextTertiary
 @Composable
 fun ProfileScreen(
     onNavigateToEditProfile: () -> Unit,
-    onNavigateToAchievement: () -> Unit,
-    onNavigateToPomodoro: () -> Unit,
     onNavigateToGrowthPortrait: () -> Unit,
     onLogout: () -> Unit,
-    onNavigateToVideoLibrary: () -> Unit = {},
+    onNavigateToSearchSettings: () -> Unit = {},
     shouldRefresh: Boolean = false,
     viewModel: ProfileViewModel = hiltViewModel(),
 ) {
@@ -160,8 +159,8 @@ fun ProfileScreen(
                             .verticalScroll(scrollState)
                             .padding(16.dp),
                     ) {
-                        Button(onClick = onNavigateToVideoLibrary, modifier = Modifier.fillMaxWidth()) {
-                            Text("个人视频记忆库 / TikHub 密钥")
+                        Button(onClick = onNavigateToSearchSettings, modifier = Modifier.fillMaxWidth()) {
+                            Text("搜索服务设置")
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                         Card(
@@ -314,118 +313,6 @@ fun ProfileScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // 成就入口卡片
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = Surface),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                            onClick = onNavigateToAchievement
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .background(
-                                            brush = Brush.linearGradient(
-                                                colors = listOf(MintGreen, Primary)
-                                            ),
-                                            shape = RoundedCornerShape(12.dp)
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.EmojiEvents,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(16.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "成就与积分",
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = TextPrimary
-                                    )
-                                    Text(
-                                        text = "查看成就，解锁奖励",
-                                        fontSize = 12.sp,
-                                        color = TextSecondary
-                                    )
-                                }
-                                Icon(
-                                    imageVector = Icons.Filled.ChevronRight,
-                                    contentDescription = null,
-                                    tint = TextSecondary
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // 番茄钟入口卡片
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = Surface),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                            onClick = onNavigateToPomodoro
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .background(
-                                            brush = Brush.linearGradient(
-                                                colors = listOf(Color(0xFFFF6B6B), Color(0xFFFF8E53))
-                                            ),
-                                            shape = RoundedCornerShape(12.dp)
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.LocalFlorist,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(16.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "番茄钟",
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = TextPrimary
-                                    )
-                                    Text(
-                                        text = "专注计时，提升效率",
-                                        fontSize = 12.sp,
-                                        color = TextSecondary
-                                    )
-                                }
-                                Icon(
-                                    imageVector = Icons.Filled.ChevronRight,
-                                    contentDescription = null,
-                                    tint = TextSecondary
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
                         OutlinedButton(
                             onClick = { showLogoutDialog = true },
                             modifier = Modifier
@@ -443,6 +330,14 @@ fun ProfileScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("退出登录", fontSize = 16.sp, fontWeight = FontWeight.Medium)
                         }
+
+                        Text(
+                            text = "心语 v${BuildConfig.VERSION_NAME}",
+                            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                            fontSize = 12.sp,
+                            color = TextSecondary,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        )
 
                         Spacer(modifier = Modifier.height(16.dp))
                     }

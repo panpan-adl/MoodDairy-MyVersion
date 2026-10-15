@@ -425,6 +425,12 @@ fun DiaryEditorScreen(
                     .fillMaxWidth()
                     .background(Primary)
             ) {
+                uiState.diaryId?.let { memoryDiaryId ->
+                    Row {
+                        TextButton(onClick = { context.startActivity(android.content.Intent(context, com.example.mydiary.memory.MemoryActivity::class.java).putExtra("page", "edit").putExtra("diary_id", memoryDiaryId)) }) { Text("写给未来的自己", color = TextPrimary) }
+                        TextButton(onClick = { context.startActivity(android.content.Intent(context, com.example.mydiary.memory.MemoryActivity::class.java).putExtra("page", "room").putExtra("diary_id", memoryDiaryId)) }) { Text("放进我的空间", color = TextPrimary) }
+                    }
+                }
                 // 状态栏占位（绿色背景）
                 Spacer(modifier = Modifier.statusBarsPadding())
                 

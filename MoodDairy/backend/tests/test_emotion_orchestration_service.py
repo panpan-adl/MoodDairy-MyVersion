@@ -12,7 +12,8 @@ def test_current_low_message_triggers_bundle():
 
     assert result.signal.state == "low"
     assert result.bundle is not None
-    assert any(action.action == "play_white_noise" for action in result.bundle.auto_actions)
+    assert result.bundle.auto_actions == []
+    assert any(action.action == "open_relax" for action in result.bundle.services)
 
 
 def test_sustained_low_summaries_trigger_bundle():
@@ -64,7 +65,7 @@ def test_crisis_message_excludes_drawing_and_video_actions():
     assert result.bundle is not None
     actions = [service.action for service in result.bundle.services]
     assert "open_drawing" not in actions
-    assert "play_white_noise" in actions
+    assert "open_relax" in actions
 
 
 def _face_signal(emotion: str) -> dict:

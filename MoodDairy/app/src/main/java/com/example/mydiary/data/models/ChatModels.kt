@@ -20,6 +20,8 @@ data class ChatMessage(
     /** 锁定原因：NO_KEY=未绑定密钥，NO_BALANCE=余额不足 */
     @SerializedName("social_search_error_code")
     val socialSearchErrorCode: String? = null,
+    @SerializedName("entry_actions")
+    val entryActions: List<ChatServiceAction>? = null,
 )
 
 data class ChatContext(
@@ -147,6 +149,7 @@ data class ChatServiceAction(
 )
 
 data class SocialSearchItem(
+    @SerializedName("resource_kind") val resourceKind: String? = null,
     @SerializedName("record_source") val recordSource: String? = null,
     @SerializedName("platform")
     val platform: String,

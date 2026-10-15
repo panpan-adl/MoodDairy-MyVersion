@@ -13,6 +13,10 @@ import retrofit2.http.*
  * 验证需求: 2.4, 4.3, 8.1
  */
 interface DiaryApiService {
+    @GET("music/recommendations")
+    suspend fun relaxRecommendations(): Response<RelaxRecommendations>
+    @GET("agent/tasks/history")
+    suspend fun agentTaskHistory(): Response<List<AgentTask>>
     @POST("agent/record")
     suspend fun agentSaveRecord(@Body request: AgentSaveRecord): Response<AgentSavedDiary>
     @GET("agent/today")
@@ -27,14 +31,6 @@ interface DiaryApiService {
     suspend fun agentReview(@Body request: AgentReviewRequest): Response<AgentReview>
     @POST("agent/review/save")
     suspend fun agentSaveReview(@Body request: AgentSaveReview): Response<AgentSavedDiary>
-    @retrofit2.http.POST("personal-videos/import")
-    suspend fun importPersonalVideos(@retrofit2.http.Body body: com.google.gson.JsonObject): retrofit2.Response<com.google.gson.JsonObject>
-    @retrofit2.http.GET("personal-videos")
-    suspend fun personalVideoStatus(): retrofit2.Response<com.google.gson.JsonObject>
-    @retrofit2.http.DELETE("personal-videos/{platform}")
-    suspend fun deletePersonalVideos(@retrofit2.http.Path("platform") platform: String): retrofit2.Response<com.google.gson.JsonObject>
-
-    
     // ============================================================================
     // 日记相关API (Diary APIs)
     // ============================================================================

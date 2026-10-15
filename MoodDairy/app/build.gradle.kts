@@ -39,6 +39,25 @@ val mediaBaseUrl = (
         ?: apiBaseUrl
 ).trim().normalizeHttpUrlEscapes().removeTrailingSlash()
 
+// On this development machine Android Studio Run must also start the local API.
+// Other checkouts / remote API builds do not depend on the Windows launcher.
+val localBackendLauncher = generateSequence(project.projectDir.parentFile) { it.parentFile }
+    .map { it.resolve("start_chat_backend.ps1") }
+    .firstOrNull { it.isFile }
+if (System.getProperty("os.name").startsWith("Windows") &&
+    apiBaseUrl in listOf("http://127.0.0.1:8000/", "http://localhost:8000/", "http://10.0.2.2:8000/") &&
+    localBackendLauncher != null
+) {
+    val ensureLocalBackend = tasks.register<Exec>("ensureLocalBackend") {
+        group = "development"
+        description = "Start the local API and refresh Android port forwarding before debug builds"
+        commandLine("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", localBackendLauncher.absolutePath)
+    }
+    tasks.matching { it.name == "preDebugBuild" }.configureEach {
+        dependsOn(ensureLocalBackend)
+    }
+}
+
 android {
     namespace = "com.example.mydiary"
     compileSdk = 36  // 提升到36以满足依赖要求
@@ -47,8 +66,8 @@ android {
         applicationId = "com.example.mydiary"
         minSdk = 26  // 提高到26以支持java.time API
         targetSdk = 35  // 使用Android 14目标SDK
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 12
+        versionName = "1.4.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "API_BASE_URL", quoteForBuildConfig(apiBaseUrl))

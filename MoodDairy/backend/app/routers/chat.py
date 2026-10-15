@@ -538,13 +538,25 @@ async def _handle_confirmation_turn(request: ChatRequest, db: AsyncSession):
     if plan.tool == "search_social_content":
         yield {"type":"search_results", "tool_call_id":plan.plan_id, "keyword":result.data.get("keyword"), "platform":result.data.get("platform"), "items":result.data.get("items", []), "locked":not result.ok and result.data.get("error_code") in ("NO_KEY", "NO_BALANCE", "INVALID_KEY"), "error_code":result.data.get("error_code"), "timestamp":datetime.now().isoformat()}
 
-    reply = await _generate_tool_followup_reply(
-        original_user_message=plan.request_message,
-        context=plan.context_snapshot,
-        tool_name=plan.tool,
-        tool_payload=result.for_model(),
-    )
-
+    if plan.tool == "search_social_content":
+        code = result.data.get("error_code") or result.error
+        if not result.ok:
+            reply = {
+                "NO_KEY": "心理内容查找需要配置搜索账户，可点击下方卡片前往搜索服务设置。",
+                "INVALID_KEY": "搜索密钥已失效，请在搜索服务设置中更换密钥后重试。",
+                "NO_BALANCE": "搜索服务余额不足，请在搜索服务设置中查看账户或前往官方充值。",
+            }.get(code, result.summary or "搜索服务暂时无法连接，请稍后重试。")
+        elif not result.data.get("items"):
+            reply = "暂未找到相关内容。可以换个心理主题或书名、片名再试。"
+        else:
+            reply = f"找到 {len(result.data['items'])} 条相关内容。卡片标明了平台来源；书评、作品介绍或解说不代表完整作品，可以点击链接查看。"
+    else:
+        reply = await _generate_tool_followup_reply(
+            original_user_message=plan.request_message,
+            context=plan.context_snapshot,
+            tool_name=plan.tool,
+            tool_payload=result.for_model(),
+        )
     for chunk in _chunk_text(reply):
         yield {"type": "delta", "delta": chunk}
 
@@ -576,7 +588,8 @@ async def _fetch_recent_face_signals(
 
 async def _handle_agent_turn(request: ChatRequest, db: AsyncSession):
     message_text = _normalize_message(request.message, request.merged_image_data_urls)
-    full_context = await _build_full_context(request.merged_diary_summaries, message_text)
+    intent = match_client_action_intent(message_text)
+    full_context = _build_context(request.merged_diary_summaries) if intent else await _build_full_context(request.merged_diary_summaries, message_text)
     valid_images = _valid_images(request.merged_image_data_urls)
     face_signals = await _fetch_recent_face_signals(db, request.user_id)
     orchestration = EmotionOrchestrationService().evaluate(
@@ -594,11 +607,25 @@ async def _handle_agent_turn(request: ChatRequest, db: AsyncSession):
         len(face_signals),
     )
 
-    # — Intent shortcut: direct navigation commands are handled without LLM —
-    intent = match_client_action_intent(message_text)
+    # Explicit support requests do not need a cloud-model round trip.
     if intent:
         tool_name, arguments = intent
         logger.info("Intent shortcut matched: tool=%s arguments=%s", tool_name, arguments)
+        definition = get_tool_definition(tool_name)
+        if definition and definition.requires_confirmation:
+            from app.services.social_search.charge_policy import prepare_search_arguments
+            arguments = prepare_search_arguments(arguments, message_text)
+            plan = await get_plan_store().create_plan(db=db, user_id=request.user_id,
+                conversation_id=request.conversation_id, tool=tool_name, mode=definition.mode,
+                requires_confirmation=True, arguments=arguments, request_message=message_text,
+                context_snapshot=full_context)
+            yield {"type": "tool_plan", "plan_id": plan.plan_id, "tool": tool_name,
+                "mode": definition.mode, "arguments": arguments, "requires_confirmation": True,
+                "title": "心理内容查找 · 确认接口费用", "preview": build_tool_plan_preview(tool_name, arguments),
+                "expires_at": plan.expires_at.isoformat()}
+            yield {"type": "awaiting_confirmation", "plan_id": plan.plan_id, "tool": tool_name}
+            return
+
         try:
             result = await execute_tool(
                 tool_name=tool_name,
@@ -623,7 +650,7 @@ async def _handle_agent_turn(request: ChatRequest, db: AsyncSession):
                 "timestamp": datetime.now().isoformat(),
             }
 
-        yield _done_event(final_state="success", reply="**完成**")
+        yield _done_event(final_state="success", reply=result.summary)
         return
 
     messages = await _build_agent_messages(message_text, full_context, valid_images)
@@ -956,7 +983,7 @@ async def _handle_agent_turn(request: ChatRequest, db: AsyncSession):
 
             # 社交搜索工具：成功发结果卡片，失败（余额不足/未配置）发锁定充值卡片
             # 歌曲搜索工具：网易云免费接口，直接发歌曲卡片，永不锁定
-            if tool_name in ("search_social_content", "search_music", "search_personal_videos"):
+            if tool_name in ("search_social_content", "search_music"):
                 yield {
                     "type": "search_results",
                     "tool_call_id": tool_call_id,
@@ -1067,27 +1094,21 @@ async def _build_agent_messages(user_message: str, context: str, valid_images: L
         "【什么时候调用工具】\n"
         "- 页面跳转：用户想打开某个页面时，立即使用对应的客户端动作工具（无需确认）\n"
         "  · '打开白噪音'/'播放白噪音'/'听下雨声' → open_white_noise\n"
-        "  · '做测试'/'打开测试中心'/'测评' → open_test_hub\n"
+        "  · '想测 MBTI'/'做测试' → open_test_hub（聊天卡片）\n"
         "  · '画画'/'去画画'/'涂鸦' → open_drawing\n"
         "  · '写日记'/'新建日记'/'编辑日记' → open_diary_editor\n"
         "- 数据操作：用户需要创建/查询日记、待办时使用\n"
         "  · 创建日记 → create_diary（需确认）\n"
         "  · 查询日记 → search_diaries / get_recent_summaries\n"
-        "  · 创建待办 → create_todo（需确认）\n"
-        "- 个人视频找回：用户说以前点赞、喜欢、收藏的视频时，优先使用 search_personal_videos，提炼关键词和同义词；仅搜索已导入记录，没有记录时引导进入密钥管理页的个人视频导入区域，不要求在聊天中发送Cookie。\n"
-        "- 内容搜索：用户想搜小红书/抖音/B站/知乎/快手/微博上的内容、教程、灵感时使用 search_social_content\n"
-        "  · 必须直接调用 search_social_content 来生成后端费用确认卡片。此时不会请求 TikHub 或扣费，用户之后会点击卡片确认。禁止用普通聊天文字代替卡片询问是否确认。\n"
-        "  · 例如：'搜一下小红书的冥想教程'、'找找抖音上治愈系视频'、'B站有没有助眠白噪音'、'知乎上大家怎么缓解焦虑'、'看看快手上的搞笑视频'、'微博上最近在聊什么'\n"
-        "  · 用户指定平台时填对应 platform（xhs/douyin/bilibili/zhihu/kuaishou/weibo），未指定则默认 auto\n"
-        "  · 费用规则（必须严格遵守）：全网搜索必须先生成费用确认卡片，用户确认后才执行；实际费用及免费额度适用范围以 TikHub 为准。B站(bilibili)和知乎(zhihu)也可能消耗接口额度；小红书(xhs)、抖音(douyin)、快手(kuaishou)、微博(weibo)是付费搜索。auto 只搜 B站+知乎，绝不能默认搜付费平台；只有用户明确说出平台名（如'小红书上''抖音上''快手上''微博上'）时才能传对应的付费 platform\n"
-        "  · 调用后用一句话总结（如'我帮你找到了 N 条相关内容'），不要罗列所有标题，搜索结果会以卡片形式展示\n"
-        "  · 只要用户表达找视频/笔记/问答/教程/攻略/灵感的意图（如'搜一下'、'找找'、'小红书有没有'、'抖音上'、'B站上'、'知乎怎么说'、'推荐几个链接'），必须实际调用 search_social_content，不要仅凭自己的知识回答\n"
-        "  · 若工具返回 ok=false 且 error_code=NO_KEY，用温柔的一句话告诉用户：这个功能需要绑定自己的 TikHub 密钥（免费注册，注册即送少量体验额度），点击下方卡片按指引操作即可，不要假装自己已经搜过\n"
-        "  · 若工具返回 ok=false 且 error_code=NO_BALANCE，用温柔的一句话告诉用户：TikHub 账户余额不足，点击下方卡片跳转到官方充值页充值后即可继续搜索（约 $0.01/次），不要假装自己已经搜过\n"
-        "  · 若工具返回其他错误，简短说明暂时没搜到并建议稍后再试\n"
-        "- 歌曲推荐：用户想听歌、让你推荐歌曲/歌手/曲风、想用音乐调节心情时使用 search_music（网易云音乐，免费）\n"
-        "  · 例如：'推荐几首周杰伦的歌'、'我想听点助眠的纯音乐'、'有没有适合难过时听的歌'、'来点轻快的歌'\n"
-        "  · 只要用户表达想听歌/让你推歌的意图，必须实际调用 search_music，不要仅凭自己的知识列歌名\n"
+        "  · 整理安排 → open_todo_create（今日规划）\n"
+        "- 心理内容查找：仅当用户明确想找心理书籍、纪录片、心理科普或放松资源时使用 search_social_content。普通倾诉不要搜索。\n"
+        "  · 先生成费用确认卡片，确认后才执行；未指定平台用 auto，其他付费平台必须由用户点名，费用以 TikHub 为准。\n"
+        "  · 展示来源和链接，区分书评、书籍介绍、纪录片介绍或解说，不把平台搜索结果称为完整作品。\n"
+        "  · 无密钥、余额不足、无结果和服务失败必须明确说明，不编造内容或链接。配置入口在我的→搜索服务设置。\n"
+        "- 用户想做 MBTI 等测试时调用 open_test_hub，指定对应 test_id，由用户点击卡片进入；不明确种类时提供选择。\n"
+        "- 用户想整理工作学习安排、减轻安排带来的压力时，使用 open_todo_create 引导今日规划；不再打开独立待办或番茄钟。\n"
+        "- 用户想放松时提供 open_relax，音乐和白噪音均由用户点击选择，不自动播放。\n"
+        "- 歌曲推荐通过 open_relax 提供统一入口，点击后选择歌曲。\n"
         "  · 调用后用一句温暖的话总结（如'我给你挑了几首歌，点开卡片就能去网易云听啦'），不要罗列所有歌名，歌曲会以卡片形式展示\n\n"
         "【对话风格】\n"
         "- 语气温暖、自然，像朋友聊天一样，可以适度使用emoji\n"

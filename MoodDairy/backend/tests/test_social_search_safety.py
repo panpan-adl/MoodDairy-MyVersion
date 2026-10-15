@@ -78,11 +78,11 @@ async def test_tool_requires_confirmation_and_scoped_message(monkeypatch):
     client=SimpleNamespace(search=AsyncMock(return_value=[]))
     fetch=AsyncMock(return_value=(client,None));monkeypatch.setattr(key_service,'get_user_search_client',fetch)
     args={'platform':'douyin','keyword':'冥想'}
-    blocked=await execute_tool('search_social_content',args,None,1,'conv',user_message='抖音上搜冥想')
+    blocked=await execute_tool('search_social_content',args,None,1,'conv',user_message='抖音上搜冥想教程')
     assert blocked.error=='CHARGE_CONFIRMATION_REQUIRED';fetch.assert_not_awaited()
-    await execute_tool('search_social_content',args,None,1,'conv',user_message='搜冥想',charge_confirmed=True)
+    await execute_tool('search_social_content',args,None,1,'conv',user_message='搜冥想教程',charge_confirmed=True)
     assert client.search.call_args.kwargs['platform'] is None
-    await execute_tool('search_social_content',args,None,1,'conv',user_message='抖音上搜冥想',charge_confirmed=True)
+    await execute_tool('search_social_content',args,None,1,'conv',user_message='抖音上搜冥想教程',charge_confirmed=True)
     assert client.search.call_args.kwargs['platform']==Platform.DOUYIN
     again=await execute_tool('search_social_content',args,None,1,'conv')
     assert again.error=='CHARGE_CONFIRMATION_REQUIRED'

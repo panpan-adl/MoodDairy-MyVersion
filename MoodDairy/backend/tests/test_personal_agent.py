@@ -58,6 +58,22 @@ def request(**kwargs):
     data.update(kwargs)
     return AdoptPlanRequest(**data)
 
+@pytest.mark.asyncio
+async def test_historical_legacy_tasks_remain_scoped_and_can_move_to_today(db):
+    day = date.today()
+    db.add(Todo(user_id=1, todo_date=day-timedelta(days=2), title='旧待办', note='先读两页', is_done=False))
+    db.add(Todo(user_id=2, todo_date=day-timedelta(days=2), title='其他用户的任务', is_done=False))
+    db.add(Todo(user_id=1, todo_date=day, title='今天的任务', is_done=False))
+    await db.commit()
+    service = agent.PersonalAgentService(db)
+    history = await service.task_history(1, day)
+    assert [task.title for task in history] == ['旧待办']
+    assert agent.task_view(history[0]).next_step == '先读两页'
+    updated = await service.update(1, history[0].id, TaskUpdate(date=day))
+    assert updated.date == day
+    assert await service.task_history(1, day) == []
+    assert len(await service.todos(1, day)) == 2
+
 @pytest.mark.parametrize('energy,budget,expected', [('low', 180, 1), ('normal', 180, 3), ('normal', 30, 0)])
 def test_budget_and_energy_defer_overflow_without_changing_estimates(energy, budget, expected):
     plan = PlanDraft(suggestion='按精力安排', tasks=[TaskDraft(title=str(i), minutes=60) for i in range(3)])

@@ -11,6 +11,11 @@ from app.services.personal_agent_service import PersonalAgentService, task_view
 
 router = APIRouter(prefix='/agent', tags=['personal-agent'])
 
+@router.get('/tasks/history', response_model=list[AgentTask])
+async def task_history(current_user_id: AuthenticatedUserId, db: AsyncSession = Depends(get_db)):
+    tasks = await PersonalAgentService(db).task_history(current_user_id, datetime.now(ZoneInfo('Asia/Shanghai')).date())
+    return [task_view(task) for task in tasks]
+
 @router.get('/today', response_model=TodayResponse)
 async def today(date: date_type, current_user_id: AuthenticatedUserId, db: AsyncSession = Depends(get_db)):
     tasks = await PersonalAgentService(db).todos(current_user_id, date)
