@@ -128,7 +128,11 @@ class AudioConverter {
                     bufferInfo.offset = 0
                     bufferInfo.size = sampleSize
                     bufferInfo.presentationTimeUs = extractor.sampleTime
-                    bufferInfo.flags = extractor.sampleFlags
+                    bufferInfo.flags = if (extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC != 0) {
+                        MediaCodec.BUFFER_FLAG_KEY_FRAME
+                    } else {
+                        0
+                    }
                     
                     muxer.writeSampleData(outputTrackIndex, buffer, bufferInfo)
                     extractor.advance()

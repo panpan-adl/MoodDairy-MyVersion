@@ -494,47 +494,37 @@ class DiaryService:
         if not normalized:
             return []
 
-        pattern = f"%{normalized}%"
-
-        text_media_match = (
-            select(DiaryMedia.id)
-            .where(
-                and_(
-                    DiaryMedia.diary_id == Diary.id,
-                    DiaryMedia.media_type == "text",
-                    DiaryMedia.content.ilike(pattern),
-                )
+        # Fernet ciphertext cannot be searched with SQL LIKE. Scan only this
+        # user's records in bounded batches, decode for comparison, then page matches.
+        matches = []
+        scanned = 0
+        needle = normalized.casefold()
+        while len(matches) < offset + limit:
+            stmt = (
+                select(Diary)
+                .options(selectinload(Diary.media_items))
+                .where(Diary.user_id == user_id)
+                .order_by(Diary.diary_date.desc(), Diary.created_at.desc(), Diary.id.desc())
+                .limit(200)
+                .offset(scanned)
             )
-            .exists()
-        )
+            result = await self.db.execute(stmt)
+            batch = list(result.unique().scalars().all())
+            for diary in batch:
+                texts = [diary.title, diary.content] + [
+                    item.content for item in diary.media_items if item.media_type == "text"
+                ]
+                if any(needle in (decrypt_field(value) or "").casefold() for value in texts):
+                    matches.append(diary)
+            if len(batch) < 200:
+                break
+            scanned += len(batch)
 
-        stmt = (
-            select(Diary)
-            .options(joinedload(Diary.media_items))
-            .where(
-                and_(
-                    Diary.user_id == user_id,
-                    or_(
-                        Diary.title.ilike(pattern),
-                        Diary.content.ilike(pattern),
-                        text_media_match,
-                    ),
-                )
-            )
-            .order_by(Diary.diary_date.desc(), Diary.created_at.desc())
-            .limit(limit)
-            .offset(offset)
-        )
-
-        result = await self.db.execute(stmt)
-        diaries = list(result.unique().scalars().all())
-
+        diaries = matches[offset:offset + limit]
         for diary in diaries:
-            if diary.media_items:
-                diary.media_items.sort(key=lambda item: item.sort_order)
-
+            diary.media_items.sort(key=lambda item: item.sort_order)
         return self._decrypt_diaries_list(diaries)
-    
+
     async def add_media_to_diary(
         self,
         diary_id: int,

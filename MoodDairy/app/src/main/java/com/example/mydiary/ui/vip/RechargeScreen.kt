@@ -130,7 +130,7 @@ class RechargeViewModel @Inject constructor(
                     if (body.bound) {
                         _status.value = body
                         _toast.tryEmit(
-                            if (body.unlocked) "密钥绑定成功，可以开始全网搜索啦"
+                            if (body.unlocked) "密钥绑定成功，可以开始心理内容查找啦"
                             else "密钥绑定成功，账户余额不足，请先充值",
                         )
                     } else {
@@ -194,7 +194,7 @@ fun RechargeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("视频记忆库 · TikHub 账户", color = Color.White) },
+                title = { Text("搜索服务设置", color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, "返回", tint = Color.White)
@@ -240,7 +240,7 @@ fun RechargeScreen(
                         Spacer(Modifier.width(8.dp))
                         Text(
                             when {
-                                unlocked -> "TikHub 已连接 · 可全网搜索"
+                                unlocked -> "TikHub 已连接 · 可心理内容查找"
                                 bound && status?.errorCode == "INVALID_KEY" -> "TikHub 密钥已失效"
                                 bound -> "TikHub 已连接 · 查看可用额度"
                                 else -> "绑定你的 TikHub 密钥"
@@ -295,7 +295,6 @@ fun RechargeScreen(
                 )
             }
 
-            PersonalVideoImportPanel(keyBound = bound)
             Spacer(Modifier.height(28.dp))
         }
     }

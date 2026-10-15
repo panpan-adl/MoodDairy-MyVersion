@@ -4,6 +4,8 @@
 
     <!-- 网络权限 -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     
     <!-- 媒体权限（将在后续任务中使用） -->
@@ -37,8 +39,11 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.MyDiary"
         android:usesCleartextTraffic="true">
+        <activity android:name=".memory.MemoryActivity" android:exported="false" />
+        <service android:name=".memory.MemoryReminder" android:permission="android.permission.BIND_JOB_SERVICE" android:exported="false" />
         <activity
             android:name=".MainActivity"
+            android:windowSoftInputMode="adjustResize"
             android:exported="true"
             android:label="@string/app_name"
             android:theme="@style/Theme.MyDiary">

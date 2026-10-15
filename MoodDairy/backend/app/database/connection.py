@@ -32,7 +32,7 @@ DB_PERMISSION_PROBE_SQL = os.getenv("DB_PERMISSION_PROBE_SQL", "SELECT 1 FROM pu
 def _build_engine(database_url: str):
     return create_async_engine(
         database_url,
-        echo=True,
+        echo=False,
         pool_pre_ping=True,
         pool_size=5,
         max_overflow=10,
@@ -76,7 +76,7 @@ async def _probe_session(session_maker: async_sessionmaker[AsyncSession], db_url
                 await session.execute(text(DB_PERMISSION_PROBE_SQL))
         return True
     except Exception as exc:
-        logger.warning("Database probe failed: url=%s error=%s", db_url, exc)
+        logger.warning("Database probe failed: %s", type(exc).__name__)
         return False
 
 
@@ -172,5 +172,5 @@ async def check_db_connection() -> bool:
         print("DB connection failed: primary and fallback are both unavailable")
         return False
 
-    print(f"DB connection active: {_active_db_url}")
+    print("DB connection active")
     return True

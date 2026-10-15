@@ -239,24 +239,11 @@ class EmotionOrchestrationService:
             "一幅安静、柔和、带有治愈感的画面：雨后窗边的微光、温暖的小灯、"
             "逐渐舒展的云层，表达从低落中慢慢恢复的过程"
         )
-        auto_white_noise = ServiceAction(
-            id="rain_sound",
-            title="播放雨声",
-            description="先放一点轻柔背景音，帮你把注意力放慢。",
-            action="play_white_noise",
-            payload={"sound_id": "rain", "volume": "0.45"},
-            auto_start=True,
-        )
-        listen_music = ServiceAction(
-            id="listen_music",
-            title="听点音乐",
-            description="选几首轻柔的音乐，让心情慢慢松下来。",
-            action="open_music",
-            payload={"mood": normalize_mood(signal.emotion_type)},
-        )
+        relax = ServiceAction(
+            id="relax", title="放松一下", description="选择音乐或白噪音，按自己的需要放松。",
+            action="open_relax", payload={"mood": normalize_mood(signal.emotion_type)})
         services = [
-            auto_white_noise,
-            listen_music,
+            relax,
             ServiceAction(
                 id="healing_drawing",
                 title="生成一幅画",
@@ -280,9 +267,9 @@ class EmotionOrchestrationService:
             ),
             ServiceAction(
                 id="adjust_todo",
-                title="调整今天待办",
+                title="理清今天的安排",
                 description="把任务拆小一点，先只留最重要的一件。",
-                action="open_todo_create",
+                action="open_today",
                 payload={"todo_date": date.today().isoformat(), "source": "emotion_bundle"},
             ),
             ServiceAction(
@@ -299,7 +286,7 @@ class EmotionOrchestrationService:
             message="最近情绪有些低落，我为你准备了几件小事。",
             trigger_reason=signal.trigger_reason,
             services=services,
-            auto_actions=[auto_white_noise],
+            auto_actions=[],
             is_crisis=False,
         )
 
@@ -314,9 +301,9 @@ class EmotionOrchestrationService:
             ),
             ServiceAction(
                 id="calming_sound",
-                title="播放白噪音",
+                title="放松一下",
                 description="用很低音量的背景声帮你稳住呼吸。",
-                action="play_white_noise",
+                action="open_relax",
                 payload={"sound_id": "white_noise", "volume": "0.35"},
                 auto_start=False,
             ),

@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.database import Diary, DiaryMedia, DiarySummary
+from app.security.field_crypto import decrypt_field
 
 from .schemas import DEFAULT_DRAWING_SIZE, EmotionPrompts
 from .volcengine_client import VolcengineAPIError, VolcengineClient, get_volcengine_client
@@ -141,7 +142,7 @@ class DrawingService:
             diary = diary_result.scalar_one_or_none()
 
             if diary and diary.content:
-                detected_emotion = self._simple_emotion_detection(diary.content)
+                detected_emotion = self._simple_emotion_detection(decrypt_field(diary.content))
                 emotion_score = 50
             else:
                 detected_emotion = "中性"
@@ -300,9 +301,9 @@ class DrawingService:
     def _extract_diary_text(self, diary: Diary) -> str:
         parts: list[str] = []
         if diary.title:
-            parts.append(diary.title)
+            parts.append(decrypt_field(diary.title))
         if diary.content:
-            parts.append(diary.content)
+            parts.append(decrypt_field(diary.content))
         if hasattr(diary, "media_items") and diary.media_items:
             for item in diary.media_items:
                 if item.media_type == "text" and item.content:

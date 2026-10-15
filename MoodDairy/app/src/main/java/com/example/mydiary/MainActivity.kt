@@ -1,4 +1,6 @@
 package com.example.mydiary
+import androidx.compose.material3.TextButton
+import com.example.mydiary.ui.theme.TextPrimary
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -7,6 +9,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,6 +23,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Checklist
@@ -45,6 +52,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -59,6 +67,7 @@ import com.example.mydiary.music.MusicWidgetController
 import com.example.mydiary.navigation.NavGraph
 import com.example.mydiary.navigation.Routes
 import com.example.mydiary.ui.theme.MyDiaryTheme
+import com.example.mydiary.ui.layout.KeyboardAwareScaffold
 import dagger.hilt.android.AndroidEntryPoint
 import java.time.LocalDate
 import javax.inject.Inject
@@ -91,15 +100,20 @@ fun MainScreen(
     sessionManager: SessionManager,
     musicWidgetController: MusicWidgetController,
 ) {
+    val memoryContext = androidx.compose.ui.platform.LocalContext.current
     val navController = rememberNavController()
     var showQuickActions by remember { mutableStateOf(false) }
 
     val startDestination = remember {
-        if (sessionManager.isLoggedIn()) Routes.CALENDAR else Routes.LOGIN
+        if (sessionManager.isLoggedIn()) Routes.TODAY else Routes.LOGIN
     }
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+
+    androidx.compose.runtime.LaunchedEffect(currentRoute) {
+        if (currentRoute == Routes.LOGIN) com.example.mydiary.whitenoise.WhiteNoiseManager.getInstance().stopAllSounds()
+    }
 
     val showBottomBar = when {
         currentRoute == Routes.LOGIN -> false
@@ -125,9 +139,15 @@ fun MainScreen(
             .fillMaxSize()
             .background(brush = gradientBrush)
     ) {
-        Scaffold(
-            modifier = Modifier.fillMaxSize(),
-            containerColor = Color.Transparent,
+        KeyboardAwareScaffold(
+            hasTopBar = currentRoute == Routes.CHAT,
+            hideNavigationForKeyboard = currentRoute == Routes.CHAT,
+            topBar = {
+                if (currentRoute == Routes.CHAT) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+                    TextButton(onClick = { memoryContext.startActivity(android.content.Intent(memoryContext, com.example.mydiary.memory.MemoryActivity::class.java).putExtra("page", "inbox")) }) { Text("制作未来视频信", color = TextPrimary) }
+                    TextButton(onClick = { memoryContext.startActivity(android.content.Intent(memoryContext, com.example.mydiary.memory.MemoryActivity::class.java).putExtra("page", "room")) }) { Text("布置情绪空间", color = TextPrimary) }
+                }
+            },
             bottomBar = {
                 if (showBottomBar) {
                     BottomNavBar(navController = navController, currentRoute = currentRoute)
@@ -141,7 +161,7 @@ fun MainScreen(
                         contentColor = Color.White,
                         shape = CircleShape,
                         modifier = Modifier
-                            .offset(y = (-28).dp)
+                            .offset(y = 0.dp)
                             .size(56.dp)
                     ) {
                         Icon(
@@ -152,24 +172,17 @@ fun MainScreen(
                     }
                 }
             },
-            floatingActionButtonPosition = FabPosition.Center
-        ) { innerPadding ->
-            Box(modifier = Modifier.padding(innerPadding)) {
+        ) {
                 NavGraph(
                     navController = navController,
                     startDestination = startDestination,
                     sessionManager = sessionManager
                 )
-            }
         }
 
         if (showQuickActions) {
             QuickActionSheet(
                 onDismiss = { showQuickActions = false },
-                onAddTodo = {
-                    showQuickActions = false
-                    navController.navigate(Routes.todoCreate(getSelectedCalendarDate(navController)))
-                },
                 onCreateDiary = {
                     showQuickActions = false
                     navController.navigate(Routes.diaryEditor(getSelectedCalendarDate(navController)))
@@ -199,7 +212,6 @@ private fun getSelectedCalendarDate(navController: NavController): LocalDate {
 @OptIn(ExperimentalMaterial3Api::class)
 private fun QuickActionSheet(
     onDismiss: () -> Unit,
-    onAddTodo: () -> Unit,
     onCreateDiary: () -> Unit,
     onSearchDiary: () -> Unit
 ) {
@@ -207,13 +219,6 @@ private fun QuickActionSheet(
         onDismissRequest = onDismiss,
         containerColor = Color.White
     ) {
-        ListItem(
-            headlineContent = { Text("添加待办") },
-            leadingContent = { Icon(Icons.Default.Checklist, contentDescription = null) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onAddTodo)
-        )
         ListItem(
             headlineContent = { Text("创建日记") },
             leadingContent = { Icon(Icons.Default.Add, contentDescription = null) },
@@ -234,86 +239,41 @@ private fun QuickActionSheet(
 
 @Composable
 fun BottomNavBar(navController: NavController, currentRoute: String?) {
+    val tabs = listOf(
+        Triple(Routes.TODAY, "今天", Icons.Filled.Home to Icons.Outlined.Home),
+        Triple(Routes.CHAT, "助手", Icons.Filled.Chat to Icons.Outlined.Chat),
+        Triple(Routes.CALENDAR, "记录", Icons.Filled.DateRange to Icons.Outlined.DateRange),
+        Triple(Routes.EXPLORE, "发现", Icons.Filled.Explore to Icons.Outlined.Explore),
+        Triple(Routes.PROFILE, "我的", Icons.Filled.Person to Icons.Outlined.Person)
+    )
     BottomAppBar(
         containerColor = Color.White.copy(alpha = 0.95f),
         tonalElevation = 8.dp,
-        modifier = Modifier
-            .height(64.dp)
-            .border(
-                width = 1.dp,
-                color = Color.White.copy(alpha = 0.6f),
-                shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
-            ),
+        // Keep the bar's content height plus its system navigation inset.
+        // A fixed total height clips labels on devices with gesture navigation.
         actions = {
-            BottomBarIcon(
-                selected = currentRoute == Routes.CALENDAR,
-                selectedIcon = Icons.Filled.DateRange,
-                unselectedIcon = Icons.Outlined.DateRange,
-                description = "日历",
-                onClick = {
-                    navController.navigate(Routes.CALENDAR) {
-                        popUpTo(navController.graph.startDestinationId) {
-                            saveState = true
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                tabs.forEach { (route, label, icons) ->
+                    BottomBarIcon(
+                        selected = currentRoute == route,
+                        selectedIcon = icons.first,
+                        unselectedIcon = icons.second,
+                        description = label,
+                        onClick = {
+                            navController.navigate(route) {
+                                popUpTo(Routes.TODAY) { saveState = true }
+                                launchSingleTop = true
+                                // A direct shortcut can save its stack under the home destination.
+                                // Returning home must show Today, rather than restoring that stack.
+                                restoreState = route != Routes.TODAY
+                            }
                         }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
+                    )
                 }
-            )
-
-            BottomBarIcon(
-                selected = currentRoute == Routes.CHAT,
-                selectedIcon = Icons.Filled.Chat,
-                unselectedIcon = Icons.Outlined.Chat,
-                description = "对话",
-                onClick = {
-                    navController.navigate(Routes.CHAT) {
-                        popUpTo(navController.graph.startDestinationId) {
-                            saveState = true
-                        }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                }
-            )
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            BottomBarIcon(
-                selected = currentRoute == Routes.EXPLORE,
-                selectedIcon = Icons.Filled.Explore,
-                unselectedIcon = Icons.Outlined.Explore,
-                description = "发现",
-                onClick = {
-                    navController.navigate(Routes.EXPLORE) {
-                        popUpTo(navController.graph.startDestinationId) {
-                            saveState = true
-                        }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                }
-            )
-
-            BottomBarIcon(
-                selected = currentRoute == Routes.PROFILE,
-                selectedIcon = Icons.Filled.Person,
-                unselectedIcon = Icons.Outlined.Person,
-                description = "我的",
-                onClick = {
-                    navController.navigate(Routes.PROFILE) {
-                        popUpTo(navController.graph.startDestinationId) {
-                            saveState = true
-                        }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                }
-            )
+            }
         }
     )
 }
-
 @Composable
 private fun BottomBarIcon(
     selected: Boolean,
@@ -326,11 +286,14 @@ private fun BottomBarIcon(
         onClick = onClick,
         modifier = Modifier.size(56.dp)
     ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Icon(
             imageVector = if (selected) selectedIcon else unselectedIcon,
             contentDescription = description,
-            modifier = Modifier.size(28.dp),
-            tint = if (selected) Color(0xFF9AEDCF) else Color(0xFF9E9E9E)
+            modifier = Modifier.size(24.dp),
+            tint = if (selected) Color(0xFF44866A) else Color(0xFF9E9E9E)
         )
+        Text(description, style = MaterialTheme.typography.labelSmall, color = if (selected) Color(0xFF44866A) else Color(0xFF777777))
+        }
     }
 }

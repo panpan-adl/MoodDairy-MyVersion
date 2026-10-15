@@ -52,7 +52,7 @@ fun TestHubScreen(
             TopAppBar(
                 title = {
                     Text(
-                        "测试中心",
+                        "测试历史",
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -93,71 +93,6 @@ fun TestHubScreen(
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // 热门推荐
-                    item {
-                        Text(
-                            text = "发现有趣的心理学测试",
-                            fontSize = 14.sp,
-                            color = TextSecondary,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-                    }
-
-                    // 快捷入口
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            TestEntryCard(
-                                entryType = TestEntryType.MBTI,
-                                icon = Icons.Outlined.GridView,
-                                backgroundColor = MintGreen.copy(alpha = 0.15f),
-                                onClick = { onNavigateToTest("mbti_simplified_v1") },
-                                modifier = Modifier.weight(1f)
-                            )
-                            TestEntryCard(
-                                entryType = TestEntryType.ANIMAL,
-                                icon = Icons.Outlined.Pets,
-                                backgroundColor = PaleYellow.copy(alpha = 0.3f),
-                                onClick = { onNavigateToTest("animal_personality_v1") },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            TestEntryCard(
-                                entryType = TestEntryType.EMOTION,
-                                icon = Icons.Outlined.Mood,
-                                backgroundColor = Color(0xFFE8F5E9),
-                                onClick = { onNavigateToTest("phq9_v1") },
-                                modifier = Modifier.weight(1f)
-                            )
-                            TestEntryCard(
-                                entryType = TestEntryType.POTENTIAL,
-                                icon = Icons.Outlined.Lightbulb,
-                                backgroundColor = Color(0xFFFFF3E0),
-                                onClick = { onNavigateToTest("holland_simplified_v1") },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-
-                    // 全部测试
-                    item {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "全部测试",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
-                        )
-                    }
                     if (history.isNotEmpty()) {
                         item {
                             Spacer(modifier = Modifier.height(8.dp))
@@ -177,14 +112,7 @@ fun TestHubScreen(
                         }
                     }
 
-                    hubState.testIndex?.tests?.let { tests ->
-                        items(tests) { test ->
-                            TestListItem(
-                                test = test,
-                                onClick = { onNavigateToTest(test.testId) }
-                            )
-                        }
-                    }
+                    if (history.isEmpty()) item { Text("还没有测试记录。可以和小嘉然说：我想测一下 MBTI。") }
 
                     item {
                         Spacer(modifier = Modifier.height(32.dp))

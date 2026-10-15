@@ -30,7 +30,8 @@ import com.example.mydiary.ui.theme.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WhiteNoiseScreen(
-    onNavigateBack: () -> Unit = {}
+    onNavigateBack: () -> Unit = {},
+    embedded: Boolean = false
 ) {
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     var searchQuery by remember { mutableStateOf("") }
@@ -46,6 +47,7 @@ fun WhiteNoiseScreen(
         WhiteNoiseCategoryListScreen(
             searchQuery = searchQuery,
             onSearchQueryChange = { searchQuery = it },
+            embedded = embedded,
             onCategoryClick = { selectedCategory = it },
             onNavigateBack = onNavigateBack
         )
@@ -59,6 +61,7 @@ fun WhiteNoiseScreen(
 @Composable
 private fun WhiteNoiseCategoryListScreen(
     searchQuery: String,
+    embedded: Boolean,
     onSearchQueryChange: (String) -> Unit,
     onCategoryClick: (String) -> Unit,
     onNavigateBack: () -> Unit
@@ -110,8 +113,8 @@ private fun WhiteNoiseCategoryListScreen(
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-            // 顶部栏
-            TopAppBar(
+            // Embedded in Relax: the parent owns the title and back button.
+            if (!embedded) TopAppBar(
                 title = {
                     Text(
                         text = "白噪音",

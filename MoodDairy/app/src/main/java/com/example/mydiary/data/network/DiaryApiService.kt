@@ -13,14 +13,24 @@ import retrofit2.http.*
  * 验证需求: 2.4, 4.3, 8.1
  */
 interface DiaryApiService {
-    @retrofit2.http.POST("personal-videos/import")
-    suspend fun importPersonalVideos(@retrofit2.http.Body body: com.google.gson.JsonObject): retrofit2.Response<com.google.gson.JsonObject>
-    @retrofit2.http.GET("personal-videos")
-    suspend fun personalVideoStatus(): retrofit2.Response<com.google.gson.JsonObject>
-    @retrofit2.http.DELETE("personal-videos/{platform}")
-    suspend fun deletePersonalVideos(@retrofit2.http.Path("platform") platform: String): retrofit2.Response<com.google.gson.JsonObject>
-
-    
+    @GET("music/recommendations")
+    suspend fun relaxRecommendations(): Response<RelaxRecommendations>
+    @GET("agent/tasks/history")
+    suspend fun agentTaskHistory(): Response<List<AgentTask>>
+    @POST("agent/record")
+    suspend fun agentSaveRecord(@Body request: AgentSaveRecord): Response<AgentSavedDiary>
+    @GET("agent/today")
+    suspend fun agentToday(@Query("date") date: String): Response<AgentToday>
+    @POST("agent/plan")
+    suspend fun agentPlan(@Body request: AgentPlanRequest): Response<AgentPlan>
+    @POST("agent/adopt")
+    suspend fun agentAdopt(@Body request: AgentAdoptRequest): Response<AgentToday>
+    @PATCH("agent/tasks/{id}")
+    suspend fun agentUpdateTask(@Path("id") id: Long, @Body request: AgentTaskUpdate): Response<AgentTask>
+    @POST("agent/review")
+    suspend fun agentReview(@Body request: AgentReviewRequest): Response<AgentReview>
+    @POST("agent/review/save")
+    suspend fun agentSaveReview(@Body request: AgentSaveReview): Response<AgentSavedDiary>
     // ============================================================================
     // 日记相关API (Diary APIs)
     // ============================================================================

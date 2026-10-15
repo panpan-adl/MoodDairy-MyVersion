@@ -162,6 +162,26 @@ def _extract_sync(diary_id: int, force: bool) -> dict | None:
             loop.close()
 
 
+def _run_extraction(diary_id: int, force: bool = False) -> dict | None:
+    """Run local extraction with an engine owned by this thread's event loop."""
+    async def run():
+        from sqlalchemy.pool import NullPool
+        from app.services.extraction_service import ExtractionService
+
+        database_url = os.getenv("DATABASE_URL")
+        if not database_url:
+            raise ValueError("DATABASE_URL is required for extraction")
+        engine = create_async_engine(database_url, poolclass=NullPool)
+        sessions = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        try:
+            async with sessions() as session:
+                return await ExtractionService(session).extract_diary(diary_id, force)
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(run())
+
+
 async def _record_failure_async(session_maker, diary_id: int, error: Exception, attempt: int) -> None:
     """Record a failure into the ExtractionJob table."""
 

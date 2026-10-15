@@ -25,10 +25,20 @@ dependencyResolutionManagement {
     }
 }
 
+// Optional local redirection keeps duplicate checkouts on a single source tree.
+// Without this local property, a normal Git clone builds its own sources.
+val localConfig = java.util.Properties().apply {
+    val localFile = settingsDir.resolve("local.properties")
+    if (localFile.isFile) localFile.inputStream().use { load(it) }
+}
+val canonicalPath = localConfig.getProperty("canonical.project.path")?.trim()
+val sourceRoot = if (canonicalPath.isNullOrEmpty()) settingsDir else file(canonicalPath).canonicalFile
+check(sourceRoot.resolve("app/build.gradle.kts").isFile) {
+    "Configured source project is missing: $sourceRoot. Check canonical.project.path in local.properties."
+}
 rootProject.name = "MyDiary"
 include(":app")
-
-// 添加 Live2D Framework 模块（使用源代码）
+project(":app").projectDir = sourceRoot.resolve("app")
 include(":Framework:framework")
-project(":Framework:framework").projectDir =
-    File("CubismSdkForJava-5-r.4.1/Framework/framework")
+project(":Framework:framework").projectDir = sourceRoot.resolve("CubismSdkForJava-5-r.4.1/Framework/framework")
+println("MoodDairy source project: ${sourceRoot.canonicalPath}")

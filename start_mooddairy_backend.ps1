@@ -70,3 +70,13 @@ if (-not (Get-Process -Name "qemu-system-x86_64*")) {
 
 Write-Host ""
 Write-Host "All done. You can close this window; services keep running." -ForegroundColor Green
+
+# The local debug build uses loopback through adb reverse.
+$adbCommand = Get-Command adb -ErrorAction SilentlyContinue
+if ($adbCommand) {
+    foreach ($line in (& $adbCommand.Source devices)) {
+        if ($line -match '^([^\s]+)\s+device$') {
+            & $adbCommand.Source -s $Matches[1] reverse tcp:8000 tcp:8000 | Out-Null
+        }
+    }
+}

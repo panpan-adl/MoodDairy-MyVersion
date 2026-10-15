@@ -1,4 +1,4 @@
-﻿package com.example.mydiary.ui.calendar
+package com.example.mydiary.ui.calendar
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
@@ -87,7 +87,6 @@ fun CalendarScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
-    val pagerState = rememberPagerState(pageCount = { 2 })
     val scope = rememberCoroutineScope()
 
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -221,27 +220,7 @@ fun CalendarScreen(
                 if (uiState.selectedDate != null) {
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    TabRow(selectedTabIndex = pagerState.currentPage) {
-                        Tab(
-                            selected = pagerState.currentPage == 0,
-                            onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
-                            text = { Text("日记") }
-                        )
-                        Tab(
-                            selected = pagerState.currentPage == 1,
-                            onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
-                            text = { Text("待办") }
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    HorizontalPager(
-                        state = pagerState,
-                        modifier = Modifier.fillMaxWidth()
-                    ) { page ->
-                        when (page) {
-                            0 -> DiaryListSection(
+                    DiaryListSection(
                                 selectedDate = uiState.selectedDate!!,
                                 diaries = uiState.selectedDateDiaries,
                                 isLoading = uiState.isLoadingDiaries,
@@ -254,17 +233,6 @@ fun CalendarScreen(
                                     showDeleteDialog = true
                                 }
                             )
-
-                            else -> TodoListSection(
-                                selectedDate = uiState.selectedDate!!,
-                                todos = uiState.selectedDateTodos,
-                                isLoading = uiState.isLoadingTodos,
-                                isUpdating = uiState.isUpdatingTodo,
-                                onToggleDone = { todo -> viewModel.toggleTodoDone(todo) },
-                                onDeleteTodo = { todo -> viewModel.deleteTodo(todo.id) }
-                            )
-                        }
-                    }
                 }
             }
         }

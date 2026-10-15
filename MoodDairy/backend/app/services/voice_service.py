@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 from typing import Optional
 from openai import OpenAI
+import httpx
 import logging
 from datetime import datetime
 import uuid
@@ -70,7 +71,7 @@ class VoiceProcessingService:
             logger.warning("OpenAI API key not provided. Voice transcription will not work.")
         
         # 初始化OpenAI客户端
-        self.client = OpenAI(api_key=self.api_key) if self.api_key else None
+        self.client = OpenAI(api_key=self.api_key, http_client=httpx.Client()) if self.api_key else None
         
         # 获取外部API客户端
         self.external_api_client = get_external_api_client()

@@ -23,6 +23,8 @@ data class ChatMessage(
     /** 深度思考过程文本（开启深度思考时才有） */
     @SerializedName("reasoning")
     val reasoning: String? = null,
+    @SerializedName("entry_actions")
+    val entryActions: List<ChatServiceAction>? = null,
 )
 
 data class ChatContext(
@@ -153,6 +155,7 @@ data class ChatServiceAction(
 )
 
 data class SocialSearchItem(
+    @SerializedName("resource_kind") val resourceKind: String? = null,
     @SerializedName("record_source") val recordSource: String? = null,
     @SerializedName("platform")
     val platform: String,

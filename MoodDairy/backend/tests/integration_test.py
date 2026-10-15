@@ -16,6 +16,8 @@ import requests
 
 pytestmark = pytest.mark.skip(reason="manual end-to-end smoke script; run directly with a live server")
 
+SESSION = requests.Session()
+
 BASE_URL = os.getenv("SMOKE_BASE_URL", "http://localhost:8000").rstrip("/")
 ENABLE_CHAT = os.getenv("SMOKE_CHAT", "0").strip().lower() in {"1", "true", "yes", "on"}
 CHAT_TIMEOUT_SECONDS = int(os.getenv("SMOKE_CHAT_TIMEOUT", "100"))
@@ -31,14 +33,14 @@ def preview_text(value: str, limit: int = 300) -> str:
 
 
 def check_health() -> bool:
-    response = requests.get(f"{BASE_URL}/health", timeout=10)
+    response = SESSION.get(f"{BASE_URL}/health", timeout=10)
     print("health:", response.status_code, response.json())
     return response.status_code == 200 and response.json().get("status") == "healthy"
 
 
 def register_user():
     username = f"testuser_{int(time.time())}"
-    response = requests.post(
+    response = SESSION.post(
         f"{BASE_URL}/api/users/register",
         json={"username": username, "password": "test123456", "nickname": "test-user"},
         timeout=10,
@@ -48,7 +50,7 @@ def register_user():
 
 
 def login_user(username: str, password: str = "test123456"):
-    response = requests.post(
+    response = SESSION.post(
         f"{BASE_URL}/api/users/login",
         json={"username": username, "password": password},
         timeout=10,
@@ -58,7 +60,7 @@ def login_user(username: str, password: str = "test123456"):
 
 
 def get_user(user_id: int):
-    response = requests.get(
+    response = SESSION.get(
         f"{BASE_URL}/api/users/{user_id}",
         timeout=10,
     )
@@ -68,7 +70,7 @@ def get_user(user_id: int):
 
 def create_diary(user_id: int):
     today = date.today().isoformat()
-    response = requests.post(
+    response = SESSION.post(
         f"{BASE_URL}/diaries/",
         json={
             "user_id": user_id,
@@ -87,7 +89,7 @@ def create_diary(user_id: int):
 
 def get_diary_by_date(user_id: int):
     today = date.today().isoformat()
-    response = requests.get(
+    response = SESSION.get(
         f"{BASE_URL}/diaries/{today}",
         params={"user_id": user_id},
         timeout=10,
@@ -97,7 +99,7 @@ def get_diary_by_date(user_id: int):
 
 
 def get_diary_by_id(diary_id: int):
-    response = requests.get(
+    response = SESSION.get(
         f"{BASE_URL}/diaries/id/{diary_id}",
         timeout=10,
     )
@@ -107,7 +109,7 @@ def get_diary_by_id(diary_id: int):
 
 def get_dates_with_diary(user_id: int):
     today = date.today()
-    response = requests.get(
+    response = SESSION.get(
         f"{BASE_URL}/diaries/dates-with-diary",
         params={"user_id": user_id, "year": today.year, "month": today.month},
         timeout=10,
@@ -117,7 +119,7 @@ def get_dates_with_diary(user_id: int):
 
 
 def upload_media(diary_id: int):
-    response = requests.post(
+    response = SESSION.post(
         f"{BASE_URL}/media/upload",
         data={"diary_id": str(diary_id), "media_type": "image"},
         files={"file": ("tiny.png", PNG_BYTES, "image/png")},
@@ -128,7 +130,7 @@ def upload_media(diary_id: int):
 
 
 def sync_media(diary_id: int, asset_id: int, file_size: int):
-    response = requests.put(
+    response = SESSION.put(
         f"{BASE_URL}/diaries/{diary_id}/media",
         json={
             "items": [
@@ -147,7 +149,7 @@ def sync_media(diary_id: int, asset_id: int, file_size: int):
 
 
 def get_diary_detail(diary_id: int, user_id: int):
-    response = requests.get(
+    response = SESSION.get(
         f"{BASE_URL}/diaries/id/{diary_id}/detail",
         params={"user_id": user_id},
         timeout=15,
@@ -157,7 +159,7 @@ def get_diary_detail(diary_id: int, user_id: int):
 
 
 def delete_diary(diary_id: int, user_id: int):
-    response = requests.delete(
+    response = SESSION.delete(
         f"{BASE_URL}/diaries/{diary_id}",
         params={"user_id": user_id},
         timeout=15,
@@ -167,9 +169,9 @@ def delete_diary(diary_id: int, user_id: int):
 
 
 def chat(user_id: int):
-    response = requests.post(
+    response = SESSION.post(
         f"{BASE_URL}/chat/",
-        json={"user_id": user_id, "message": "manual smoke test message"},
+        json={"user_id": user_id, "message": "manual smoke test message", "conversation_id": f"qa_{int(time.time())}"},
         timeout=CHAT_TIMEOUT_SECONDS,
     )
     print("chat:", response.status_code, preview_text(response.text, 300))
@@ -208,6 +210,7 @@ def run_all_tests():
         results["passed"] += 1
         user_data = register_response.json()
         user_id = user_data.get("id") or user_data.get("user_id")
+        SESSION.headers["Authorization"] = f"Bearer {user_data['access_token']}"
 
         login_response = login_user(username)
         record_result(results, login_response.status_code == 200, "login")

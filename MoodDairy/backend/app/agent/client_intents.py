@@ -65,6 +65,16 @@ def match_client_action_intent(message: str) -> Optional[MatchResult]:
     if not c:
         return None
 
+    from app.agent.support_intents import match_test_request, search_arguments
+    test = match_test_request(raw)
+    if test is not None:
+        return ("open_test_hub", test)
+    search = search_arguments(raw)
+    if search:
+        return ("search_social_content", search)
+    if not any(word in c for word in ("不要", "不想", "不用", "取消")) and any(word in c for word in ("想听歌", "听点音乐", "放松一下", "打开音乐", "播放音乐", "推荐歌曲", "推荐几首")):
+        return ("open_relax", {})
+
     today = date.today().isoformat()
     short = len(c) <= 24
     imperative = c.startswith(_IMPERATIVES) or (
@@ -82,6 +92,10 @@ def match_client_action_intent(message: str) -> Optional[MatchResult]:
 
     # ===== 顺序敏感：更具体的在前 =====
 
+    # 否定白噪音/音乐指令（不要放白噪音）
+    if any(word in c for word in ("不要", "不想", "不用", "取消")) and any(word in c for word in ("白噪音", "音乐", "听歌")):
+        return None
+
     # Stop white noise
     if any(k in c for k in ("停止白噪音", "关闭白噪音", "别放了", "停止播放", "暂停播放", "停止声音")):
         return ("stop_white_noise", {})
@@ -89,10 +103,8 @@ def match_client_action_intent(message: str) -> Optional[MatchResult]:
     # Create diary with title/content（「创建日记叫小团」「写日记标题是小团」）
     if "日记" in c and any(k in c for k in ("创建", "写", "记", "新建")):
         import re
-        # 先提取内容，再提取标题（避免标题贪婪匹配吃掉「内容是...」）
         content_match = re.search(r"(?:内容是|内容叫|正文是)(.+)", c)
         content = content_match.group(1).strip() if content_match else None
-        # 标题：在「内容是」之前的文本里找，避免贪婪
         title_text = c[:content_match.start()] if content_match else c
         title_match = re.search(r"(?:叫|标题是|标题叫|名称是|叫《)《?([一-龥A-Za-z0-9_\-]{1,20})》?", title_text)
         title = title_match.group(1) if title_match else None
@@ -104,10 +116,9 @@ def match_client_action_intent(message: str) -> Optional[MatchResult]:
                 payload["diary_content"] = content
             return ("open_diary_editor", payload)
 
-    # Update profile（「把昵称改成小团」「改签名 XXX」）
+    # Update profile
     if any(k in c for k in ("改", "修改", "换成", "变为")):
         import re
-        # 注意：正则分支按长度从长到短排，避免「改」抢先匹配「改成」
         m = re.search(r"(?:把)?昵称(?:改成叫|改成|改为|改叫|改)?[是为]?([一-龥A-Za-z0-9_]{1,15})", c)
         if m:
             return ("update_profile", {"field": "nickname", "value": m.group(1)})
@@ -146,14 +157,6 @@ def match_client_action_intent(message: str) -> Optional[MatchResult]:
     if any(k in c for k in ("成长画像", "成长报告", "我的成长", "看看成长")):
         return ("open_growth_portrait", {})
 
-    # Achievement
-    if "成就" in c:
-        return ("open_achievement", {})
-
-    # Shop
-    if any(k in c for k in ("商城", "商店", "去商城")):
-        return ("open_shop", {})
-
     # Live2D
     if any(k in c for k in ("live2d", "二次元", "虚拟形象")):
         return ("open_live2d", {})
@@ -170,15 +173,13 @@ def match_client_action_intent(message: str) -> Optional[MatchResult]:
     if any(k in c for k in ("打开探索", "去发现", "看看探索")):
         return ("open_explore", {})
 
-    # White noise — 检查是否指定了具体声音名
+    # White noise
     if any(k in c for k in ("白噪音", "白噪声", "白燥音", "雨声", "雨音")):
         sound_name = _extract_sound_name(c)
-        # 明确说「打开」只跳转页面；说「播放/放/听」才播放
-        open_only = any(k in c for k in ("打开", "打开", "进去", "跳转"))
+        open_only = any(k in c for k in ("打开", "进去", "跳转"))
         if sound_name and not open_only:
             return ("play_white_noise", {"sound_name": sound_name})
         return ("open_white_noise", {})
-    # 单独说「水滴声」「鸟鸣」等自然声音
     sound_name = _extract_sound_name(c)
     if sound_name:
         return ("play_white_noise", {"sound_name": sound_name})
@@ -191,12 +192,16 @@ def match_client_action_intent(message: str) -> Optional[MatchResult]:
     if any(k in c for k in ("画画", "画图", "画一张", "涂鸦", "简笔画", "绘画")):
         return ("open_drawing", {})
 
-    # Diary editor — default today（含「写日」兜住 ASR 杂字）
+    # Diary editor — default today
     if any(k in c for k in ("日记", "日志", "日纪", "写日")):
         return ("open_diary_editor", {"diary_date": today})
 
+    # Planning / todo
+    if any(word in c for word in ("安排", "规划", "计划")) and any(word in c for word in ("学习", "工作", "今天", "任务")) and any(word in c for word in ("帮", "想", "请", "打开", "制定")):
+        return ("open_todo_create", {"todo_date": today})
+
     # Todo create screen
-    if any(k in c for k in ("待办", "代办", "待半")):
+    if any(k in c for k in ("待办", "代办", "待半", "待办界面", "待办页面", "打开待办", "新建待办", "待办事项", "待办列表")):
         return ("open_todo_create", {"todo_date": today})
 
     return None

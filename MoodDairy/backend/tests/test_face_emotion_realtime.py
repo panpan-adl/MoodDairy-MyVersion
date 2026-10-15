@@ -27,7 +27,7 @@ async def test_report_returns_recommendations_without_chat_and_without_autoplay(
     assert response.success
     assert response.service_bundle["type"] == "service_bundle"
     assert response.service_bundle["auto_actions"] == []
-    assert any(item["action"] == "open_music" for item in response.service_bundle["services"])
+    assert any(item["action"] == "open_relax" for item in response.service_bundle["services"])
     assert db.add.call_args.args[0].user_id == 7
     db.commit.assert_awaited_once()
 

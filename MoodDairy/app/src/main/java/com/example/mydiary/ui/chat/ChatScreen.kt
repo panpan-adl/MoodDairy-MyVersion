@@ -15,10 +15,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -76,6 +73,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -94,13 +92,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.isShiftPressed
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -298,25 +289,7 @@ fun ChatScreen(
         }
     }
 
-    val lastMessage = messages.lastOrNull()
-    LaunchedEffect(
-        messages.size,
-        lastMessage?.socialSearchLocked,
-        lastMessage?.socialSearchResults?.size,
-    ) {
-        if (messages.isNotEmpty()) {
-            val targetIndex = messages.lastIndex
-            val lastVisibleIndex = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-            val shouldAnimate = lastVisibleIndex >= targetIndex - 3
-            if (shouldAnimate) {
-                listState.animateScrollToItem(targetIndex)
-                // 最新消息可能比一屏还高（含搜索卡片），继续滚到内容最底部
-                listState.animateScrollBy(4000f)
-            } else {
-                listState.scrollToItem(targetIndex, Int.MAX_VALUE)
-            }
-        }
-    }
+    val entries = remember(messages) { chatTimelineEntries(messages) }
 
     Box(
         modifier = Modifier
@@ -331,28 +304,81 @@ fun ChatScreen(
                 ),
             ),
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            ChatTopBar(
-                onNavigateToLive2D = onNavigateToLive2D,
-                onNavigateToRecharge = onNavigateToRecharge,
-                isVip = isVip,
-                isEmotionCapturing = isEmotionCapturing,
-                onOpenHistory = {
-                    viewModel.loadHistoryConversations()
-                    showHistory = true
-                },
-                onNewConversation = { viewModel.startNewConversation() },
-            )
-            if (isEmotionCapturing) {
-                Text(
-                    text = faceEmotionStatus,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+        ChatViewport(
+            listState = listState,
+            entries = entries,
+            header = {
+                ChatTopBar(
+                    onNavigateToLive2D = onNavigateToLive2D,
+                    onNavigateToRecharge = onNavigateToRecharge,
+                    isVip = isVip,
+                    isEmotionCapturing = isEmotionCapturing,
+                    onOpenHistory = {
+                        viewModel.loadHistoryConversations()
+                        showHistory = true
+                    },
+                    onNewConversation = { viewModel.startNewConversation() },
                 )
-            }
+                if (isEmotionCapturing) {
+                    Text(
+                        text = faceEmotionStatus,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            composer = {
+                ChatInputBar(
+                    inputText = inputText,
+                    selectedImageUris = selectedImageUris,
+                    enabled = !isLoading,
+                    isListening = isListening,
+                    onInputChange = { inputText = it },
+                    onAddImage = { imagePickerLauncher.launch("image/*") },
+                    onPickVoiceFile = { audioFilePickerLauncher.launch("audio/*") },
+                    onVoiceInput = {
+                        if (isListening) {
+                            ChatVosk.stop()
+                            isListening = false
+                            return@ChatInputBar
+                        }
 
-            errorMessage?.let { error ->
+                        val hasPermission = ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.RECORD_AUDIO,
+                        ) == PackageManager.PERMISSION_GRANTED
+
+                        if (hasPermission) {
+                            startVoskListening()
+                        } else {
+                            audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        }
+                    },
+                    onRemoveImage = { index ->
+                        if (index in selectedImageUris.indices) {
+                            selectedImageUris.removeAt(index)
+                        }
+                    },
+                    onSend = {
+                        if ((inputText.isNotBlank() || selectedImageUris.isNotEmpty()) && !isLoading) {
+                            val uriStrings = selectedImageUris.map(Uri::toString)
+                            viewModel.sendMessage(
+                                content = inputText,
+                                imageUris = uriStrings,
+                                imagePreviewUris = uriStrings,
+                            )
+                            inputText = ""
+                            selectedImageUris.clear()
+                        }
+                    },
+                    deepThinkingEnabled = deepThinkingEnabled,
+                    onToggleDeepThinking = { viewModel.toggleDeepThinking(it) },
+                )
+            },
+        ) {
+            if (errorMessage != null) item(key = "chat_error") {
+                val error = errorMessage!!
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -387,7 +413,7 @@ fun ChatScreen(
                 }
             }
 
-            if (pendingPlans.isNotEmpty()) {
+            if (pendingPlans.isNotEmpty()) item(key = "chat_pending_plans") {
                 PendingPlanSection(
                     plans = pendingPlans,
                     onConfirm = { plan ->
@@ -403,7 +429,7 @@ fun ChatScreen(
                 )
             }
 
-            if (serviceBundles.isNotEmpty()) {
+            if (serviceBundles.isNotEmpty()) item(key = "chat_service_bundles") {
                 EmotionServiceBundleSection(
                     bundles = serviceBundles,
                     onAction = viewModel::performServiceAction,
@@ -411,71 +437,9 @@ fun ChatScreen(
                 )
             }
 
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                state = listState,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(vertical = 16.dp),
-            ) {
-                items(
-                    items = messages,
-                    key = { message ->
-                        "${message.timestamp}-${message.isFromUser}-${message.content.hashCode()}-${message.imageUris.size}-${message.isStreaming}-${message.socialSearchResults?.size ?: 0}-${message.socialSearchLocked}"
-                    },
-                ) { message ->
-                    ChatMessageItem(message = message, onNavigateToRecharge = onNavigateToRecharge)
-                }
+            items(entries.asReversed(), key = { it.key }) { entry ->
+                ChatMessageItem(message = entry.message, onNavigateToRecharge = onNavigateToRecharge, onEntryAction = viewModel::performEntryAction)
             }
-
-            ChatInputBar(
-                inputText = inputText,
-                selectedImageUris = selectedImageUris,
-                enabled = !isLoading,
-                isListening = isListening,
-                onInputChange = { inputText = it },
-                onAddImage = { imagePickerLauncher.launch("image/*") },
-                onPickVoiceFile = { audioFilePickerLauncher.launch("audio/*") },
-                onVoiceInput = {
-                    if (isListening) {
-                        ChatVosk.stop()
-                        isListening = false
-                        return@ChatInputBar
-                    }
-
-                    val hasPermission = ContextCompat.checkSelfPermission(
-                        context,
-                        Manifest.permission.RECORD_AUDIO,
-                    ) == PackageManager.PERMISSION_GRANTED
-
-                    if (hasPermission) {
-                        startVoskListening()
-                    } else {
-                        audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                    }
-                },
-                onRemoveImage = { index ->
-                    if (index in selectedImageUris.indices) {
-                        selectedImageUris.removeAt(index)
-                    }
-                },
-                onSend = {
-                    if ((inputText.isNotBlank() || selectedImageUris.isNotEmpty()) && !isLoading) {
-                        val uriStrings = selectedImageUris.map(Uri::toString)
-                        viewModel.sendMessage(
-                            content = inputText,
-                            imageUris = uriStrings,
-                            imagePreviewUris = uriStrings,
-                        )
-                        inputText = ""
-                        selectedImageUris.clear()
-                    }
-                },
-                deepThinkingEnabled = deepThinkingEnabled,
-                onToggleDeepThinking = { viewModel.toggleDeepThinking(it) },
-            )
         }
     }
 
@@ -658,7 +622,7 @@ private fun EditPlanDialog(
 }
 
 @Composable
-private fun ChatTopBar(
+internal fun ChatTopBar(
     onNavigateToLive2D: () -> Unit = {},
     onNavigateToRecharge: () -> Unit = {},
     isVip: Boolean = false,
@@ -861,7 +825,7 @@ private fun EmotionServiceBundleSection(
 private fun serviceActionIcon(action: String, id: String): ImageVector {
     return when {
         action == "play_white_noise" -> Icons.Default.PlayArrow
-        action == "open_music" -> Icons.Default.MusicNote
+        action == "open_music" || action == "open_relax" -> Icons.Default.MusicNote
         action == "open_drawing" -> Icons.Default.Palette
         action == "open_test" || id.contains("todo") -> Icons.Default.Checklist
         action == "continue_chat" -> Icons.Default.Chat
@@ -871,7 +835,7 @@ private fun serviceActionIcon(action: String, id: String): ImageVector {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ChatMessageItem(message: ChatMessage, onNavigateToRecharge: () -> Unit = {}) {
+internal fun ChatMessageItem(message: ChatMessage, onNavigateToRecharge: () -> Unit = {}, onEntryAction: (com.example.mydiary.data.models.ChatServiceAction) -> Unit = {}) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -968,6 +932,14 @@ private fun ChatMessageItem(message: ChatMessage, onNavigateToRecharge: () -> Un
         }
     }
 
+    if (!message.isFromUser && !message.entryActions.isNullOrEmpty()) {
+        Column(Modifier.fillMaxWidth().padding(start = 44.dp, top = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            message.entryActions.orEmpty().forEach { action ->
+                OutlinedButton(onClick = { onEntryAction(action) }, modifier = Modifier.fillMaxWidth()) { Text(action.title) }
+            }
+        }
+    }
+
     // 社交搜索结果卡片：AI 消息附带，显示在气泡下方
     if (!message.isFromUser && !message.socialSearchResults.isNullOrEmpty()) {
         Spacer(modifier = Modifier.height(6.dp))
@@ -998,7 +970,7 @@ private fun ChatMessageItem(message: ChatMessage, onNavigateToRecharge: () -> Un
 }
 
 @Composable
-private fun ChatInputBar(
+internal fun ChatInputBar(
     inputText: String,
     selectedImageUris: List<Uri>,
     enabled: Boolean,
@@ -1149,22 +1121,7 @@ private fun ChatInputBar(
                     enabled = true,
                     modifier = Modifier
                         .weight(1f)
-                        .padding(horizontal = 8.dp)
-                        .onPreviewKeyEvent { event ->
-                            val isEnter = event.key == Key.Enter || event.key == Key.NumPadEnter
-                            if (isEnter && !event.isShiftPressed) {
-                                if (event.type == KeyEventType.KeyDown &&
-                                    event.nativeKeyEvent.repeatCount == 0 &&
-                                    enabled &&
-                                    (inputText.isNotBlank() || selectedImageUris.isNotEmpty())
-                                ) {
-                                    onSend()
-                                }
-                                true
-                            } else {
-                                false
-                            }
-                        },
+                        .padding(horizontal = 8.dp),
                     placeholder = {
                         Text(
                             text = if (enabled) "输入消息..." else "正在回复中，可以先输入...",
@@ -1180,16 +1137,7 @@ private fun ChatInputBar(
                         disabledContainerColor = Color.Transparent,
                     ),
                     shape = RoundedCornerShape(24.dp),
-                    singleLine = false,
-                    maxLines = 4,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(
-                        onSend = {
-                            if (enabled && (inputText.isNotBlank() || selectedImageUris.isNotEmpty())) {
-                                onSend()
-                            }
-                        },
-                    ),
+                    singleLine = true,
                 )
 
                 val canSend = inputText.isNotBlank() || selectedImageUris.isNotEmpty()

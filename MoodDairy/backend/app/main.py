@@ -17,11 +17,13 @@ from app.database import check_db_connection, close_db, init_db
 from app.drawing import drawing_router
 from app.drawing.generator_config import GeneratorConfig
 from app.routers import chat, diaries, face_emotion, insights, media, music, todos, users, voice, tts
-from app.routers import diary_search, diary_summaries
+from app.routers import diary_search, diary_summaries, personal_agent
 from app.routers import social_search_router
 from app.security.middleware import JWTAuthMiddleware
 from app.security.log_filter import install_sensitive_log_filter
 from app.utils.error_handler import handle_exception
+from app.build_revision import revision
+BUILD_REVISION=revision()
 
 install_sensitive_log_filter()
 
@@ -50,7 +52,7 @@ class StaticMediaBypassMiddleware:
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http":
             path = scope.get("path", "")
-            if path.startswith("/media/"):
+            if path.startswith("/media/") and path != "/media/upload":
                 await self._server.handle(scope, receive, send, path[len("/media/"):])
                 return
             if path.startswith("/uploads/"):
@@ -97,6 +99,9 @@ async def lifespan(app: FastAPI):
     from app.drawing.generator_config import is_drawing_enabled, is_sd_enabled
     print(f"AI Drawing enabled: {is_drawing_enabled()}, SD enabled: {is_sd_enabled()}")
 
+    from app.services.memory_skills import ensure_schema
+    await ensure_schema()
+
     yield
 
     print("Diary backend shutting down...")
@@ -120,7 +125,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 # 最后注册 → 位于中间件栈最外层，静态媒体在此短路，不经过任何 BaseHTTPMiddleware
-app.add_middleware(StaticMediaBypassMiddleware)
 
 
 @app.middleware("http")
@@ -176,7 +180,7 @@ async def health_check():
     """Health check endpoint."""
 
     db_status = "connected" if await check_db_connection() else "disconnected"
-    return {"status": "healthy", "database": db_status}
+    return {"status": "healthy" if db_status == 'connected' else 'degraded', "database": db_status, "revision": BUILD_REVISION}
 
 
 app.include_router(diary_summaries.router)
@@ -189,6 +193,9 @@ app.include_router(tts.router)
 app.include_router(users.router)
 app.include_router(chat.router)
 app.include_router(todos.router)
+app.include_router(personal_agent.router)
+from app.routers.memory_skills import router as memory_skills_router
+app.include_router(memory_skills_router)
 app.include_router(face_emotion.router)
 app.include_router(music.router)
 app.include_router(drawing_router)
@@ -203,5 +210,6 @@ if __name__ == "__main__":
 
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
 
-from app.routers.personal_videos import router as personal_videos_router
-app.include_router(personal_videos_router)
+
+# Static responses bypass the BaseHTTPMiddleware stream wrappers.
+app.add_middleware(StaticMediaBypassMiddleware)

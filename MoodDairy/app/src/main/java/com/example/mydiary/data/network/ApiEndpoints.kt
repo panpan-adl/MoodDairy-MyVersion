@@ -49,19 +49,15 @@ object ApiEndpoints {
 
     private fun resolveApiBaseUrl(): String {
         val cleaned = sanitizeBaseUrl(BuildConfig.API_BASE_URL)
-        val afterRewrite = if (!shouldRewriteToDeviceLoopback()) {
-            rewriteLoopbackToEmulatorHost(cleaned)
-        } else {
-            rewriteEmulatorHost(cleaned)
-        }
+        // Honor an explicitly configured loopback URL on emulators using adb reverse.
+        val afterRewrite = if (shouldRewriteToDeviceLoopback()) rewriteEmulatorHost(cleaned) else cleaned
         val configured = ensureTrailingSlash(afterRewrite)
         return validateRetrofitBaseUrlOrFallback(configured)
     }
 
     private fun resolveMediaBaseUrl(): String {
         val cleaned = sanitizeBaseUrl(BuildConfig.MEDIA_BASE_URL)
-        val configured = if (!shouldRewriteToDeviceLoopback()) rewriteLoopbackToEmulatorHost(cleaned)
-        else rewriteEmulatorHost(cleaned)
+        val configured = if (shouldRewriteToDeviceLoopback()) rewriteEmulatorHost(cleaned) else cleaned
         val trimmed = trimTrailingSlash(configured)
         return if (trimmed.toHttpUrlOrNull() != null) {
             trimmed

@@ -111,6 +111,9 @@ private fun SocialSearchCard(item: SocialSearchItem) {
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
         Column {
+            if (item.platform != "netease") {
+                Text(item.resourceKind ?: "平台相关内容 · 完整性未核实", modifier = Modifier.padding(8.dp), fontSize = 11.sp)
+            }
             // 封面
             Box(
                 modifier = Modifier
@@ -241,14 +244,13 @@ fun VipUnlockCard(
     modifier: Modifier = Modifier,
     errorCode: String? = null,
 ) {
-    val isNoKey = errorCode == "NO_KEY" || errorCode == null
-    val title = if (isNoKey) "绑定 TikHub 密钥，解锁全网搜索" else "TikHub 余额不足，去充值后继续搜索"
-    val subtitle = if (isNoKey) {
-        "免费注册，B站、知乎免费搜；小红书 / 抖音 / 快手 / 微博约 $0.01/次"
-    } else {
-        "搜索约 $0.01/次，支持支付宝 / 微信付款"
+    val title = when (errorCode) {
+        "NO_BALANCE" -> "搜索服务余额不足"
+        "INVALID_KEY" -> "搜索密钥已失效"
+        else -> "配置心理内容查找"
     }
-    val actionText = if (isNoKey) "去绑定" else "去充值"
+    val subtitle = "使用自己的 TikHub 搜索账户，实际费用与额度以服务方为准。"
+    val actionText = "搜索服务设置"
     Card(
         modifier = modifier
             .fillMaxWidth()

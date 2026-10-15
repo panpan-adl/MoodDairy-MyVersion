@@ -82,6 +82,8 @@ class MultimodalInsightService:
             .options(
                 joinedload(Diary.summary),
                 joinedload(Diary.multimodal_insight),
+                selectinload(Diary.media_items),
+                selectinload(Diary.voice_transcriptions),
             )
             .where(Diary.user_id == user_id)
             .where(Diary.diary_date >= portrait_start)
@@ -232,7 +234,9 @@ class MultimodalInsightService:
 
     def _analyze_text(self, diary: Diary) -> ModalityInsight:
         summary = diary.summary
-        text_content = " ".join(filter(None, [diary.title, diary.content, summary.summary if summary else None]))
+        from app.security.field_crypto import decrypt_field
+        title, content = decrypt_field(diary.title), decrypt_field(diary.content)
+        text_content = " ".join(filter(None, [title, content, summary.summary if summary else None]))
         if not text_content.strip():
             return ModalityInsight(available=False)
 
@@ -254,7 +258,7 @@ class MultimodalInsightService:
             stress_score=stress_score,
             positive_event_score=positive_score,
             confidence_score=80 if summary else 65,
-            summary=(summary.summary if summary and summary.summary else (diary.content or "")[:120]),
+            summary=(summary.summary if summary and summary.summary else (content or "")[:120]),
             evidence=evidence,
             tags=tags,
         )
