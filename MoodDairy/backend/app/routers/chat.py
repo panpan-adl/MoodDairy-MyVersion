@@ -39,8 +39,16 @@ logger = logging.getLogger(__name__)
 # backend/logs/chat_debug.log — 相对项目路径，避免硬编码盘符
 _CHAT_DEBUG_LOG = Path(__file__).resolve().parent.parent.parent / "logs" / "chat_debug.log"
 
+# 2026-10-13: 调试埋点默认关闭 —— 每行 SSE 开关一次日志文件会被系统实时扫描拖到每次数秒，
+# 阻塞事件循环导致流式输出龟速、健康检查超时。需要排查时设环境变量 CHAT_DEBUG_LOG=1 再重启。
+_CHAT_DEBUG_ENABLED = os.getenv("CHAT_DEBUG_LOG", "0") == "1"
+
 
 def _open_chat_debug_log():
+    if not _CHAT_DEBUG_ENABLED:
+        import contextlib
+        import io
+        return contextlib.nullcontext(io.StringIO())
     _CHAT_DEBUG_LOG.parent.mkdir(parents=True, exist_ok=True)
     return open(_CHAT_DEBUG_LOG, "a", encoding="utf-8")
 
@@ -239,6 +247,9 @@ class ChatRequest(BaseModel):
     # Legacy compatibility fields
     diary_summaries: List[DiarySummarySimple] = Field(default_factory=list)
     image_data_urls: List[str] = Field(default_factory=list)
+
+    # 深度思考开关：开启后模型先推理再回答（更慢更聪明），并向前端推送思考过程
+    deep_thinking: bool = Field(default=False, description="Enable deep thinking mode")
 
     @model_validator(mode="after")
     def validate_payload(self) -> "ChatRequest":
@@ -575,6 +586,7 @@ async def _fetch_recent_face_signals(
 
 
 async def _handle_agent_turn(request: ChatRequest, db: AsyncSession):
+    deep_thinking = bool(getattr(request, "deep_thinking", False))
     message_text = _normalize_message(request.message, request.merged_image_data_urls)
     full_context = await _build_full_context(request.merged_diary_summaries, message_text)
     valid_images = _valid_images(request.merged_image_data_urls)
@@ -641,7 +653,7 @@ async def _handle_agent_turn(request: ChatRequest, db: AsyncSession):
         with _open_chat_debug_log() as _dbg_f5:
             import json as _j
             _dbg_f5.write(_j.dumps({"sessionId":"1d9790","location":"chat.py:_handle_agent_turn:phase1_start","message":"PHASE1_streaming_started","data":{"tools_provided":False}})+"\n")
-        async for event in _stream_llm_events(messages, tools=None):
+        async for event in _stream_llm_events(messages, tools=None, deep_thinking=deep_thinking):
             event_type = event.get("type", "")
 
             if event_type == "chunk":
@@ -650,6 +662,9 @@ async def _handle_agent_turn(request: ChatRequest, db: AsyncSession):
                 with _open_chat_debug_log() as _dbg_f6:
                     import json as _j2
                     _dbg_f6.write(_j2.dumps({"sessionId":"1d9790","location":"chat.py:_handle_agent_turn:chunk","message":"chunk_received","data":{"delta":event["delta"],"accumulated_len":len(phase1_text)}})+"\n")
+
+            elif event_type == "reasoning":
+                yield {"type": "reasoning", "delta": event["delta"]}
 
             elif event_type == "tool_calls":
                 phase1_tool_calls = event["calls"]
@@ -722,12 +737,15 @@ async def _handle_agent_turn(request: ChatRequest, db: AsyncSession):
             accumulated_text = assistant_text
         else:
             try:
-                async for event in _stream_llm_events(messages, tools):
+                async for event in _stream_llm_events(messages, tools, deep_thinking=deep_thinking):
                     event_type = event.get("type", "")
 
                     if event_type == "chunk":
                         accumulated_text += event["delta"]
                         yield {"type": "delta", "delta": event["delta"]}
+
+                    elif event_type == "reasoning":
+                        yield {"type": "reasoning", "delta": event["delta"]}
 
                     elif event_type == "tool_calls":
                         pending_tool_calls = event["calls"]
@@ -1081,7 +1099,9 @@ async def _build_agent_messages(user_message: str, context: str, valid_images: L
         "  · 用户指定平台时填对应 platform（xhs/douyin/bilibili/zhihu/kuaishou/weibo），未指定则默认 auto\n"
         "  · 费用规则（必须严格遵守）：全网搜索必须先生成费用确认卡片，用户确认后才执行；实际费用及免费额度适用范围以 TikHub 为准。B站(bilibili)和知乎(zhihu)也可能消耗接口额度；小红书(xhs)、抖音(douyin)、快手(kuaishou)、微博(weibo)是付费搜索。auto 只搜 B站+知乎，绝不能默认搜付费平台；只有用户明确说出平台名（如'小红书上''抖音上''快手上''微博上'）时才能传对应的付费 platform\n"
         "  · 调用后用一句话总结（如'我帮你找到了 N 条相关内容'），不要罗列所有标题，搜索结果会以卡片形式展示\n"
-        "  · 只要用户表达找视频/笔记/问答/教程/攻略/灵感的意图（如'搜一下'、'找找'、'小红书有没有'、'抖音上'、'B站上'、'知乎怎么说'、'推荐几个链接'），必须实际调用 search_social_content，不要仅凭自己的知识回答\n"
+        "  · 只要用户表达找视频/笔记/问答/教程/攻略/资源/课程/灵感的意图（如'搜一下'、'找找'、'帮我找一个××课程'、'小红书有没有'、'B站上'、'知乎怎么说'、'推荐几个链接'），必须实际调用 search_social_content，不要仅凭自己的知识回答\n"
+        "  · 【先搜后问铁律】即使用户描述笼统、不够具体，也必须立即调用工具出卡片，绝对禁止先反问用户、禁止只回文字；keyword 取核心名词（'帮我找一个操作系统的课程'→'操作系统'，'来点治愈的东西'→'治愈'），先给结果再邀请补充\n"
+        "  · 若最终 count=0，才如实说明没搜到，并邀请用户换个说法或补充信息\n"
         "  · 若工具返回 ok=false 且 error_code=NO_KEY，用温柔的一句话告诉用户：这个功能需要绑定自己的 TikHub 密钥（免费注册，注册即送少量体验额度），点击下方卡片按指引操作即可，不要假装自己已经搜过\n"
         "  · 若工具返回 ok=false 且 error_code=NO_BALANCE，用温柔的一句话告诉用户：TikHub 账户余额不足，点击下方卡片跳转到官方充值页充值后即可继续搜索（约 $0.01/次），不要假装自己已经搜过\n"
         "  · 若工具返回其他错误，简短说明暂时没搜到并建议稍后再试\n"
@@ -1094,12 +1114,12 @@ async def _build_agent_messages(user_message: str, context: str, valid_images: L
         "- 避免过于正式或说教\n"
         "- 回应要有具体性，不要泛泛而谈\n"
         "- 短确认（'好的'、'嗯'、'ok'）直接回应即可\n"
-        "- 遇到明确操作请求时，先引导确认需求，再用工具执行\n"
+        "- 遇到明确操作请求时，先引导确认需求，再用工具执行（例外：找内容/找歌这类搜索意图，必须先调用工具出卡片，再邀请用户细化）\n"
         "- 遇到用户情绪低落时，给予更多耐心和倾听\n\n"
         "【特别注意】\n"
         "- 用户倾诉情绪时，专注倾听和共情，不硬塞建议\n"
         "- 用户寻求实际帮助时，直接给出完整、具体、可操作的方案，不要藏着掖着等他追问\n"
-        "- 保持对话的自然流畅，不要机械地堆砌规则"
+        "- 保持对话的自然流畅，不要机械地堆砌规则\n"
     )
 
     user_prompt = (
@@ -1124,12 +1144,14 @@ async def _build_agent_messages(user_message: str, context: str, valid_images: L
 async def _stream_llm_events(
     messages: List[Dict[str, Any]],
     tools: Optional[List[Dict[str, Any]]] = None,
+    deep_thinking: bool = False,
 ) -> AsyncIterator[Dict[str, Any]]:
     """
     Stream LLM responses from Ark API using SSE (Server-Sent Events).
 
     Yields events:
         - "chunk": text delta from the model
+        - "reasoning": deep-thinking delta from the model（deep_thinking=True 时才有）
         - "tool_calls": parsed tool call(s) when function calls are detected
         - "done": when the stream completes
 
@@ -1153,10 +1175,12 @@ async def _stream_llm_events(
     payload: Dict[str, Any] = {
         "model": model,
         "messages": sanitized_messages,
-        # 2026-10-02: Ark 流式接口在本环境长时间无响应，改为非流式一次性获取
-        "stream": False,
+        # 2026-10-13: 流式已实测恢复可用（首字 ~2s）；改为真流式，首字尽快到达用户
+        "stream": True,
         "temperature": 0.4,
         "max_tokens": 1500,
+        # 深度思考开关：默认关闭保证速度；开启后 reasoning_content 会随流式返回
+        "thinking": {"type": "enabled"} if deep_thinking else {"type": "disabled"},
     }
     if tools:
         payload["tools"] = tools
@@ -1241,6 +1265,11 @@ async def _stream_llm_events(
                 if not choice:
                     continue
                 delta = choice[0].get("delta", {})
+
+                # 深度思考过程：单独作为 reasoning 事件推给前端
+                reasoning_delta = delta.get("reasoning_content")
+                if reasoning_delta:
+                    yield {"type": "reasoning", "delta": reasoning_delta}
 
                 content = delta.get("content")
                 if content:
@@ -1489,6 +1518,7 @@ async def _call_llm(
             ],
             temperature=0.7,
             max_tokens=1500,
+            extra_body={"thinking": {"type": "disabled"}},
         )
 
     try:

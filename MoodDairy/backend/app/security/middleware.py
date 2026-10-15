@@ -17,6 +17,9 @@ def _is_public_path(path: str) -> bool:
     # Local static media (OSS uses presigned URLs)
     if path.startswith("/media/") or path.startswith("/uploads/"):
         return True
+    # TTS 语音合成：MediaPlayer 无法传 header，放行
+    if path.startswith("/tts"):
+        return True
     return False
 
 

@@ -129,6 +129,31 @@ fun EditProfileScreen(
         }
     }
 
+    // 团子「修改资料」指令：读取目标字段和值，自动填进对应输入框（读完即清空）
+    LaunchedEffect(Unit) {
+        val field = com.example.mydiary.live2d.PetOverlayService.pendingProfileField
+        val value = com.example.mydiary.live2d.PetOverlayService.pendingProfileValue
+        if (!field.isNullOrBlank() && !value.isNullOrBlank()) {
+            when (field) {
+                "nickname" -> viewModel.onNicknameChange(value)
+                "phone" -> viewModel.onPhoneChange(value)
+                "email" -> viewModel.onEmailChange(value)
+                "birthday" -> viewModel.onBirthdayChange(value)
+                "gender" -> {
+                    // 「男/女/保密」→ 后端约定 1/2/0
+                    val genderCode = when (value) {
+                        "男" -> 1
+                        "女" -> 2
+                        else -> 0
+                    }
+                    viewModel.onGenderChange(genderCode)
+                }
+            }
+            com.example.mydiary.live2d.PetOverlayService.pendingProfileField = null
+            com.example.mydiary.live2d.PetOverlayService.pendingProfileValue = null
+        }
+    }
+
     LaunchedEffect(editState) {
         if (editState is EditState.Success) {
             viewModel.resetState()

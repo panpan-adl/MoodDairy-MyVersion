@@ -9,9 +9,12 @@ import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.clickable
@@ -26,6 +29,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -38,15 +42,18 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Chat
@@ -54,6 +61,8 @@ import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -93,16 +102,23 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.compose.AsyncImage
+import com.example.mydiary.data.local.StoredConversation
 import com.example.mydiary.data.models.ChatMessage
 import com.example.mydiary.ui.theme.DividerColor
 import com.example.mydiary.ui.theme.MintGreen
@@ -113,6 +129,9 @@ import com.example.mydiary.ui.theme.Surface as AppSurface
 import com.example.mydiary.ui.theme.TextPrimary
 import com.example.mydiary.ui.theme.TextSecondary
 import com.example.mydiary.ui.theme.TextTertiary
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -141,8 +160,32 @@ fun ChatScreen(
     val isVip by viewModel.isVip.collectAsState()
     val shouldAskEmotionConsent by viewModel.shouldAskEmotionConsent.collectAsState()
     val isEmotionCapturing by viewModel.isEmotionCapturing.collectAsState()
+    val deepThinkingEnabled by viewModel.deepThinkingEnabled.collectAsState()
+    val historyConversations by viewModel.historyConversations.collectAsState()
     val listState = rememberLazyListState()
     val latestInputText by rememberUpdatedState(inputText)
+
+    var showHistory by remember { mutableStateOf(false) }
+    var exportingConversation by remember { mutableStateOf<StoredConversation?>(null) }
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/plain"),
+    ) { uri ->
+        val conv = exportingConversation
+        if (uri != null && conv != null) {
+            val text = viewModel.buildConversationExportText(conv.conversationId)
+            if (text != null) {
+                try {
+                    context.contentResolver.openOutputStream(uri)?.use { out ->
+                        out.write(text.toByteArray(Charsets.UTF_8))
+                    }
+                    Toast.makeText(context, "对话已导出为文件", Toast.LENGTH_SHORT).show()
+                } catch (_: Exception) {
+                    Toast.makeText(context, "导出失败，请重试", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        exportingConversation = null
+    }
 
     var editingPlan by remember { mutableStateOf<PendingToolPlanUi?>(null) }
     var editingText by remember { mutableStateOf("") }
@@ -162,26 +205,33 @@ fun ChatScreen(
         hasCameraPermission = granted
     }
 
-    val speechRecognizer = remember(context) {
-        if (SpeechRecognizer.isRecognitionAvailable(context)) {
-            SpeechRecognizer.createSpeechRecognizer(context)
-        } else {
-            null
+    // 改用 Vosk 离线中文识别（模拟器无 Google 语音服务也能收音）。进入聊天页即在后台预热模型。
+    LaunchedEffect(Unit) {
+        ChatVosk.ensureReady(context.applicationContext) { ok ->
+            if (!ok) viewModel.showError("离线语音模型加载失败，可先打字聊")
         }
     }
 
-    val onRecognizedText by rememberUpdatedState(newValue = { recognizedText: String ->
-        val normalized = recognizedText.trim()
-        if (normalized.isNotBlank()) {
-            inputText = listOf(latestInputText.trim(), normalized)
-                .filter { it.isNotBlank() }
-                .joinToString(" ")
-        }
-    })
-
-    val onRecognitionError by rememberUpdatedState(newValue = { message: String ->
-        viewModel.showError(message)
-    })
+    /** 启动 Vosk 聆听，识别到的文字并入输入框 */
+    fun startVoskListening() {
+        isListening = true
+        ChatVosk.startListening(
+            appContext = context.applicationContext,
+            onResult = { text ->
+                isListening = false
+                val normalized = text.trim()
+                if (normalized.isNotBlank()) {
+                    inputText = listOf(latestInputText.trim(), normalized)
+                        .filter { it.isNotBlank() }
+                        .joinToString(" ")
+                }
+            },
+            onError = { msg ->
+                isListening = false
+                viewModel.showError(msg)
+            },
+        )
+    }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
@@ -208,59 +258,12 @@ fun ChatScreen(
             return@rememberLauncherForActivityResult
         }
 
-        val recognizer = speechRecognizer
-        if (recognizer == null) {
-            isListening = false
-            viewModel.showError("当前设备不支持语音输入")
-            return@rememberLauncherForActivityResult
-        }
-
-        isListening = true
-        startSpeechRecognition(recognizer)
+        startVoskListening()
     }
 
-    DisposableEffect(speechRecognizer) {
-        val recognizer = speechRecognizer
-        if (recognizer == null) {
-            onDispose { }
-        } else {
-            recognizer.setRecognitionListener(object : RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) {
-                    isListening = true
-                }
-
-                override fun onBeginningOfSpeech() = Unit
-                override fun onRmsChanged(rmsdB: Float) = Unit
-                override fun onBufferReceived(buffer: ByteArray?) = Unit
-
-                override fun onEndOfSpeech() {
-                    isListening = false
-                }
-
-                override fun onError(error: Int) {
-                    isListening = false
-                    if (error == SpeechRecognizer.ERROR_CLIENT) return
-                    onRecognitionError(mapSpeechRecognizerError(error))
-                }
-
-                override fun onResults(results: Bundle?) {
-                    isListening = false
-                    val recognizedText = results
-                        ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        ?.firstOrNull()
-                        .orEmpty()
-                    onRecognizedText(recognizedText)
-                }
-
-                override fun onPartialResults(partialResults: Bundle?) = Unit
-                override fun onEvent(eventType: Int, params: Bundle?) = Unit
-            })
-
-            onDispose {
-                recognizer.cancel()
-                recognizer.destroy()
-            }
-        }
+    // 离开聊天页时停止离线收音
+    DisposableEffect(Unit) {
+        onDispose { ChatVosk.stop() }
     }
 
     // 表情采集生命周期：前台且已授权+开关开启+有相机权限时启动，后台即停止
@@ -334,6 +337,11 @@ fun ChatScreen(
                 onNavigateToRecharge = onNavigateToRecharge,
                 isVip = isVip,
                 isEmotionCapturing = isEmotionCapturing,
+                onOpenHistory = {
+                    viewModel.loadHistoryConversations()
+                    showHistory = true
+                },
+                onNewConversation = { viewModel.startNewConversation() },
             )
             if (isEmotionCapturing) {
                 Text(
@@ -431,13 +439,8 @@ fun ChatScreen(
                 onAddImage = { imagePickerLauncher.launch("image/*") },
                 onPickVoiceFile = { audioFilePickerLauncher.launch("audio/*") },
                 onVoiceInput = {
-                    if (speechRecognizer == null) {
-                        viewModel.showError("当前设备不支持语音输入")
-                        return@ChatInputBar
-                    }
-
                     if (isListening) {
-                        speechRecognizer.stopListening()
+                        ChatVosk.stop()
                         isListening = false
                         return@ChatInputBar
                     }
@@ -445,11 +448,10 @@ fun ChatScreen(
                     val hasPermission = ContextCompat.checkSelfPermission(
                         context,
                         Manifest.permission.RECORD_AUDIO,
-                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                    ) == PackageManager.PERMISSION_GRANTED
 
                     if (hasPermission) {
-                        isListening = true
-                        startSpeechRecognition(speechRecognizer)
+                        startVoskListening()
                     } else {
                         audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                     }
@@ -471,8 +473,27 @@ fun ChatScreen(
                         selectedImageUris.clear()
                     }
                 },
+                deepThinkingEnabled = deepThinkingEnabled,
+                onToggleDeepThinking = { viewModel.toggleDeepThinking(it) },
             )
         }
+    }
+
+    // 历史对话弹窗：查看/继续/导出/删除过去的对话
+    if (showHistory) {
+        ConversationHistoryDialog(
+            conversations = historyConversations,
+            onDismiss = { showHistory = false },
+            onOpen = { conv ->
+                showHistory = false
+                viewModel.openConversation(conv.conversationId)
+            },
+            onExport = { conv ->
+                exportingConversation = conv
+                exportLauncher.launch("心语对话_${conv.title.take(12)}_${conv.updatedAt / 1000}.txt")
+            },
+            onDelete = { conv -> viewModel.deleteConversation(conv.conversationId) },
+        )
     }
 
     if (faceEmotionPrompt != null && !shouldAskEmotionConsent && editingPlan == null) {
@@ -642,6 +663,8 @@ private fun ChatTopBar(
     onNavigateToRecharge: () -> Unit = {},
     isVip: Boolean = false,
     isEmotionCapturing: Boolean = false,
+    onOpenHistory: () -> Unit = {},
+    onNewConversation: () -> Unit = {},
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -661,7 +684,7 @@ private fun ChatTopBar(
                     .clip(CircleShape)
                     .pointerInput(Unit) {
                         detectTapGestures(
-                            onDoubleTap = {
+                            onTap = {
                                 onNavigateToLive2D()
                             },
                         )
@@ -696,6 +719,26 @@ private fun ChatTopBar(
                     modifier = Modifier.size(16.dp),
                 )
                 Spacer(modifier = Modifier.width(8.dp))
+            }
+
+            // 历史对话入口
+            IconButton(onClick = onOpenHistory, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    imageVector = Icons.Default.History,
+                    contentDescription = "chat_history",
+                    tint = TextSecondary,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+
+            // 新建对话
+            IconButton(onClick = onNewConversation, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "new_conversation",
+                    tint = TextSecondary,
+                    modifier = Modifier.size(22.dp),
+                )
             }
 
             var menuExpanded by remember { mutableStateOf(false) }
@@ -826,8 +869,11 @@ private fun serviceActionIcon(action: String, id: String): ImageVector {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ChatMessageItem(message: ChatMessage, onNavigateToRecharge: () -> Unit = {}) {
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
     Column(modifier = Modifier.fillMaxWidth()) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -848,6 +894,16 @@ private fun ChatMessageItem(message: ChatMessage, onNavigateToRecharge: () -> Un
 
         Box(
             modifier = Modifier
+                .combinedClickable(
+                    onClick = {},
+                    // 2026-10-13 长按消息气泡复制内容
+                    onLongClick = {
+                        if (message.content.isNotBlank()) {
+                            clipboard.setText(AnnotatedString(message.content))
+                            Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                )
                 .widthIn(max = 280.dp)
                 .clip(
                     RoundedCornerShape(
@@ -953,6 +1009,8 @@ private fun ChatInputBar(
     onVoiceInput: () -> Unit,
     onRemoveImage: (Int) -> Unit,
     onSend: () -> Unit,
+    deepThinkingEnabled: Boolean = false,
+    onToggleDeepThinking: (Boolean) -> Unit = {},
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -995,6 +1053,48 @@ private fun ChatInputBar(
                         }
                     }
                 }
+            }
+
+            // 深度思考开关：开启后 AI 会先推理再回答，并展示思考过程（更慢但更聪明）
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Surface(
+                    modifier = Modifier.clip(RoundedCornerShape(16.dp)),
+                    color = if (deepThinkingEnabled) Primary.copy(alpha = 0.14f) else Color.Transparent,
+                    shape = RoundedCornerShape(16.dp),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (deepThinkingEnabled) Primary else DividerColor,
+                    ),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .clickable { onToggleDeepThinking(!deepThinkingEnabled) }
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Psychology,
+                            contentDescription = "deep_thinking",
+                            tint = if (deepThinkingEnabled) Primary else TextTertiary,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "深度思考",
+                            fontSize = 12.sp,
+                            color = if (deepThinkingEnabled) Primary else TextTertiary,
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = if (deepThinkingEnabled) "已开启：AI 先思考再回答，速度较慢" else "开启后回答更深入，速度较慢",
+                    fontSize = 10.sp,
+                    color = TextTertiary,
+                )
             }
 
             Row(
@@ -1135,5 +1235,91 @@ private fun mapSpeechRecognizerError(errorCode: Int): String {
         SpeechRecognizer.ERROR_SERVER -> "语音识别服务异常"
         SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "语音输入超时，请按住后直接说话"
         else -> "语音输入失败，请重试"
+    }
+}
+
+/** 历史对话弹窗：查看/继续/导出/删除过去的对话 */
+@Composable
+private fun ConversationHistoryDialog(
+    conversations: List<StoredConversation>,
+    onDismiss: () -> Unit,
+    onOpen: (StoredConversation) -> Unit,
+    onExport: (StoredConversation) -> Unit,
+    onDelete: (StoredConversation) -> Unit,
+) {
+    val fmt = remember { SimpleDateFormat("MM-dd HH:mm", Locale.CHINA) }
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .heightIn(max = 560.dp),
+            shape = RoundedCornerShape(20.dp),
+            color = AppSurface,
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "历史对话",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary,
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "关闭", tint = TextSecondary)
+                    }
+                }
+
+                if (conversations.isEmpty()) {
+                    Text(
+                        text = "还没有历史对话\n\n每轮对话结束后稍作休息（约 10 分钟），\n就会自动归档到这里，方便以后查找。",
+                        fontSize = 14.sp,
+                        color = TextSecondary,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 40.dp),
+                    )
+                } else {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(conversations, key = { it.conversationId }) { conv ->
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = SoftWhite,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                                    Text(
+                                        text = conv.title,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = TextPrimary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        text = fmt.format(Date(conv.updatedAt)),
+                                        fontSize = 12.sp,
+                                        color = TextTertiary,
+                                    )
+                                    Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                                        TextButton(onClick = { onOpen(conv) }) { Text("打开", fontSize = 13.sp) }
+                                        TextButton(onClick = { onExport(conv) }) { Text("导出", fontSize = 13.sp) }
+                                        TextButton(onClick = { onDelete(conv) }) {
+                                            Text("删除", fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }

@@ -103,8 +103,9 @@ async def _exec_create_diary(
     del conversation_id
 
     content = str(arguments.get("content", "")).strip()
+    # content 为空时给默认值，允许只传标题
     if not content:
-        raise ValueError("content is required")
+        content = "今天记录了一篇日记"
 
     tags = _normalize_tags(arguments.get("tags"))
     diary_date = _parse_date(arguments.get("diary_date"), date_type.today())
@@ -321,6 +322,29 @@ async def _exec_open_white_noise(
     )
 
 
+async def _exec_play_white_noise(
+    arguments: Dict[str, Any],
+    db: AsyncSession,
+    user_id: int,
+    conversation_id: str,
+) -> ToolExecutionResult:
+    del db, user_id, conversation_id
+    sound_name = arguments.get("sound_name", "")
+    volume = arguments.get("volume", 0.45)
+    action = {
+        "action": "play_white_noise",
+        "payload": {"source": "chat_agent", "sound_name": sound_name, "volume": str(volume)}
+    }
+    return ToolExecutionResult(
+        ok=True,
+        tool="play_white_noise",
+        mode="client_action",
+        summary=f"已准备播放白噪音：{sound_name}",
+        data=action,
+        client_action=action,
+    )
+
+
 async def _exec_open_test_hub(
     arguments: Dict[str, Any],
     db: AsyncSession,
@@ -387,6 +411,14 @@ async def _exec_open_diary_editor(
     if diary_date:
         payload["diary_date"] = _parse_date(str(diary_date), date_type.today()).isoformat()
 
+    # 支持预填标题/内容
+    diary_title = arguments.get("diary_title")
+    if diary_title:
+        payload["diary_title"] = str(diary_title)
+    diary_content = arguments.get("diary_content")
+    if diary_content:
+        payload["diary_content"] = str(diary_content)
+
     action = {"action": "open_diary_editor", "payload": payload}
     return ToolExecutionResult(
         ok=True,
@@ -420,6 +452,48 @@ async def _exec_open_todo_create(
         data=action,
         client_action=action,
     )
+
+
+# 搜索空结果降级时，去掉的常见修饰后缀（长的在前，逐轮剥离）
+_KEYWORD_TRIM_SUFFIXES = (
+    "的课程", "的视频", "的资源", "的内容", "的教程", "的攻略",
+    "课程", "教程", "视频", "资源", "攻略", "推荐", "分享", "相关", "入门", "的",
+)
+
+
+def _keyword_variants(keyword: str) -> List[str]:
+    """为空结果重试生成更宽泛的关键词变体（去修饰后缀 → 首个分词 → 前两字）。"""
+    kw = keyword.strip()
+    variants: List[str] = []
+
+    # 1) 逐轮剥掉常见修饰后缀："操作系统的课程" → "操作系统"
+    cur = kw
+    for _ in range(3):
+        for suf in _KEYWORD_TRIM_SUFFIXES:
+            if cur.endswith(suf) and len(cur) - len(suf) >= 2:
+                cur = cur[: -len(suf)]
+                break
+        else:
+            break
+    if cur != kw and len(cur.strip()) >= 2:
+        variants.append(cur.strip())
+
+    # 2) 带空格/分隔符的取第一个分词："操作系统 课程" → "操作系统"
+    tokens = [t for t in kw.replace("，", " ").replace("、", " ").split() if t]
+    if len(tokens) > 1:
+        variants.append(tokens[0])
+
+    # 3) 最后兜底：只取前两个字，保证尽量有结果（宁可宽泛也不空手而归）
+    if len(kw) >= 4:
+        variants.append(kw[:2])
+
+    seen = set()
+    out: List[str] = []
+    for v in variants:
+        if v not in seen and v != kw:
+            seen.add(v)
+            out.append(v)
+    return out
 
 
 async def _exec_search_social_content(
@@ -507,6 +581,22 @@ async def _exec_search_social_content(
 
     try:
         items = await client.search(keyword=keyword, platform=platform, limit=limit)
+
+        # 搜到 0 条时自动降级重试：换更短、更宽泛的关键词（如"操作系统的课程"→"操作系统"），
+        # 尽量让用户总能拿到内容卡片，而不是一句"没搜到"。
+        if not items:
+            tried = {keyword}
+            for kw in _keyword_variants(keyword):
+                if kw in tried:
+                    continue
+                tried.add(kw)
+                try:
+                    items = await client.search(keyword=kw, platform=platform, limit=limit)
+                except SocialSearchError:
+                    continue
+                if items:
+                    keyword = kw
+                    break
 
         return ToolExecutionResult(
             ok=True,
@@ -630,7 +720,6 @@ TOOL_REGISTRY: Dict[str, ToolDefinition] = {
                 },
                 "mood_score": {"type": "integer", "minimum": 1, "maximum": 100},
             },
-            "required": ["content"],
             "additionalProperties": False,
         },
         executor=_exec_create_diary,
@@ -723,6 +812,22 @@ TOOL_REGISTRY: Dict[str, ToolDefinition] = {
         parameters={"type": "object", "properties": {}, "additionalProperties": False},
         executor=_exec_open_white_noise,
     ),
+    "play_white_noise": ToolDefinition(
+        name="play_white_noise",
+        description="Ask the client app to play white noise with a specific sound.",
+        mode="client_action",
+        requires_confirmation=False,
+        display_name="播放白噪音",
+        parameters={
+            "type": "object",
+            "properties": {
+                "sound_name": {"type": "string", "description": "声音名称，如水滴、雨声、鸟鸣等"},
+                "volume": {"type": "number", "minimum": 0, "maximum": 1, "default": 0.45},
+            },
+            "additionalProperties": False,
+        },
+        executor=_exec_play_white_noise,
+    ),
     "open_test_hub": ToolDefinition(
         name="open_test_hub",
         description="Ask the client app to open test hub page.",
@@ -786,6 +891,12 @@ TOOL_REGISTRY: Dict[str, ToolDefinition] = {
             "例如：'搜一下小红书的冥想教程'、'B站有没有助眠白噪音'、'知乎上大家怎么缓解焦虑'、"
             "'找找快手的搞笑视频'、'看看微博上大家在聊什么'、'有没有什么美食攻略'。"
             "返回内容卡片列表，包含标题、封面图、作者、点赞数和跳转链接。"
+            "【铁律】只要用户表达了'找/搜/想要……资源、课程、教程、视频、攻略、链接'等查找意图，"
+            "无论描述多笼统（如'帮我找一个操作系统的课程'、'想看点治愈的东西'），"
+            "都必须立即调用本工具生成卡片，绝对禁止先反问用户、禁止只用文字回复而不调用工具；"
+            "先出卡片让用户看到内容，再在文字里邀请用户补充细节。"
+            "keyword 提取技巧：取核心名词，去掉'一个/课程/教程/视频'等修饰词，"
+            "如'帮我找一个操作系统的课程'→keyword='操作系统'，'来点助眠的视频'→keyword='助眠'。"
             "本轮调用此工具只生成后端费用确认卡片，不立即搜索或扣费。请直接调用工具生成卡片，禁止先用文字询问用户是否确认。"
             "注意：小红书/抖音/快手/微博是付费搜索（会消耗用户账户余额），"
             "只有用户明确点名该平台时才能传对应值；"

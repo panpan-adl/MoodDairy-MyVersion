@@ -20,6 +20,9 @@ data class ChatMessage(
     /** 锁定原因：NO_KEY=未绑定密钥，NO_BALANCE=余额不足 */
     @SerializedName("social_search_error_code")
     val socialSearchErrorCode: String? = null,
+    /** 深度思考过程文本（开启深度思考时才有） */
+    @SerializedName("reasoning")
+    val reasoning: String? = null,
 )
 
 data class ChatContext(
@@ -49,6 +52,9 @@ data class ChatRequest(
     val context: ChatContext = ChatContext(),
     @SerializedName("confirmation")
     val confirmation: ChatConfirmation? = null,
+    /** 深度思考开关 */
+    @SerializedName("deep_thinking")
+    val deepThinking: Boolean = false,
 )
 
 data class ChatResponse(

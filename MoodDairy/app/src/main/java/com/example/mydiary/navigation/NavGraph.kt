@@ -1,5 +1,6 @@
 package com.example.mydiary.navigation
 
+import android.content.Context
 import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -19,6 +20,7 @@ import com.example.mydiary.ui.auth.LoginScreen
 import com.example.mydiary.ui.auth.RegisterScreen
 import com.example.mydiary.ui.calendar.CalendarScreen
 import com.example.mydiary.ui.calendar.CalendarViewModel
+import com.example.mydiary.ui.chat.ChatClientAction
 import com.example.mydiary.ui.chat.ChatScreen
 import com.example.mydiary.ui.drawing.DrawingScreen
 import com.example.mydiary.ui.drawing.DrawingResultScreen
@@ -277,55 +279,7 @@ fun NavGraph(
                         navController.navigate(Routes.RECHARGE)
                     },
                     onClientAction = { action ->
-                        when (action.action) {
-                            "open_white_noise" -> navController.navigate(Routes.WHITE_NOISE)
-                            "play_white_noise" -> {
-                                val soundId = action.payload["sound_id"] ?: "rain"
-                                val volume = action.payload["volume"]?.toFloatOrNull()?.coerceIn(0f, 1f) ?: 0.45f
-                                val sound = WhiteNoiseSoundList.getAllSounds()
-                                    .firstOrNull { it.id == soundId }
-                                    ?: WhiteNoiseSoundList.getAllSounds().firstOrNull { it.id == "white_noise" }
-                                if (sound != null) {
-                                    WhiteNoiseManager.getInstance().setVolume(sound.id, volume)
-                                    WhiteNoiseManager.getInstance().playSound(context, sound)
-                                }
-                            }
-                            "open_test_hub" -> navController.navigate(Routes.TEST_HUB)
-                            "open_test" -> {
-                                val testId = action.payload["test_id"]
-                                if (testId.isNullOrBlank()) {
-                                    navController.navigate(Routes.TEST_HUB)
-                                } else {
-                                    navController.navigate(Routes.test(testId))
-                                }
-                            }
-                            "open_drawing" -> {
-                                val diaryId = action.payload["diary_id"]?.toLongOrNull()
-                                val prompt = action.payload["prompt"]
-                                navController.navigate(Routes.drawing(diaryId, prompt))
-                            }
-                            "open_diary_editor" -> {
-                                val diaryId = action.payload["diary_id"]?.toLongOrNull()
-                                val dateStr = action.payload["diary_date"]
-                                if (dateStr != null) {
-                                    val route = if (diaryId != null) {
-                                        "diary_editor/$dateStr?diary_id=$diaryId"
-                                    } else {
-                                        "diary_editor/$dateStr"
-                                    }
-                                    navController.navigate(route)
-                                } else {
-                                    navController.navigate(Routes.diaryEditor(LocalDate.now(), diaryId))
-                                }
-                            }
-                            "open_todo_create" -> {
-                                val dateStr = action.payload["todo_date"]
-                                val date = dateStr?.let {
-                                    runCatching { LocalDate.parse(it) }.getOrNull()
-                                } ?: LocalDate.now()
-                                navController.navigate(Routes.todoCreate(date))
-                            }
-                        }
+                        handleClientAction(navController, context, action)
                     }
                 )
             } else {
@@ -706,6 +660,149 @@ fun NavGraph(
             RechargeScreen(
                 onNavigateBack = { navController.popBackStack() },
             )
+        }
+    }
+}
+
+/**
+ * 把「操作 App」指令落到真实页面上。
+ * 聊天页（后端 client_action）与桌宠（语音指令）共用这一套路由，避免两处各写一份。
+ */
+internal fun handleClientAction(
+    navController: NavHostController,
+    context: Context,
+    action: ChatClientAction
+) {
+    when (action.action) {
+        "open_white_noise" -> navController.navigate(Routes.WHITE_NOISE)
+        "play_white_noise" -> {
+            val soundId = action.payload["sound_id"]
+            val soundName = action.payload["sound_name"]
+            val volume = action.payload["volume"]?.toFloatOrNull()?.coerceIn(0f, 1f) ?: 0.45f
+
+            Log.d(TAG, "play_white_noise: soundId=$soundId soundName=$soundName payload=${action.payload}")
+
+            // 按 id 或名称查找音频
+            val sound = when {
+                soundId != null -> WhiteNoiseSoundList.getAllSounds().firstOrNull { it.id == soundId }
+                soundName != null -> WhiteNoiseSoundList.getAllSounds().firstOrNull {
+                    it.name.contains(soundName) || soundName.contains(it.name)
+                }
+                else -> WhiteNoiseSoundList.getAllSounds().firstOrNull { it.id == "white_noise" }
+            }
+
+            if (sound != null) {
+                Log.d(TAG, "匹配到音频: ${sound.name} (id=${sound.id})")
+                WhiteNoiseManager.getInstance().setVolume(sound.id, volume)
+                WhiteNoiseManager.getInstance().playSound(context, sound)
+            } else {
+                Log.w(TAG, "未找到匹配音频: soundName=$soundName")
+            }
+            // 同时跳转到白噪音页面，方便用户看到播放状态
+            navController.navigate(Routes.WHITE_NOISE)
+        }
+        "open_test_hub" -> navController.navigate(Routes.TEST_HUB)
+        "open_test" -> {
+            val testId = action.payload["test_id"]
+            if (testId.isNullOrBlank()) {
+                navController.navigate(Routes.TEST_HUB)
+            } else {
+                navController.navigate(Routes.test(testId))
+            }
+        }
+        "open_drawing" -> {
+            val diaryId = action.payload["diary_id"]?.toLongOrNull()
+            val prompt = action.payload["prompt"]
+            navController.navigate(Routes.drawing(diaryId, prompt))
+        }
+        "open_diary_editor" -> {
+            val diaryId = action.payload["diary_id"]?.toLongOrNull()
+            val dateStr = action.payload["diary_date"]
+            // 支持预填标题/内容（「创建日记叫小团」→ 跳转编辑器并预填）
+            val title = action.payload["diary_title"]
+            val content = action.payload["diary_content"]
+            if (!title.isNullOrBlank() || !content.isNullOrBlank()) {
+                com.example.mydiary.live2d.PetOverlayService.pendingDiaryTitle = title
+                com.example.mydiary.live2d.PetOverlayService.pendingDiaryContent = content
+                Log.d(TAG, "预填日记: title=$title content=${content?.take(20)}")
+            }
+            if (dateStr != null) {
+                val route = if (diaryId != null) {
+                    "diary_editor/$dateStr?diary_id=$diaryId"
+                } else {
+                    "diary_editor/$dateStr"
+                }
+                navController.navigate(route)
+            } else {
+                navController.navigate(Routes.diaryEditor(LocalDate.now(), diaryId))
+            }
+        }
+        "open_todo_create" -> {
+            val dateStr = action.payload["todo_date"]
+            val date = dateStr?.let {
+                runCatching { LocalDate.parse(it) }.getOrNull()
+            } ?: LocalDate.now()
+            navController.navigate(Routes.todoCreate(date))
+        }
+        "stop_white_noise" -> {
+            WhiteNoiseManager.getInstance().stopAllSounds()
+            Log.d(TAG, "停止所有白噪音")
+        }
+        "open_calendar" -> {
+            // 回到日历：清空回退栈到 CALENDAR
+            navController.popBackStack(Routes.CALENDAR, inclusive = false)
+        }
+        "open_chat" -> {
+            navController.navigate(Routes.CHAT)
+        }
+        "open_pomodoro" -> {
+            navController.navigate(Routes.POMODORO_TIMER)
+        }
+        "open_highlights" -> {
+            navController.navigate(Routes.HIGHLIGHTS)
+        }
+        "open_little_joys" -> {
+            navController.navigate(Routes.LITTLE_JOYS)
+        }
+        "open_growth_portrait" -> {
+            navController.navigate(Routes.GROWTH_PORTRAIT)
+        }
+        "open_achievement" -> {
+            navController.navigate(Routes.ACHIEVEMENT)
+        }
+        "open_shop" -> {
+            navController.navigate(Routes.SHOP)
+        }
+        "open_live2d" -> {
+            navController.navigate(Routes.LIVE2D)
+        }
+        "open_profile" -> {
+            navController.navigate(Routes.PROFILE)
+        }
+        "open_diary_search" -> {
+            navController.navigate(Routes.DIARY_SEARCH)
+        }
+        "open_explore" -> {
+            navController.navigate(Routes.EXPLORE)
+        }
+        "create_diary" -> {
+            // 创建日记带标题/内容：把初始数据存到 PetOverlayService 全局变量，DiaryEditorScreen 读取
+            val dateStr = action.payload["diary_date"] ?: LocalDate.now().toString()
+            val title = action.payload["diary_title"]
+            val content = action.payload["diary_content"]
+            com.example.mydiary.live2d.PetOverlayService.pendingDiaryTitle = title
+            com.example.mydiary.live2d.PetOverlayService.pendingDiaryContent = content
+            Log.d(TAG, "create_diary: title=$title content=${content?.take(20)}")
+            navController.navigate("diary_editor/$dateStr")
+        }
+        "update_profile" -> {
+            // 修改资料：把字段和值存到 PetOverlayService 全局变量，EditProfileScreen 读取
+            val field = action.payload["field"]
+            val value = action.payload["value"]
+            com.example.mydiary.live2d.PetOverlayService.pendingProfileField = field
+            com.example.mydiary.live2d.PetOverlayService.pendingProfileValue = value
+            Log.d(TAG, "update_profile: field=$field value=$value")
+            navController.navigate(Routes.EDIT_PROFILE)
         }
     }
 }

@@ -16,7 +16,7 @@ from app.asgi_static import RangeStaticServer
 from app.database import check_db_connection, close_db, init_db
 from app.drawing import drawing_router
 from app.drawing.generator_config import GeneratorConfig
-from app.routers import chat, diaries, face_emotion, insights, media, music, todos, users, voice
+from app.routers import chat, diaries, face_emotion, insights, media, music, todos, users, voice, tts
 from app.routers import diary_search, diary_summaries
 from app.routers import social_search_router
 from app.security.middleware import JWTAuthMiddleware
@@ -83,6 +83,14 @@ async def lifespan(app: FastAPI):
         print("user_tikhub_keys table is ready.")
     except Exception as exc:
         print(f"Failed to ensure user_tikhub_keys table: {exc}")
+
+    # 搜索确认计划表：迁移状态约束（补 'executing'）
+    try:
+        from app.agent.plan_store import ensure_status_constraint
+
+        await ensure_status_constraint()
+    except Exception as exc:
+        print(f"Failed to ensure chat_agent_plans constraint: {exc}")
 
     # 初始化绘图配置（从环境变量读取）
     GeneratorConfig.init_from_env()
@@ -177,6 +185,7 @@ app.include_router(diaries.router)
 app.include_router(insights.router)
 app.include_router(media.router)
 app.include_router(voice.router)
+app.include_router(tts.router)
 app.include_router(users.router)
 app.include_router(chat.router)
 app.include_router(todos.router)

@@ -73,6 +73,9 @@ class ChatViewModel @Inject constructor(
 
     private val tag = "ChatViewModel"
 
+    /** 超过该时长无新消息，当前对话自动归档并开启新对话（类似豆包的会话切分） */
+    private val CONVERSATION_IDLE_ROLL_MS = 10 * 60 * 1000L
+
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
 
@@ -97,6 +100,93 @@ class ChatViewModel @Inject constructor(
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
+    // ============================================================================
+    // 深度思考开关 + 历史对话
+    // ============================================================================
+
+    private val settingsPrefs =
+        appContext.getSharedPreferences("chat_settings", Context.MODE_PRIVATE)
+
+    private val _deepThinkingEnabled =
+        MutableStateFlow(settingsPrefs.getBoolean(KEY_DEEP_THINKING, false))
+    val deepThinkingEnabled: StateFlow<Boolean> = _deepThinkingEnabled.asStateFlow()
+
+    private val _historyConversations =
+        MutableStateFlow<List<com.example.mydiary.data.local.StoredConversation>>(emptyList())
+    val historyConversations: StateFlow<List<com.example.mydiary.data.local.StoredConversation>> =
+        _historyConversations.asStateFlow()
+
+    fun toggleDeepThinking(enabled: Boolean) {
+        _deepThinkingEnabled.value = enabled
+        settingsPrefs.edit().putBoolean(KEY_DEEP_THINKING, enabled).apply()
+    }
+
+    fun loadHistoryConversations() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _historyConversations.value = chatHistoryStorage.listConversations(userId)
+        }
+    }
+
+    fun startNewConversation() {
+        conversationId = "conv_${userId}_${UUID.randomUUID().toString().take(8)}"
+        _messages.value = listOf(
+            ChatMessage(
+                content = "你好，我是你的日记助手。你可以发文字、图片或语音给我。",
+                isFromUser = false,
+            ),
+        )
+        if (userId != 0L) {
+            chatHistoryStorage.saveMessages(userId, _messages.value)
+        }
+    }
+
+    /** 打开一条历史对话（把消息列表切换为该对话内容） */
+    fun openConversation(conversationId: String) {
+        val stored = chatHistoryStorage.loadConversation(userId, conversationId) ?: return
+        this.conversationId = stored.conversationId
+        _messages.value = stored.messages
+        chatHistoryStorage.saveMessages(userId, stored.messages)
+    }
+
+    fun deleteConversation(conversationId: String) {
+        chatHistoryStorage.deleteConversation(userId, conversationId)
+        _historyConversations.value =
+            _historyConversations.value.filterNot { it.conversationId == conversationId }
+    }
+
+    /** 生成整段对话的纯文本（用于导出 .txt 文件） */
+    fun buildConversationExportText(conversationId: String): String? {
+        val stored = chatHistoryStorage.loadConversation(userId, conversationId) ?: return null
+        val fmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.CHINA)
+        val sb = StringBuilder()
+        sb.appendLine("【心语对话记录】")
+        sb.appendLine("标题：${stored.title}")
+        sb.appendLine("开始时间：${fmt.format(java.util.Date(stored.createdAt))}")
+        sb.appendLine("共 ${stored.messages.size} 条消息")
+        sb.appendLine("--------------------------------")
+        stored.messages.forEach { m ->
+            val who = if (m.isFromUser) "我" else "小嘉然"
+            sb.appendLine("[$who ${fmt.format(java.util.Date(m.timestamp))}]")
+            m.reasoning?.takeIf { it.isNotBlank() }?.let { sb.appendLine("（思考过程：${it.trim()}）") }
+            if (m.content.isNotBlank()) sb.appendLine(m.content.trim())
+            m.socialSearchResults?.takeIf { it.isNotEmpty() }?.let { items ->
+                sb.appendLine("［附带 ${items.size} 条搜索结果卡片］")
+            }
+            sb.appendLine()
+        }
+        return sb.toString()
+    }
+
+    /** 一轮回复结束后把当前对话落盘为独立文件 */
+    private fun persistConversation() {
+        if (userId == 0L) return
+        val snapshot = _messages.value
+        if (snapshot.none { it.isFromUser }) return
+        viewModelScope.launch(Dispatchers.IO) {
+            chatHistoryStorage.saveConversation(userId, conversationId, snapshot)
+        }
+    }
 
     // ============================================================================
     // 摄像头表情识别 (Face Emotion Capture)
@@ -128,7 +218,8 @@ class ChatViewModel @Inject constructor(
 
     fun initializeChat(userId: Long) {
         this.userId = userId
-        if (conversationId.isBlank()) {
+        // 2026-10-13 修复跨账号串历史：会话 ID 必须属于当前用户，切换账号时丢弃旧账号的会话
+        if (conversationId.isBlank() || !conversationId.startsWith("conv_${userId}_")) {
             conversationId = "conv_${userId}_${UUID.randomUUID().toString().take(8)}"
         }
 
@@ -136,6 +227,7 @@ class ChatViewModel @Inject constructor(
             val savedMessages = chatHistoryStorage.loadMessages(userId)
             if (savedMessages.isNotEmpty()) {
                 _messages.value = savedMessages
+                rollConversationIfStale()
             } else {
                 addMessage(
                     ChatMessage(
@@ -146,6 +238,20 @@ class ChatViewModel @Inject constructor(
             }
             fetchRecentSummaries()
         }
+    }
+
+    /**
+     * 闲置超过 10 分钟后，把上一轮对话自动归档（历史页按首条用户消息命名），并开启新对话。
+     * 类似豆包的会话切分逻辑；正在流式输出时不切分。
+     */
+    private fun rollConversationIfStale() {
+        val msgs = _messages.value
+        if (msgs.none { it.isFromUser }) return
+        if (msgs.any { it.isStreaming }) return
+        val lastTs = msgs.lastOrNull()?.timestamp ?: return
+        if (System.currentTimeMillis() - lastTs < CONVERSATION_IDLE_ROLL_MS) return
+        persistConversation()
+        startNewConversation()
     }
 
     private fun fetchRecentSummaries() {
@@ -176,6 +282,9 @@ class ChatViewModel @Inject constructor(
         if (content.isBlank() && imageUris.isEmpty()) {
             return
         }
+
+        // App 内闲置超过 10 分钟再发消息：先把上一轮归档，再开新对话
+        rollConversationIfStale()
 
         val trimmedContent = content.trim()
         val requestMessage = if (trimmedContent.isNotBlank()) trimmedContent else "Please help me look at this image."
@@ -226,6 +335,7 @@ class ChatViewModel @Inject constructor(
                     imageDataUrls = uploadedImageUrls,
                 ),
                 confirmation = null,
+                deepThinking = _deepThinkingEnabled.value,
             )
 
             try {
@@ -296,6 +406,7 @@ class ChatViewModel @Inject constructor(
                 approved = approved,
                 editedArguments = editedArguments,
             ),
+            deepThinking = _deepThinkingEnabled.value,
         )
 
         viewModelScope.launch {
@@ -480,6 +591,13 @@ class ChatViewModel @Inject constructor(
                     appendAssistantDelta(assistantTimestamp, delta)
                 }
             }
+            "reasoning" -> {
+                // 深度思考过程：累积到气泡的 reasoning 字段，UI 可展开查看
+                val delta = event.delta.orEmpty()
+                if (delta.isNotEmpty()) {
+                    appendAssistantReasoning(assistantTimestamp, delta)
+                }
+            }
             "tool_plan" -> {
                 val planId = event.planId.orEmpty()
                 if (planId.isNotBlank()) {
@@ -545,9 +663,11 @@ class ChatViewModel @Inject constructor(
                     _errorMessage.value = event.errorMessage ?: event.errorCode ?: "请求失败"
                 }
 
-                val finalReply = event.reply
+                val finalReply = (event.reply
                     ?: _messages.value.firstOrNull { it.timestamp == assistantTimestamp }?.content
-                    ?: ""
+                    ?: "")
+                    // 后端意图快捷通道执行成功只会回「**完成**」，显示成人话
+                    .replace("**完成**", "好啦，已经帮你打开对应页面啦～")
 
                 val fallback = if (finalState == "error") {
                     "处理失败，请重试。"
@@ -581,6 +701,18 @@ class ChatViewModel @Inject constructor(
             _messages.value.map { message ->
                 if (message.timestamp == timestamp) {
                     message.copy(content = message.content + delta, isStreaming = true)
+                } else {
+                    message
+                }
+            },
+        )
+    }
+
+    private fun appendAssistantReasoning(timestamp: Long, delta: String) {
+        updateMessages(
+            _messages.value.map { message ->
+                if (message.timestamp == timestamp) {
+                    message.copy(reasoning = (message.reasoning ?: "") + delta, isStreaming = true)
                 } else {
                     message
                 }
@@ -832,6 +964,7 @@ class ChatViewModel @Inject constructor(
 
     companion object {
         private const val MAX_CHAT_IMAGES = 3
+        private const val KEY_DEEP_THINKING = "deep_thinking_enabled"
     }
 }
 

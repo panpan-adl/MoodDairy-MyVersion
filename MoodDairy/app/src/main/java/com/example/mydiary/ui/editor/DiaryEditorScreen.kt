@@ -96,6 +96,14 @@ fun DiaryEditorScreen(
     LaunchedEffect(date, diaryId) {
         logEditorEvent("LaunchedEffect triggered", mapOf("date" to date.toString(), "diaryId" to (diaryId?.toString() ?: "null")))
         viewModel.initialize(date, diaryId)
+        // 团子「创建日记」指令：读取预填标题（读完即清空，避免下次进编辑页又填上）
+        // 内容字段是富文本块，结构复杂，先只预填标题；内容由用户进编辑器后继续口述
+        val prefillTitle = com.example.mydiary.live2d.PetOverlayService.pendingDiaryTitle
+        if (!prefillTitle.isNullOrBlank()) {
+            viewModel.updateTitle(prefillTitle)
+            com.example.mydiary.live2d.PetOverlayService.pendingDiaryTitle = null
+        }
+        com.example.mydiary.live2d.PetOverlayService.pendingDiaryContent = null
     }
 
     LaunchedEffect(uiState.diaryId) {

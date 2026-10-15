@@ -43,12 +43,10 @@ class FAISSStore:
 
     def _create_index(self) -> Any:
         _require_faiss()
-        m = 32
-        ef_construction = 200
-        index = faiss.IndexHNSWFlat(self.dimension, m)
-        index.hnsw.efConstruction = ef_construction
-        index.hnsw.efSearch = 64
-        logger.info("Created HNSW FAISS index: M=%s ef_construction=%s", m, ef_construction)
+        # IndexFlatL2 为精确检索：本机 faiss 的 HNSW 实现存在原生段错误，
+        # 且个人日记应用的向量规模（百级）下 Flat 检索性能足够且结果更准
+        index = faiss.IndexFlatL2(self.dimension)
+        logger.info("Created FlatL2 FAISS index (exact search), dimension=%s", self.dimension)
         return index
 
     def add_documents(self, embeddings: List[List[float]], documents: List[Dict[str, Any]]) -> None:
