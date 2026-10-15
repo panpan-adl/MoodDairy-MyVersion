@@ -416,7 +416,6 @@ class PetOverlayService : Service() {
 
         // 小猫 Live2D 视图（复用现有渲染栈，按最长边贴合居中）
         val cat = Live2DView(this).apply {
-            setModelPlacement(0f, 0f, 0.9f, fit = true)
             layoutParams = LinearLayout.LayoutParams(catSize, catSize)
         }
         catView = cat
