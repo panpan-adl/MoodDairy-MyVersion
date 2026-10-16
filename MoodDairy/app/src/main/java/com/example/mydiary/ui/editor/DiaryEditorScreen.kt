@@ -433,12 +433,6 @@ fun DiaryEditorScreen(
                     .fillMaxWidth()
                     .background(Primary)
             ) {
-                uiState.diaryId?.let { memoryDiaryId ->
-                    Row {
-                        TextButton(onClick = { context.startActivity(android.content.Intent(context, com.example.mydiary.memory.MemoryActivity::class.java).putExtra("page", "edit").putExtra("diary_id", memoryDiaryId)) }) { Text("写给未来的自己", color = TextPrimary) }
-                        TextButton(onClick = { context.startActivity(android.content.Intent(context, com.example.mydiary.memory.MemoryActivity::class.java).putExtra("page", "room").putExtra("diary_id", memoryDiaryId)) }) { Text("放进我的空间", color = TextPrimary) }
-                    }
-                }
                 // 状态栏占位（绿色背景）
                 Spacer(modifier = Modifier.statusBarsPadding())
                 
@@ -590,68 +584,52 @@ fun DiaryEditorScreen(
                         modifier = Modifier.padding(horizontal = 16.dp),
                         color = MaterialTheme.colorScheme.outline
                     )
-                    uiState.multimodalInsight?.let { insight ->
-                        MultimodalInsightCard(
-                            fusion = insight.fusionAnalysis,
-                            textAnalysis = insight.textAnalysis,
-                            voiceAnalysis = insight.voiceAnalysis,
-                            imageAnalysis = insight.imageAnalysis,
-                            videoAnalysis = insight.videoAnalysis,
-                            drawingAnalysis = insight.drawingAnalysis,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
-                    }
-                    
-                    // 媒体列表显示区域
-                    if (uiState.mediaItems.isNotEmpty()) {
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f)
-                                .padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            items(uiState.mediaItems.sortedBy { it.order }) { mediaItem ->
-                                when (mediaItem) {
-                                    is MediaItem.Text -> TextMediaItem(
-                                        mediaItem = mediaItem,
-                                        onContentChange = { newContent ->
-                                            viewModel.updateTextContent(mediaItem.id, newContent)
-                                        },
-                                        onDelete = { viewModel.removeMediaItem(mediaItem.id) }
-                                    )
-                                    is MediaItem.Image -> ImageMediaItem(
-                                        mediaItem = mediaItem,
-                                        onDelete = { viewModel.removeMediaItem(mediaItem.id) }
-                                    )
-                                    is MediaItem.Audio -> AudioMediaItem(
-                                        mediaItem = mediaItem,
-                                        onDelete = { viewModel.removeMediaItem(mediaItem.id) }
-                                    )
-                                    is MediaItem.Video -> VideoMediaItem(
-                                        mediaItem = mediaItem,
-                                        onDelete = { viewModel.removeMediaItem(mediaItem.id) }
-                                    )
-                                }
+                    // Reflection shares the document scroll area instead of constraining media.
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().weight(1f).padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        item(key = "diary_review") {
+                            DiaryReviewCard(
+                                review = uiState.diaryReview,
+                                dirty = uiState.hasUnsavedChanges || uiState.diaryId == null,
+                                generating = uiState.reviewGenerating,
+                                error = uiState.reviewError,
+                                onGenerate = viewModel::generateDiaryReview
+                            )
+                        }
+                        items(uiState.mediaItems.sortedBy { it.order }, key = { it.id }) { mediaItem ->
+                            when (mediaItem) {
+                                is MediaItem.Text -> TextMediaItem(
+                                    mediaItem = mediaItem,
+                                    onContentChange = { newContent ->
+                                        viewModel.updateTextContent(mediaItem.id, newContent)
+                                    },
+                                    onDelete = { viewModel.removeMediaItem(mediaItem.id) }
+                                )
+                                is MediaItem.Image -> ImageMediaItem(
+                                    mediaItem = mediaItem,
+                                    onDelete = { viewModel.removeMediaItem(mediaItem.id) }
+                                )
+                                is MediaItem.Audio -> AudioMediaItem(
+                                    mediaItem = mediaItem,
+                                    onDelete = { viewModel.removeMediaItem(mediaItem.id) }
+                                )
+                                is MediaItem.Video -> VideoMediaItem(
+                                    mediaItem = mediaItem,
+                                    onDelete = { viewModel.removeMediaItem(mediaItem.id) }
+                                )
                             }
                         }
-                    } else {
-                        // 空状态提示
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "点击右下角按钮添加内容",
+                        if (uiState.mediaItems.isEmpty()) {
+                            item { Text("点击右下角按钮添加内容",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 16.sp
-                            )
+                                modifier = Modifier.padding(vertical = 24.dp)) }
                         }
                     }
                 }
                 
+
                 // 媒体添加菜单
                 if (showMediaMenu) {
                     MediaAddMenu(
@@ -2745,75 +2723,6 @@ private fun VoiceEmotionCard(emotion: VoiceEmotionResult) {
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun MultimodalInsightCard(
-    fusion: FusionInsightResponse,
-    textAnalysis: ModalityInsightResponse,
-    voiceAnalysis: ModalityInsightResponse,
-    imageAnalysis: ModalityInsightResponse,
-    videoAnalysis: ModalityInsightResponse,
-    drawingAnalysis: ModalityInsightResponse,
-    modifier: Modifier = Modifier,
-) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text("多模态分析", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-            Text(fusion.explanation, fontSize = 14.sp, color = TextSecondary, lineHeight = 20.sp)
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                InsightMetricChip("情绪 ${fusion.overallEmotion}", getEmotionColorForResult(fusion.overallEmotion))
-                InsightMetricChip("压力 ${fusion.stressScore}", Color(0xFFFFB74D))
-                InsightMetricChip("积极 ${fusion.positiveEventScore}", Color(0xFF66BB6A))
-            }
-
-            InsightModalityRow("文字", textAnalysis)
-            InsightModalityRow("语音", voiceAnalysis)
-            InsightModalityRow("图片", imageAnalysis)
-            InsightModalityRow("视频", videoAnalysis)
-            InsightModalityRow("绘画", drawingAnalysis)
-
-            if (fusion.growthKeywords.isNotEmpty()) {
-                Text("成长关键词：${fusion.growthKeywords.joinToString("、")}", color = TextPrimary, fontSize = 13.sp)
-            }
-        }
-    }
-}
-
-@Composable
-private fun InsightModalityRow(title: String, analysis: ModalityInsightResponse) {
-    if (!analysis.available) return
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            text = "$title · ${analysis.emotion ?: "中性"}  ${analysis.emotionScore ?: 0}/100",
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-            color = TextPrimary
-        )
-        analysis.summary?.let {
-            Text(text = it, fontSize = 12.sp, color = TextSecondary, lineHeight = 18.sp)
-        }
-    }
-}
-
-@Composable
-private fun InsightMetricChip(text: String, color: Color) {
-    Box(
-        modifier = Modifier
-            .background(color.copy(alpha = 0.14f), RoundedCornerShape(999.dp))
-            .padding(horizontal = 10.dp, vertical = 6.dp)
-    ) {
-        Text(text = text, color = color, fontSize = 12.sp, fontWeight = FontWeight.Bold)
     }
 }
 

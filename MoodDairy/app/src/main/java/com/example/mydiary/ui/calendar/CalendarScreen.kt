@@ -57,6 +57,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -198,8 +199,7 @@ fun CalendarScreen(
                         selectedDate = uiState.selectedDate,
                         datesWithDiary = uiState.datesWithDiary,
                         onDateClick = { date ->
-                            viewModel.selectDate(date)
-                            onDateSelected(date)
+                            if (viewModel.selectDate(date)) onDateSelected(date)
                         },
                         onSwipeLeft = { viewModel.nextMonth() },
                         onSwipeRight = { viewModel.previousMonth() }
@@ -358,6 +358,7 @@ private fun CalendarDateCell(
     Box(
         modifier = Modifier
             .aspectRatio(1f)
+            .testTag("calendar-date-${dateInfo.date}")
             .clip(RoundedCornerShape(8.dp))
             .background(
                 when {
@@ -366,7 +367,7 @@ private fun CalendarDateCell(
                     else -> Color.Transparent
                 }
             )
-            .clickable(enabled = dateInfo.isCurrentMonth) { onClick() }
+            .clickable(enabled = dateInfo.isCurrentMonth || dateInfo.date.isAfter(today)) { onClick() }
             .padding(4.dp),
         contentAlignment = Alignment.Center
     ) {

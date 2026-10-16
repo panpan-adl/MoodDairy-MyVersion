@@ -58,11 +58,13 @@ class SherpaAsrEngine(private val context: Context) {
             override fun onEndOfSpeech() = Unit
             override fun onError(error: Int) {
                 listening = false
+                recognizer?.destroy()
                 recognizer = null
                 callback?.onError(mapError(error))
             }
             override fun onResults(results: Bundle?) {
                 listening = false
+                recognizer?.destroy()
                 recognizer = null
                 val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 callback?.onSegment(matches?.firstOrNull().orEmpty())

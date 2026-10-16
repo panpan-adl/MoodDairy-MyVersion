@@ -115,3 +115,21 @@ data class DiaryMultimodalInsightResponse(
     @SerializedName("updated_at")
     val updatedAt: String,
 )
+
+
+data class DiaryReviewResponse(
+    @SerializedName("diary_id") val diaryId: Long,
+    @SerializedName("content_version") val contentVersion: String,
+    val body: String? = null,
+    val question: String? = null,
+    @SerializedName("generated_at") val generatedAt: String? = null,
+    val stale: Boolean = false,
+    @SerializedName("has_text") val hasText: Boolean = true,
+    @SerializedName("attachment_note") val attachmentNote: String? = null,
+    val clues: List<String> = emptyList(),
+)
+
+data class DiaryReviewRequest(
+    @SerializedName("content_version") val contentVersion: String? = null,
+    val refresh: Boolean = false,
+)

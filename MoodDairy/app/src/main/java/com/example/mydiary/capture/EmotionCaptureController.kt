@@ -103,6 +103,7 @@ class EmotionCaptureController @Inject constructor(
         emotionAnalyzer = analyzer
         val sessionSmoother = EmotionProbabilitySmoother()
         val durationTracker = NegativeEmotionDurationTracker()
+        val positiveRefiner = PositiveEmotionRefiner()
         smoother = sessionSmoother
 
         val detector = FaceDetection.getClient(
@@ -137,7 +138,7 @@ class EmotionCaptureController @Inject constructor(
                 imageAnalysis = analysis
                 analysis.setAnalyzer(executor) { imageProxy ->
                     if (emotionAnalyzer === analyzer && running.get()) {
-                        processFrame(imageProxy, analyzer, detector, sessionSmoother, durationTracker, onResult, onObservation)
+                        processFrame(imageProxy, analyzer, detector, sessionSmoother, durationTracker, positiveRefiner, onResult, onObservation)
                     } else {
                         imageProxy.close()
                     }
@@ -212,6 +213,7 @@ class EmotionCaptureController @Inject constructor(
         detector: FaceDetector,
         sessionSmoother: EmotionProbabilitySmoother,
         durationTracker: NegativeEmotionDurationTracker,
+        positiveRefiner: PositiveEmotionRefiner,
         onResult: (String, Float, Long, String?) -> Unit,
         onObservation: (String?, Float) -> Unit,
     ) {
@@ -243,7 +245,7 @@ class EmotionCaptureController @Inject constructor(
             }
             if (face == null) {
                 durationTracker.reset()
-                sessionSmoother.reset()
+                sessionSmoother.reset(); positiveRefiner.reset()
                 if (emotionAnalyzer === analyzer && running.get()) onObservation(null, 0f)
                 Log.d(tag, "未检测到人脸，丢帧")
                 return
@@ -264,7 +266,7 @@ class EmotionCaptureController @Inject constructor(
             if (qualityIssue != null) {
                 upright.recycle()
                 durationTracker.reset()
-                sessionSmoother.reset()
+                sessionSmoother.reset(); positiveRefiner.reset()
                 if (emotionAnalyzer === analyzer && running.get()) onObservation(qualityIssue, 0f)
                 Log.d(tag, "quality=$qualityIssue box=${face.boundingBox} yaw=${face.headEulerAngleY} pitch=${face.headEulerAngleX}")
                 return
@@ -274,7 +276,7 @@ class EmotionCaptureController @Inject constructor(
             if (bounds == null) {
                 upright.recycle()
                 durationTracker.reset()
-                sessionSmoother.reset()
+                sessionSmoother.reset(); positiveRefiner.reset()
                 if (emotionAnalyzer === analyzer && running.get()) onObservation("incomplete_face", 0f)
                 Log.d(tag, "crop rejected: box=$box image=${imageProxy.width}x${imageProxy.height} rotation=${imageProxy.imageInfo.rotationDegrees}")
                 return
@@ -292,8 +294,9 @@ class EmotionCaptureController @Inject constructor(
             } finally { upright.recycle() }
             val scores = rawScores?.let { sessionSmoother.add(it, SystemClock.elapsedRealtime()) }
             val result = scores?.let {
-                PositiveEmotionRefiner.refine(
-                    scores, face.smilingProbability, face.headEulerAngleY, face.headEulerAngleX
+                positiveRefiner.refine(
+                    scores, face.smilingProbability, face.headEulerAngleY, face.headEulerAngleX,
+                    SystemClock.elapsedRealtime()
                 )
             }
             if (result != null) {
@@ -329,7 +332,7 @@ class EmotionCaptureController @Inject constructor(
             } else {
                 durationTracker.reset()
                 if (rawScores == null) {
-                    sessionSmoother.reset()
+                    sessionSmoother.reset(); positiveRefiner.reset()
                     if (emotionAnalyzer === analyzer && running.get()) onObservation("inference_failed", 0f)
                 } else {
                     val initial = com.example.mydiary.ml.EmotionPrediction.fromProbabilities(rawScores)
@@ -338,7 +341,7 @@ class EmotionCaptureController @Inject constructor(
             }
         } catch (e: Exception) {
             durationTracker.reset()
-            sessionSmoother.reset()
+            sessionSmoother.reset(); positiveRefiner.reset()
             if (emotionAnalyzer === analyzer && running.get()) onObservation("frame_failed", 0f)
             Log.w(tag, "帧处理失败，丢帧: ${e.message}")
         } finally {

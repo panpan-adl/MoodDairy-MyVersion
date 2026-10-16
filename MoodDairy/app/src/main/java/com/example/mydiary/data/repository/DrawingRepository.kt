@@ -175,10 +175,19 @@ class DrawingRepository @Inject constructor(
         }
     }
 
+    suspend fun retryVideoAudio(taskId: String): Result<VideoStatusResponse> {
+        return when (val result = SafeApiCall.execute { apiService.retryVideoAudio(taskId) }) {
+            is ApiResult.Success -> Result.success(result.data)
+            is ApiResult.Error -> Result.failure(Exception(result.message))
+            is ApiResult.Loading -> Result.failure(Exception("Unexpected loading state"))
+        }
+    }
+
     suspend fun waitForVideo(
         taskId: String,
-        maxWaitSeconds: Int = 300,
+        maxWaitSeconds: Int = 600,
         pollIntervalMs: Long = 5000,
+        onProgress: (VideoStatusResponse) -> Unit = {},
     ): Result<VideoStatusResponse> {
         val startTime = System.currentTimeMillis()
         val maxWaitMs = maxWaitSeconds * 1000L
@@ -186,6 +195,7 @@ class DrawingRepository @Inject constructor(
         while (System.currentTimeMillis() - startTime < maxWaitMs) {
             val result = getVideoStatus(taskId)
             result.onSuccess { status ->
+                onProgress(status)
                 if (status.isComplete) {
                     return Result.success(status)
                 }

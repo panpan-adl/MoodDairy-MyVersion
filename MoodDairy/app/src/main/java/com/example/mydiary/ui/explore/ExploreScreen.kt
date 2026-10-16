@@ -44,7 +44,8 @@ fun ExploreScreen(
     onNavigateToHighlights: () -> Unit = {},
     onNavigateToLittleJoys: () -> Unit = {},
     onNavigateToDiary: (Long) -> Unit = {},
-    viewModel: ExploreViewModel = hiltViewModel()
+    viewModel: ExploreViewModel = hiltViewModel(),
+    showTitle: Boolean = true
 ) {
     val memoryContext = androidx.compose.ui.platform.LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
@@ -69,7 +70,7 @@ fun ExploreScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // 页面标题
-            item {
+            if (showTitle) item {
                 Text(
                     text = "发现",
                     fontSize = 28.sp,

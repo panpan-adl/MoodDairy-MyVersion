@@ -52,14 +52,16 @@ async def test_upload_is_not_intercepted_by_static_media_server():
 
 
 @pytest.mark.asyncio
-async def test_video_stays_playable_when_optional_mixing_fails():
+async def test_video_does_not_deliver_silent_source_when_mixing_fails():
     from app.drawing.video_service import VideoService
     client = MagicMock()
     client.get_video_task_status = AsyncMock(return_value={"status":"succeeded","video_url":"https://example.com/original.mp4"})
-    with patch("app.drawing.video_audio_mixer.add_background_music", AsyncMock(side_effect=RuntimeError("mixer unavailable"))):
+    failure=dict(status="failed", video_url=None, audio_status="failed", audio_error="配乐服务不可用", error="视频已生成，但背景音乐添加失败，请重试。")
+    with patch("app.drawing.video_audio_mixer.background_music_status", return_value=failure):
         result = await VideoService(client).get_video_status("qa_video")
-    assert result["status"] == "succeeded"
-    assert result["video_url"] == "https://example.com/original.mp4"
+    assert result["status"] == "failed"
+    assert result["audio_status"] == "failed"
+    assert result["video_url"] is None
 
 
 def test_local_extraction_runs_without_celery_and_disposes_engine():

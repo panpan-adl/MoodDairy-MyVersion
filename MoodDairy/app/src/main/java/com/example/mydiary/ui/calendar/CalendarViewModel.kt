@@ -32,10 +32,15 @@ class CalendarViewModel @Inject constructor(
         loadDatesWithDiary()
     }
 
-    fun selectDate(date: LocalDate) {
+    fun selectDate(date: LocalDate): Boolean {
+        if (date.isAfter(LocalDate.now())) {
+            _uiState.update { it.copy(infoMessage = FUTURE_DATE_MESSAGE) }
+            return false
+        }
         _uiState.update { it.copy(selectedDate = date) }
         loadDiariesForDate(date)
         loadTodosForDate(date)
+        return true
     }
 
     fun previousMonth() {
@@ -338,3 +343,5 @@ data class CalendarUiState(
     val infoMessage: String? = null,
     val errorMessage: String? = null
 )
+
+internal const val FUTURE_DATE_MESSAGE = "这一天还没到，暂时不能记录。先记下今天的心情吧。"

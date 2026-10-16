@@ -74,7 +74,9 @@ class MemoryActivity : ComponentActivity() {
             draft=fresh().put("diary_ids",JSONArray().put(it)); store.save(draft)
             if (page!="room") page="edit" else placement=JSONObject().put("source_type","diary").put("source_id",it.toString()).put("kind","book").put("slot",0).put("title","").put("description","")
         }
-        setContent { MyDiaryTheme {
+        setContent {
+            com.example.mydiary.live2d.CompanionHost(active = session.isLoggedIn(), assistant = false)
+ MyDiaryTheme {
             MaterialTheme(colorScheme=MaterialTheme.colorScheme.copy(primary=Color(0xFF356F5B),onPrimary=Color.White,secondary=Color(0xFF58744C))) { Screen() }
         } }
         task { refresh() }

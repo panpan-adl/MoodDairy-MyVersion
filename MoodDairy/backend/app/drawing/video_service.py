@@ -146,12 +146,12 @@ class VideoService:
             logger.error(f"创建转换视频失败: {e}")
             raise VideoServiceError(f"创建转换视频失败: {str(e)}")
     
-    async def get_video_status(self, task_id: str) -> Dict[str, Any]:
+    async def get_video_status(self, task_id: str, retry_audio: bool = False) -> Dict[str, Any]:
         """
         获取视频生成任务状态
 
         任务成功后会对无声视频做一次后期配乐（ffmpeg 混入疗愈音乐并上传 OSS），
-        配乐失败时自动降级返回原始无声视频 URL。
+        配乐期间保持处理中，失败时明确返回可重试错误，不交付无声原片。
 
         Args:
             task_id: 任务ID
@@ -161,15 +161,13 @@ class VideoService:
         """
         try:
             result = await self.client.get_video_task_status(task_id)
-            # 视频渲染成功：异步配乐，替换为带音轨的 URL
+            result = dict(result)
+            result.setdefault("task_id", task_id)
             if result.get("status") == "succeeded" and result.get("video_url"):
-                try:
-                    from .video_audio_mixer import add_background_music
-                    result["video_url"] = await add_background_music(
-                        task_id, result["video_url"]
-                    )
-                except Exception as exc:
-                    logger.warning("Optional background music unavailable: %s", exc)
+                from .video_audio_mixer import background_music_status
+                result.update(background_music_status(task_id, result["video_url"], retry=retry_audio))
+            else:
+                result["audio_status"] = "pending"
             return result
         except VolcengineAPIError as e:
             logger.error(f"获取视频状态失败: {e}")
@@ -190,11 +188,13 @@ class VideoService:
         Returns:
             str: 视频URL
         """
-        try:
-            return await self.client.wait_for_video(
-                task_id=task_id,
-                max_wait_seconds=max_wait_seconds
-            )
-        except VolcengineAPIError as e:
-            logger.error(f"等待视频生成失败: {e}")
-            raise VideoServiceError(f"等待视频生成失败: {str(e)}")
+        import asyncio
+        deadline = asyncio.get_running_loop().time() + max_wait_seconds
+        while asyncio.get_running_loop().time() < deadline:
+            result = await self.get_video_status(task_id)
+            if result["status"] == "succeeded":
+                return result["video_url"]
+            if result["status"] == "failed":
+                raise VideoServiceError(result.get("error") or "视频生成失败")
+            await asyncio.sleep(2)
+        raise VideoServiceError("视频生成或配乐超时，请重新查看任务状态")

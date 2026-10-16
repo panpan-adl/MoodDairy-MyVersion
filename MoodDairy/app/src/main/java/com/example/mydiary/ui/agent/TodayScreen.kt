@@ -59,7 +59,7 @@ internal data class TodayActions(
 )
 @Composable
 fun TodayScreen(onOpenAssistant: () -> Unit, onOpenRecords: () -> Unit, onOpenDiary: (Long) -> Unit,
-                viewModel: TodayViewModel = hiltViewModel()) {
+                viewModel: TodayViewModel = hiltViewModel(), showTitle: Boolean = true) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val lifecycle = LocalLifecycleOwner.current
     DisposableEffect(lifecycle, viewModel) {
@@ -77,16 +77,17 @@ fun TodayScreen(onOpenAssistant: () -> Unit, onOpenRecords: () -> Unit, onOpenDi
         toggle = viewModel::toggle, postpone = viewModel::postpone, reflection = viewModel::updateReflection,
         generateReview = viewModel::generateReview, review = viewModel::updateReview, saveReview = viewModel::saveReview,
         clearNotice = viewModel::clearNotice, assistant = onOpenAssistant, records = onOpenRecords,
-        openDiary = onOpenDiary))
+        openDiary = onOpenDiary), showTitle = showTitle)
 }
 @Composable
-internal fun TodayDashboard(state: TodayState, actions: TodayActions) {
+internal fun TodayDashboard(state: TodayState, actions: TodayActions, showTitle: Boolean = true) {
     var selected by rememberSaveable { mutableStateOf(TodaySection.RECORD) }
     var filter by rememberSaveable { mutableStateOf("all") }
     var editTask by remember { mutableStateOf<AgentTask?>(null) }
     var editIndex by remember { mutableStateOf<Int?>(null) }
     var editor by remember { mutableStateOf<AgentTaskDraft?>(null) }
     var awaitingAdopt by remember { mutableStateOf(false) }
+    var previousBusy by rememberSaveable { mutableStateOf(state.busy) }
     val recordScroll = rememberLazyListState()
     val tasksScroll = rememberLazyListState()
     val reviewScroll = rememberLazyListState()
@@ -96,11 +97,13 @@ internal fun TodayDashboard(state: TodayState, actions: TodayActions) {
     val notice = state.error ?: state.message
     val canOperate = !state.busy && state.loaded
     LaunchedEffect(state.busy, state.plan) {
+        val operationFinished = previousBusy && !state.busy
+        previousBusy = state.busy
         if (awaitingAdopt && !state.busy) {
             if (state.plan == null && state.error == null) selected = TodaySection.TASKS
             awaitingAdopt = false
         }
-        if (state.plan != null && !state.busy && selected == TodaySection.RECORD) {
+        if (state.plan != null && operationFinished && selected == TodaySection.RECORD) {
             recordScroll.animateScrollToItem(2 + if (notice != null) 1 else 0)
         }
     }
@@ -108,7 +111,7 @@ internal fun TodayDashboard(state: TodayState, actions: TodayActions) {
         listOf(MintGreen.copy(alpha = 0.3f), PaleYellow.copy(alpha = 0.3f), SoftWhite)))) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("今天", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                if (showTitle) Text("今天", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                 val dateLabel = runCatching { LocalDate.parse(state.date).format(DateTimeFormatter.ofPattern("M月d日  EEEE", Locale.CHINA)) }.getOrDefault(state.date)
                 Text("$dateLabel · 理清安排，给心情留些余地", fontSize = 12.sp, color = TextSecondary)
             }

@@ -199,6 +199,13 @@ interface DiaryApiService {
         @Query("end_date") endDate: String? = null
     ): Response<GrowthPortraitResponse>
 
+    @GET("insights/diaries/{diary_id}/review")
+    suspend fun getDiaryReview(@Path("diary_id") diaryId: Long): Response<DiaryReviewResponse>
+
+    @POST("insights/diaries/{diary_id}/review")
+    suspend fun generateDiaryReview(@Path("diary_id") diaryId: Long,
+        @Body request: DiaryReviewRequest): Response<DiaryReviewResponse>
+
     @GET("insights/diaries/{diary_id}")
     suspend fun getDiaryMultimodalInsight(
         @Path("diary_id") diaryId: Long
@@ -604,6 +611,10 @@ interface DiaryApiService {
     suspend fun getVideoStatus(
         @Path("task_id") taskId: String
     ): Response<VideoStatusResponse>
+
+    @POST("drawing/video/audio/{task_id}/retry")
+    suspend fun retryVideoAudio(@Path("task_id") taskId: String): Response<VideoStatusResponse>
+
 
     // ============================================================================
     // SD 功能开关相关API (SD Toggle APIs)

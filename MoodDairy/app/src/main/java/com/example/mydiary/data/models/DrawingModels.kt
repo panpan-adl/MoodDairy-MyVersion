@@ -57,6 +57,8 @@ data class VideoStatusResponse(
     @SerializedName("task_id") val taskId: String,
     val status: String,
     @SerializedName("video_url") val videoUrl: String? = null,
+    @SerializedName("audio_status") val audioStatus: String? = null,
+    @SerializedName("audio_error") val audioError: String? = null,
     val error: String? = null,
 ) {
     val isComplete: Boolean

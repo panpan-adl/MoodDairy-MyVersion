@@ -138,4 +138,18 @@ object NetworkModule {
     ): DiaryApiService {
         return retrofit.create(DiaryApiService::class.java)
     }
+
+    /** Model generation can outlast ordinary reads. Never transparently replay a refresh POST. */
+    @Provides
+    @Singleton
+    @Named("diaryReview")
+    fun provideDiaryReviewApiService(
+        @Named("longTimeout") client: OkHttpClient,
+        gson: Gson,
+    ): DiaryApiService = Retrofit.Builder()
+        .baseUrl(ApiEndpoints.apiBaseUrl)
+        .client(client.newBuilder().retryOnConnectionFailure(false).build())
+        .addConverterFactory(GsonConverterFactory.create(gson))
+        .build()
+        .create(DiaryApiService::class.java)
 }

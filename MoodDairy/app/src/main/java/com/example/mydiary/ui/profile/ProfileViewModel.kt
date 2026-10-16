@@ -2,10 +2,8 @@ package com.example.mydiary.ui.profile
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.mydiary.data.models.GrowthPortraitResponse
 import com.example.mydiary.data.models.User
 import com.example.mydiary.data.network.ApiResult
-import com.example.mydiary.data.repository.GrowthPortraitRepository
 import com.example.mydiary.data.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,7 +25,6 @@ import javax.inject.Inject
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
     private val userRepository: UserRepository,
-    private val growthPortraitRepository: GrowthPortraitRepository,
 ) : ViewModel() {
 
     // 个人主页状态
@@ -37,9 +34,6 @@ class ProfileViewModel @Inject constructor(
     // 当前用户数据
     private val _user = MutableStateFlow<User?>(null)
     val user: StateFlow<User?> = _user.asStateFlow()
-
-    private val _growthPortrait = MutableStateFlow<GrowthPortraitResponse?>(null)
-    val growthPortrait: StateFlow<GrowthPortraitResponse?> = _growthPortrait.asStateFlow()
 
     init {
         // 初始化时加载用户资料
@@ -70,7 +64,6 @@ class ProfileViewModel @Inject constructor(
 
             // 设置当前用户（立即显示本地数据，避免闪烁）
             _user.value = currentUser
-            loadGrowthPortrait()
 
             // 只有首次加载时才显示 Loading 状态
             val isFirstLoad = _profileState.value == ProfileState.Idle
@@ -113,19 +106,9 @@ class ProfileViewModel @Inject constructor(
     fun logout() {
         userRepository.logout()
         _user.value = null
-        _growthPortrait.value = null
         _profileState.value = ProfileState.LoggedOut
     }
 
-    private fun loadGrowthPortrait() {
-        viewModelScope.launch {
-            growthPortraitRepository.getGrowthPortrait(days = 7).collect { result ->
-                if (result is ApiResult.Success) {
-                    _growthPortrait.value = result.data
-                }
-            }
-        }
-    }
 }
 
 /**

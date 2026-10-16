@@ -3,7 +3,7 @@ import hashlib
 
 def revision():
     root=Path(__file__).resolve().parents[1]
-    files=sorted((root/'app').rglob('*.py'))+[root/'scripts/memory_worker.py']
+    files=sorted((root/'app').rglob('*.py'))+[root/'scripts/memory_worker.py', root/'scripts/android_port_forward.py']
     for parent in root.parents:
         launcher=parent/'start_backend_worker.py'
         if launcher.exists(): files.append(launcher); break

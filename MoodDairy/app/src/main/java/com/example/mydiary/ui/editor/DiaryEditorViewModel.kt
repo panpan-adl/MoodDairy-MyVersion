@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.mydiary.data.models.Diary
+import com.example.mydiary.data.models.DiaryReviewResponse
 import com.example.mydiary.data.models.DiaryMultimodalInsightResponse
 import com.example.mydiary.data.models.EmotionAnalysis
 import com.example.mydiary.data.models.MediaItem
@@ -222,6 +223,8 @@ class DiaryEditorViewModel @Inject constructor(
             return
         }
 
+        ++reviewRequestSerial
+        _uiState.update { it.copy(diaryReview = null, reviewGenerating = false, reviewError = null) }
         // 记录本次初始化的参数
         lastInitializedDiaryId = diaryId
         lastInitializedDate = resolvedDate
@@ -353,16 +356,62 @@ class DiaryEditorViewModel @Inject constructor(
         }
     }
 
-    private fun loadDiaryInsight(diaryId: Long) {
+    private var reviewRequestSerial = 0L
+
+    private fun loadDiaryReview(diaryId: Long) {
+        val serial = ++reviewRequestSerial
         viewModelScope.launch {
-            growthPortraitRepository.getDiaryMultimodalInsight(diaryId).collect { result ->
+            val result = growthPortraitRepository.getDiaryReview(diaryId)
+            if (serial != reviewRequestSerial || _uiState.value.diaryId != diaryId) return@launch
+            when (result) {
+                is ApiResult.Success -> _uiState.update { it.copy(diaryReview = result.data, reviewError = null, reviewGenerating = false) }
+                is ApiResult.Error -> _uiState.update { it.copy(reviewError = "回顾暂时没有加载出来，可以稍后再试。", reviewGenerating = false) }
+                else -> Unit
+            }
+        }
+    }
+
+    fun generateDiaryReview() {
+        val state = _uiState.value
+        if (state.reviewGenerating) return
+        val diaryId = state.diaryId
+        if (diaryId == null || state.hasUnsavedChanges || state.isSaving) {
+            _uiState.update { it.copy(reviewError = "先保存这篇日记，再一起回顾吧。") }
+            return
+        }
+        val serial = ++reviewRequestSerial
+        val title = state.title
+        val media = state.mediaItems.toList()
+        _uiState.update { it.copy(reviewGenerating = true, reviewError = null) }
+        viewModelScope.launch {
+            // Always reload saved text/version before generation; never submit editor drafts.
+            val cached = growthPortraitRepository.getDiaryReview(diaryId)
+            if (serial != reviewRequestSerial || _uiState.value.diaryId != diaryId) return@launch
+            val latest = _uiState.value
+            if (latest.hasUnsavedChanges || latest.title != title || latest.mediaItems != media) {
+                _uiState.update { it.copy(reviewGenerating = false, reviewError = "先保存这篇日记，再一起回顾吧。") }
+                return@launch
+            }
+            val result = if (cached is ApiResult.Success && cached.data.hasText) {
+                growthPortraitRepository.generateDiaryReview(diaryId, cached.data.contentVersion,
+                    refresh = cached.data.body != null)
+            } else cached
+            if (serial != reviewRequestSerial || _uiState.value.diaryId != diaryId) return@launch
+            _uiState.update { current ->
+                val changed = current.hasUnsavedChanges || current.title != title || current.mediaItems != media
                 when (result) {
-                    is ApiResult.Success -> _uiState.update { it.copy(multimodalInsight = result.data) }
-                    is ApiResult.Error -> _uiState.update { it.copy(multimodalInsight = null) }
-                    is ApiResult.Loading -> Unit
+                    is ApiResult.Success -> current.copy(reviewGenerating = false,
+                        diaryReview = result.data.copy(stale = result.data.stale || changed),
+                        reviewError = if (changed) "内容有了变化，保存后再一起回顾吧。" else null)
+                    else -> current.copy(reviewGenerating = false,
+                        reviewError = "这次没能整理出来，你写下的内容还在，可以稍后再试。")
                 }
             }
         }
+    }
+
+    private fun loadDiaryInsight(diaryId: Long) {
+        loadDiaryReview(diaryId)
     }
 
     fun refreshMultimodalInsight(diaryId: Long) {
@@ -748,6 +797,7 @@ class DiaryEditorViewModel @Inject constructor(
                     )
                 }
                 
+                loadDiaryReview(savedDiaryId)
                 Log.d(TAG, "保存完成: diaryId=$savedDiaryId, mediaItems=${finalMediaItems.size}")
                 
             } catch (e: Exception) {
@@ -1914,6 +1964,9 @@ data class DiaryEditorUiState(
     val hasUnsavedChanges: Boolean = false,
     val saveSuccess: Boolean = false,
     val errorMessage: String? = null,
+    val diaryReview: DiaryReviewResponse? = null,
+    val reviewGenerating: Boolean = false,
+    val reviewError: String? = null,
     val multimodalInsight: DiaryMultimodalInsightResponse? = null,
     val voiceProcessingState: VoiceProcessingState = VoiceProcessingState.Idle
 )

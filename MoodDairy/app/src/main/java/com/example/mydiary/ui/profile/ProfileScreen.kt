@@ -75,15 +75,12 @@ import com.example.mydiary.ui.theme.TextTertiary
 @Composable
 fun ProfileScreen(
     onNavigateToEditProfile: () -> Unit,
-    onNavigateToGrowthPortrait: () -> Unit,
     onLogout: () -> Unit,
-    onNavigateToSearchSettings: () -> Unit = {},
     shouldRefresh: Boolean = false,
     viewModel: ProfileViewModel = hiltViewModel(),
 ) {
     val profileState by viewModel.profileState.collectAsStateWithLifecycle()
     val user by viewModel.user.collectAsStateWithLifecycle()
-    val growthPortrait by viewModel.growthPortrait.collectAsStateWithLifecycle()
     var showLogoutDialog by remember { mutableStateOf(false) }
 
     // 使用 rememberSaveable 保存滚动位置，导航返回时恢复
@@ -159,10 +156,6 @@ fun ProfileScreen(
                             .verticalScroll(scrollState)
                             .padding(16.dp),
                     ) {
-                        Button(onClick = onNavigateToSearchSettings, modifier = Modifier.fillMaxWidth()) {
-                            Text("搜索服务设置")
-                        }
-                        Spacer(modifier = Modifier.height(12.dp))
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(16.dp),
@@ -243,40 +236,6 @@ fun ProfileScreen(
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text("编辑资料", fontSize = 16.sp, fontWeight = FontWeight.Medium)
                                 }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = Surface),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                            onClick = onNavigateToGrowthPortrait,
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Text(
-                                    text = "成长画像摘要",
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary,
-                                )
-                                Text(
-                                    text = growthPortrait?.summary ?: "最近 7 天的情绪趋势与积极事件正在生成中。",
-                                    fontSize = 14.sp,
-                                    color = TextSecondary,
-                                )
-                                Text(
-                                    text = growthPortrait?.selfAwarenessFeedback ?: "点击查看完整画像",
-                                    fontSize = 13.sp,
-                                    color = TextPrimary,
-                                )
                             }
                         }
 

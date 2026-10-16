@@ -95,6 +95,9 @@ class VideoStatusResponse(BaseModel):
     status: str = Field(..., description="Task status")
     video_url: Optional[str] = Field(None, description="Generated video URL")
     error: Optional[str] = Field(None, description="Error message")
+    audio_status: Optional[str] = Field(None, description="pending, processing, ready or failed")
+    audio_error: Optional[str] = None
+
 
 
 class VideoResponse(BaseModel):

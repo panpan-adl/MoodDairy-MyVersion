@@ -16,7 +16,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.navigation
 import androidx.navigation.navArgument
 import com.example.mydiary.data.local.SessionManager
-import com.example.mydiary.ui.agent.TodayScreen
+import com.example.mydiary.ui.life.LifeScreen
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.mydiary.ui.auth.LoginScreen
 import com.example.mydiary.ui.auth.RegisterScreen
 import com.example.mydiary.ui.calendar.CalendarScreen
@@ -27,7 +28,6 @@ import com.example.mydiary.ui.drawing.DrawingScreen
 import com.example.mydiary.ui.drawing.DrawingResultScreen
 import com.example.mydiary.ui.drawing.SharedDrawingViewModel
 import com.example.mydiary.ui.editor.DiaryEditorScreen
-import com.example.mydiary.ui.explore.ExploreScreen
 import com.example.mydiary.ui.explore.GrowthPortraitScreen
 import com.example.mydiary.ui.explore.HighlightsScreen
 import com.example.mydiary.ui.explore.LittleJoysScreen
@@ -51,6 +51,7 @@ private const val TAG = "DiaryNavDebug"
 object Routes {
     const val LOGIN = "login"
     const val REGISTER = "register"
+    const val LIFE = "life"
     const val TODAY = "today"
     const val CALENDAR = "calendar"
     const val CHAT = "chat"
@@ -127,6 +128,7 @@ fun NavGraph(
     }
 
     val protectedRoutes = listOf(
+        Routes.LIFE,
         Routes.TODAY,
         Routes.CALENDAR,
         Routes.CHAT,
@@ -187,7 +189,7 @@ fun NavGraph(
                     }
                 },
                 onLoginSuccess = {
-                    navController.navigate(Routes.TODAY) {
+                    navController.navigate(Routes.CHAT) {
                         popUpTo(Routes.LOGIN) { inclusive = true }
                     }
                 }
@@ -200,7 +202,7 @@ fun NavGraph(
                     navController.popBackStack()
                 },
                 onRegisterSuccess = {
-                    navController.navigate(Routes.TODAY) {
+                    navController.navigate(Routes.CHAT) {
                         popUpTo(Routes.LOGIN) { inclusive = true }
                     }
                 }
@@ -208,10 +210,23 @@ fun NavGraph(
         }
 
         composable(Routes.TODAY) {
-            TodayScreen(
-                onOpenAssistant = { navController.navigate(Routes.CHAT) },
-                onOpenRecords = { navController.navigate(Routes.CALENDAR) },
-                onOpenDiary = { id -> navController.navigate(Routes.diaryEditor(LocalDate.now(), id)) }
+            LaunchedEffect(Unit) {
+                navController.popBackStack()
+                navController.navigateToLife("today")
+            }
+        }
+        composable(Routes.LIFE) { entry ->
+            val requestedSection by entry.savedStateHandle
+                .getStateFlow<String?>(LIFE_SECTION_REQUEST, null).collectAsStateWithLifecycle()
+            LifeScreen(
+                requestedSection = requestedSection,
+                onSectionRequestHandled = { entry.savedStateHandle[LIFE_SECTION_REQUEST] = null },
+                onOpenAssistant = { navController.navigateMainTab(Routes.CHAT) },
+                onOpenRecords = { navController.navigateMainTab(Routes.CALENDAR) },
+                onOpenDiary = { id -> navController.navigate(Routes.diaryEditor(LocalDate.now(), id)) },
+                onOpenGrowthPortrait = { navController.navigate(Routes.GROWTH_PORTRAIT) },
+                onOpenHighlights = { navController.navigate(Routes.HIGHLIGHTS) },
+                onOpenLittleJoys = { navController.navigate(Routes.LITTLE_JOYS) }
             )
         }
         composable(Routes.CALENDAR) { backStackEntry ->
@@ -290,22 +305,10 @@ fun NavGraph(
         }
 
         composable(Routes.EXPLORE) {
-            ExploreScreen(
-                onNavigateToGrowthPortrait = {
-                    navController.navigate(Routes.GROWTH_PORTRAIT)
-                },
-                onNavigateToHighlights = {
-                    navController.navigate(Routes.HIGHLIGHTS)
-                },
-                onNavigateToLittleJoys = {
-                    navController.navigate(Routes.LITTLE_JOYS)
-                },
-                onNavigateToDiary = { diaryId ->
-                    val route = Routes.diaryEditor(LocalDate.now(), diaryId)
-                    Log.d(TAG, "Navigate to diary: diaryId=$diaryId, route=$route")
-                    navController.navigate(route)
-                }
-            )
+            LaunchedEffect(Unit) {
+                navController.popBackStack()
+                navController.navigateToLife("review")
+            }
         }
 
         composable(Routes.GROWTH_PORTRAIT) {
@@ -389,15 +392,11 @@ fun NavGraph(
             }
 
             ProfileScreen(
-                onNavigateToSearchSettings = { navController.navigate(Routes.RECHARGE) },
                 shouldRefresh = shouldRefresh,
                 onNavigateToEditProfile = {
                     navController.navigate(Routes.EDIT_PROFILE)
                 },
 
-                onNavigateToGrowthPortrait = {
-                    navController.navigate(Routes.GROWTH_PORTRAIT)
-                },
                 onLogout = {
                     navController.navigate(Routes.LOGIN) {
                         popUpTo(0) { inclusive = true }
@@ -706,15 +705,14 @@ internal fun handleClientAction(
             Log.d(TAG, "停止所有白噪音")
         }
         "open_calendar" -> {
-            // 回到日历：清空回退栈到 CALENDAR
-            navController.popBackStack(Routes.CALENDAR, inclusive = false)
+            navController.navigateMainTab(Routes.CALENDAR)
         }
         "open_chat" -> {
-            navController.navigate(Routes.CHAT)
+            navController.navigateMainTab(Routes.CHAT)
         }
         "open_pomodoro" -> {
             // 番茄钟已并入今日面板
-            navController.navigate(Routes.TODAY) { launchSingleTop = true }
+            navController.navigateToLife("today")
         }
         "open_highlights" -> {
             navController.navigate(Routes.HIGHLIGHTS)
@@ -726,7 +724,7 @@ internal fun handleClientAction(
             navController.navigate(Routes.GROWTH_PORTRAIT)
         }
         "open_today" -> {
-            navController.navigate(Routes.TODAY) { launchSingleTop = true }
+            navController.navigateToLife("today")
         }
         "open_live2d" -> {
             navController.navigate(Routes.LIVE2D)
@@ -738,7 +736,7 @@ internal fun handleClientAction(
             navController.navigate(Routes.DIARY_SEARCH)
         }
         "open_explore" -> {
-            navController.navigate(Routes.EXPLORE)
+            navController.navigateToLife("review")
         }
         "create_diary" -> {
             // 创建日记带标题/内容：把初始数据存到 PetOverlayService 全局变量，DiaryEditorScreen 读取

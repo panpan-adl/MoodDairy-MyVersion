@@ -18,6 +18,8 @@ import com.example.mydiary.ui.agent.TodayActions
 import com.example.mydiary.ui.agent.TodayDashboard
 import com.example.mydiary.ui.agent.TodayState
 import com.example.mydiary.ui.theme.MyDiaryTheme
+import com.example.mydiary.ui.life.LifeContent
+import androidx.compose.material3.Text
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -38,14 +40,14 @@ class TodayDashboardInstrumentedTest {
                     ))) }
                 MyDiaryTheme {
                     val nav = rememberNavController()
-                    Scaffold(bottomBar = { BottomNavBar(nav, Routes.TODAY) }) { padding ->
+                    Scaffold(bottomBar = { BottomNavBar(nav, Routes.LIFE) }) { padding ->
                         Box(Modifier.padding(padding)) {
-                            TodayDashboard(state, TodayActions(
+                            LifeContent(today = { TodayDashboard(state, TodayActions(
                                 record = { state = state.copy(record = it) },
                                 reflection = { state = state.copy(reflection = it) },
                                 toggle = { task -> state = state.copy(tasks = state.tasks.map { if (it.id == task.id) it.copy(isDone = !it.isDone) else it }) },
                                 generateReview = { state = state.copy(review = "今天整理好了项目提纲，也为英语复习留出了时间。明天继续完成方案的细节，照顾好自己的节奏。") }
-                            ))
+                            ), showTitle = false) }, review = { Text("回顾内容") })
                         }
                     }
                 }

@@ -109,6 +109,9 @@ class SharedDrawingViewModel @Inject constructor(
                 videoError = null,
                 videoUrl = null,
                 videoTaskId = null,
+                videoStatus = null,
+                videoAudioStatus = null,
+                isCreatingVideo = false,
             )
         }
     }
@@ -219,7 +222,7 @@ class SharedDrawingViewModel @Inject constructor(
         val imageUrl = _uiState.value.generatedImageUrl ?: return
 
         viewModelScope.launch {
-            _uiState.update { it.copy(isCreatingVideo = true, videoError = null) }
+            _uiState.update { it.copy(isCreatingVideo = true, videoError = null, videoAudioStatus = "pending", videoUrl = null) }
             drawingRepository.createVideo(imageUrl, prompt)
                 .onSuccess { response ->
                     _uiState.update {
@@ -245,7 +248,7 @@ class SharedDrawingViewModel @Inject constructor(
         val imageUrl = _uiState.value.generatedImageUrl ?: return
 
         viewModelScope.launch {
-            _uiState.update { it.copy(isCreatingVideo = true, videoError = null) }
+            _uiState.update { it.copy(isCreatingVideo = true, videoError = null, videoAudioStatus = "pending", videoUrl = null) }
             drawingRepository.createTransformVideo(imageUrl)
                 .onSuccess { response ->
                     _uiState.update {
@@ -267,14 +270,29 @@ class SharedDrawingViewModel @Inject constructor(
         }
     }
 
+    fun retryVideoAudio() {
+        val taskId = _uiState.value.videoTaskId ?: return
+        if (_uiState.value.isCreatingVideo) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isCreatingVideo = true, videoError = null, videoAudioStatus = "processing", videoUrl = null) }
+            drawingRepository.retryVideoAudio(taskId)
+                .onSuccess { pollVideoStatus(taskId) }
+                .onFailure { error -> _uiState.update { it.copy(isCreatingVideo = false, videoAudioStatus = "failed", videoError = error.message) } }
+        }
+    }
+
     private fun pollVideoStatus(taskId: String) {
         viewModelScope.launch {
-            drawingRepository.waitForVideo(taskId)
+            drawingRepository.waitForVideo(taskId, onProgress = { status ->
+                if (_uiState.value.videoTaskId == taskId) _uiState.update { it.copy(videoStatus = status.status, videoAudioStatus = status.audioStatus) }
+            })
                 .onSuccess { status ->
+                    if (_uiState.value.videoTaskId != taskId) return@onSuccess
                     _uiState.update {
                         it.copy(
                             isCreatingVideo = false,
                             videoStatus = status.status,
+                            videoAudioStatus = status.audioStatus,
                             videoUrl = status.videoUrl,
                             videoError = if (!status.isSuccess) status.error else null,
                         )
@@ -284,6 +302,7 @@ class SharedDrawingViewModel @Inject constructor(
                     }
                 }
                 .onFailure { error ->
+                    if (_uiState.value.videoTaskId != taskId) return@onFailure
                     _uiState.update {
                         it.copy(
                             isCreatingVideo = false,

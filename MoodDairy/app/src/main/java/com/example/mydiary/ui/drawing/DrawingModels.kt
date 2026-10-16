@@ -22,6 +22,7 @@ data class DrawingUiState(
     val isCreatingVideo: Boolean = false,
     val videoTaskId: String? = null,
     val videoStatus: String? = null,
+    val videoAudioStatus: String? = null,
     val videoUrl: String? = null,
     val videoError: String? = null,
     val diaryId: Long? = null,

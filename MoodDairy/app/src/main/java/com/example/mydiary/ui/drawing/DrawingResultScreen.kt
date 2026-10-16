@@ -256,7 +256,7 @@ fun DrawingResultScreen(
                                     Spacer(modifier = Modifier.height(10.dp))
                                     Text(
                                         text = buildString {
-                                            append("正在生成视频")
+                                            append(if (uiState.videoAudioStatus == "processing") "视频已生成，正在添加背景音乐" else "正在生成视频")
                                             videoStatusDisplay?.let { append(" · ").append(it) }
                                         },
                                         fontSize = 14.sp,
@@ -315,6 +315,11 @@ fun DrawingResultScreen(
                                 }
                             }
 
+                            uiState.videoAudioStatus == "failed" -> {
+                                Button(onClick = { if (sharedViewModel != null) sharedViewModel.retryVideoAudio() else viewModel.retryVideoAudio() }) {
+                                    Text("重试配乐")
+                                }
+                            }
                             else -> {
                                 Button(
                                     onClick = createVideo,

@@ -106,7 +106,8 @@ class FunctionalUiInstrumentedTest {
                 compose.runOnIdle { assertNotEquals("Protected page must remain open: $route", Routes.LOGIN, nav.currentDestination?.route) }
                 Log.i("FunctionalQA", "Mounted page: $route")
             }
-            for (id in listOf("daily_mood_v1", "phq9_v1", "gad7_v1", "mbti_v1", "animal_personality_v1", "holland_v1")) {
+            val testIds = runBlocking { TestRepository(compose.activity).loadTestIndex().getOrThrow().tests.map { it.testId } }
+            for (id in testIds) {
                 compose.runOnIdle { nav.navigate(Routes.test(id)) }
                 compose.waitForIdle()
                 compose.runOnIdle { assertEquals("test_start/{test_id}", nav.currentDestination?.route) }

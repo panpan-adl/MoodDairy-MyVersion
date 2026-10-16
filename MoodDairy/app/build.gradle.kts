@@ -58,6 +58,23 @@ if (System.getProperty("os.name").startsWith("Windows") &&
     }
 }
 
+// Instrumentation force-stops the target at completion. Restore the developer's
+// emulator only after the connected test task has finished (also on failure).
+val emulatorRestoreScript = generateSequence(rootProject.projectDir) { it.parentFile }
+    .map { it.resolve("restore_emulator_app.ps1") }
+    .firstOrNull { it.isFile }
+if (System.getProperty("os.name").startsWith("Windows") && emulatorRestoreScript != null) {
+    val restoreEmulatorApp = tasks.register<Exec>("restoreEmulatorApp") {
+        group = "verification"
+        description = "Restore the app on local emulators after connected device tests"
+        commandLine("powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+            "-File", emulatorRestoreScript.absolutePath)
+    }
+    tasks.matching { it.name == "connectedDebugAndroidTest" }.configureEach {
+        finalizedBy(restoreEmulatorApp)
+    }
+}
+
 android {
     namespace = "com.example.mydiary"
     compileSdk = 36  // 提升到36以满足依赖要求
@@ -66,8 +83,8 @@ android {
         applicationId = "com.example.mydiary"
         minSdk = 26  // 提高到26以支持java.time API
         targetSdk = 35  // 使用Android 14目标SDK
-        versionCode = 12
-        versionName = "1.4.6"
+        versionCode = 14
+        versionName = "1.4.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "API_BASE_URL", quoteForBuildConfig(apiBaseUrl))
@@ -78,7 +95,8 @@ android {
             abiFilters += listOf(
                 "armeabi-v7a",  // 32位 ARM
                 "arm64-v8a",    // 64位 ARM（真机）
-                "x86"           // 32位 x86（模拟器测试）
+                "x86",          // 32位 x86（模拟器测试）
+                "x86_64"        // 64位模拟器直接使用原生库，避免 ARM 兼容层
             )
         }
     }

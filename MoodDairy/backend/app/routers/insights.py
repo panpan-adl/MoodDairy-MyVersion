@@ -89,3 +89,23 @@ async def get_growth_portrait(
     )
     await db.commit()
     return result
+
+
+from app.services.diary_review_service import DiaryReviewService, DiaryReviewResponse
+from pydantic import BaseModel
+
+
+class ReviewRequest(BaseModel):
+    content_version: str | None = None
+    refresh: bool = False
+
+
+@router.get('/diaries/{diary_id}/review', response_model=DiaryReviewResponse)
+async def read_diary_review(diary_id: int, current_user_id: AuthenticatedUserId, db: AsyncSession = Depends(get_db)):
+    return await DiaryReviewService(db).read(diary_id, current_user_id)
+
+
+@router.post('/diaries/{diary_id}/review', response_model=DiaryReviewResponse)
+async def generate_diary_review(diary_id: int, request: ReviewRequest, current_user_id: AuthenticatedUserId,
+                                db: AsyncSession = Depends(get_db)):
+    return await DiaryReviewService(db).generate(diary_id, current_user_id, request.content_version, request.refresh)

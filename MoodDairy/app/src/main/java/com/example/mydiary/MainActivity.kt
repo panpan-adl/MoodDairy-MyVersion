@@ -65,6 +65,7 @@ import com.example.mydiary.data.local.SessionManager
 import com.example.mydiary.music.MusicFloatingLayer
 import com.example.mydiary.music.MusicWidgetController
 import com.example.mydiary.navigation.NavGraph
+import com.example.mydiary.navigation.navigateMainTab
 import com.example.mydiary.navigation.Routes
 import com.example.mydiary.ui.theme.MyDiaryTheme
 import com.example.mydiary.ui.layout.KeyboardAwareScaffold
@@ -105,14 +106,30 @@ fun MainScreen(
     var showQuickActions by remember { mutableStateOf(false) }
 
     val startDestination = remember {
-        if (sessionManager.isLoggedIn()) Routes.TODAY else Routes.LOGIN
+        if (sessionManager.isLoggedIn()) Routes.CHAT else Routes.LOGIN
     }
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    com.example.mydiary.live2d.CompanionHost(
+        active = currentRoute != null && currentRoute != Routes.LOGIN && currentRoute != Routes.REGISTER && currentRoute != Routes.LIVE2D,
+        assistant = currentRoute == Routes.CHAT,
+    )
+    androidx.compose.runtime.LaunchedEffect(navController) {
+        com.example.mydiary.live2d.PetOverlayService.clientActions.collect { action ->
+            if (sessionManager.isLoggedIn()) {
+                com.example.mydiary.navigation.handleClientAction(navController, memoryContext, action)
+            }
+        }
+    }
+
+
 
     androidx.compose.runtime.LaunchedEffect(currentRoute) {
-        if (currentRoute == Routes.LOGIN) com.example.mydiary.whitenoise.WhiteNoiseManager.getInstance().stopAllSounds()
+        if (currentRoute == Routes.LOGIN) {
+            com.example.mydiary.live2d.PetOverlayService.clearVoiceActivation()
+            com.example.mydiary.whitenoise.WhiteNoiseManager.getInstance().stopAllSounds()
+        }
     }
 
     val showBottomBar = when {
@@ -140,14 +157,9 @@ fun MainScreen(
             .background(brush = gradientBrush)
     ) {
         KeyboardAwareScaffold(
-            hasTopBar = currentRoute == Routes.CHAT,
+            hasTopBar = false,
+            topBar = {},
             hideNavigationForKeyboard = currentRoute == Routes.CHAT,
-            topBar = {
-                if (currentRoute == Routes.CHAT) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-                    TextButton(onClick = { memoryContext.startActivity(android.content.Intent(memoryContext, com.example.mydiary.memory.MemoryActivity::class.java).putExtra("page", "inbox")) }) { Text("制作未来视频信", color = TextPrimary) }
-                    TextButton(onClick = { memoryContext.startActivity(android.content.Intent(memoryContext, com.example.mydiary.memory.MemoryActivity::class.java).putExtra("page", "room")) }) { Text("布置情绪空间", color = TextPrimary) }
-                }
-            },
             bottomBar = {
                 if (showBottomBar) {
                     BottomNavBar(navController = navController, currentRoute = currentRoute)
@@ -240,10 +252,9 @@ private fun QuickActionSheet(
 @Composable
 fun BottomNavBar(navController: NavController, currentRoute: String?) {
     val tabs = listOf(
-        Triple(Routes.TODAY, "今天", Icons.Filled.Home to Icons.Outlined.Home),
-        Triple(Routes.CHAT, "助手", Icons.Filled.Chat to Icons.Outlined.Chat),
         Triple(Routes.CALENDAR, "记录", Icons.Filled.DateRange to Icons.Outlined.DateRange),
-        Triple(Routes.EXPLORE, "发现", Icons.Filled.Explore to Icons.Outlined.Explore),
+        Triple(Routes.CHAT, "助手", Icons.Filled.Chat to Icons.Outlined.Chat),
+        Triple(Routes.LIFE, "生活", Icons.Filled.Explore to Icons.Outlined.Explore),
         Triple(Routes.PROFILE, "我的", Icons.Filled.Person to Icons.Outlined.Person)
     )
     BottomAppBar(
@@ -260,13 +271,7 @@ fun BottomNavBar(navController: NavController, currentRoute: String?) {
                         unselectedIcon = icons.second,
                         description = label,
                         onClick = {
-                            navController.navigate(route) {
-                                popUpTo(Routes.TODAY) { saveState = true }
-                                launchSingleTop = true
-                                // A direct shortcut can save its stack under the home destination.
-                                // Returning home must show Today, rather than restoring that stack.
-                                restoreState = route != Routes.TODAY
-                            }
+                            navController.navigateMainTab(route)
                         }
                     )
                 }

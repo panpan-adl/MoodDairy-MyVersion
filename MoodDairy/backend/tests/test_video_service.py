@@ -4,7 +4,7 @@
 测试VideoService的业务逻辑（不实际生成视频）
 """
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 class TestVideoServiceInit:
@@ -136,7 +136,10 @@ class TestGetVideoStatus:
         
         service = VideoService(client=mock_client)
         
-        result = await service.get_video_status("task_123")
+        with patch("app.drawing.video_audio_mixer.background_music_status", return_value={
+            "status": "succeeded", "video_url": "https://example.com/video.mp4", "audio_status": "ready"
+        }):
+            result = await service.get_video_status("task_123")
         
         assert result["status"] == "succeeded"
         assert result["video_url"] == "https://example.com/video.mp4"

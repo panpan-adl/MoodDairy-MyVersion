@@ -23,7 +23,7 @@ object Live2DConfig {
         ModelInfo(
             id = "diana",
             path = "live2d/Diana/Diana.model3.json",
-            displayName = "Diana",
+            displayName = "然然",
             description = "优雅的公主模型"
         ),
         ModelInfo(

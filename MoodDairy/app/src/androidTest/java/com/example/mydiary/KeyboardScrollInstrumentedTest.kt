@@ -58,7 +58,7 @@ class KeyboardScrollInstrumentedTest {
                 val entries = chatTimelineEntries(messages.value)
                 chatState = rememberLazyListState()
                 KeyboardAwareScaffold(true, true,
-                    topBar = { Row { TextButton(onClick = {}) { Text("制作未来视频信") }; TextButton(onClick = {}) { Text("布置情绪空间") } } },
+                    topBar = {},
                     bottomBar = { Box(Modifier.fillMaxWidth().height(64.dp)) { Text("底部导航测试") } },
                 ) {
                     ChatViewport(chatState, entries,
@@ -135,13 +135,11 @@ class KeyboardScrollInstrumentedTest {
     @Test fun keyboardKeepsHeaderFixedAndComposerDockedAcrossRepeatedToggles() {
         mountChat()
         val header = bounds("chat_fixed_header")
-        val shortcuts = bounds("app_fixed_topbar")
         val originalTimeline = bounds("chat_timeline")
         compose.onNode(hasSetTextAction()).performTextInput("只在内存中的测试草稿")
         repeat(2) {
             showKeyboard()
             assertTrue(abs(header.top - bounds("chat_fixed_header").top) < 2f)
-            assertTrue(abs(shortcuts.top - bounds("app_fixed_topbar").top) < 2f)
             assertTrue(bounds("chat_timeline").height < originalTimeline.height)
             compose.onNodeWithTag("app_bottom_navigation").assertDoesNotExist()
             val composer = bounds("chat_composer")

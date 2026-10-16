@@ -156,6 +156,7 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val latestInputText by rememberUpdatedState(inputText)
 
+
     var showHistory by remember { mutableStateOf(false) }
     var exportingConversation by remember { mutableStateOf<StoredConversation?>(null) }
     val exportLauncher = rememberLauncherForActivityResult(
@@ -660,7 +661,7 @@ internal fun ChatTopBar(
 
             Column {
                 Text(
-                    text = "小嘉然",
+                    text = "然然",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = TextPrimary,
@@ -670,6 +671,11 @@ internal fun ChatTopBar(
                     fontSize = 12.sp,
                     color = TextSecondary,
                 )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = onNavigateToLive2D) { Text("数字人", color = TextPrimary) }
+                    com.example.mydiary.live2d.CompanionToggle()
+                }
+
             }
 
             Spacer(modifier = Modifier.weight(1f))

@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import joinedload, selectinload, configure_mappers
 
 from app.models.database import Diary, DiaryMedia, DiaryMultimodalInsight, DiarySummary, VoiceTranscription
 from app.models.schemas import (
@@ -33,6 +33,8 @@ class MultimodalInsightService:
     """Build and query per-diary multimodal insights plus longitudinal portraits."""
 
     def __init__(self, db: AsyncSession):
+        # Backrefs must exist even when this is the first request after startup.
+        configure_mappers()
         self.db = db
         self.analysis_version = 1
 
@@ -411,7 +413,8 @@ class MultimodalInsightService:
         )
 
     async def _save_or_update(self, response: DiaryMultimodalInsightResponse) -> None:
-        stmt = select(DiaryMultimodalInsight).where(DiaryMultimodalInsight.diary_id == response.diary_id)
+        stmt = (select(DiaryMultimodalInsight).where(DiaryMultimodalInsight.diary_id == response.diary_id)
+                .with_for_update().execution_options(populate_existing=True))
         insight = (await self.db.execute(stmt)).scalar_one_or_none()
         payload = {
             "text_analysis": response.text_analysis.model_dump(),
@@ -425,6 +428,8 @@ class MultimodalInsightService:
             "confidence_score": response.fusion_analysis.confidence_score,
             "analysis_version": response.analysis_version,
         }
+        if insight is not None and (insight.fusion_analysis or {}).get("gentle_review"):
+            payload["fusion_analysis"]["gentle_review"] = insight.fusion_analysis["gentle_review"]
         if insight is None:
             insight = DiaryMultimodalInsight(diary_id=response.diary_id, **payload)
             self.db.add(insight)

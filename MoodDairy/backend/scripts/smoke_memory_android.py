@@ -6,6 +6,7 @@ sys.path.insert(0,str(ROOT))
 from dotenv import load_dotenv
 load_dotenv(ROOT/'.env')
 import asyncio,subprocess,os
+from android_instrumentation import run_instrumentation
 from uuid import uuid4
 from datetime import date
 import httpx
@@ -14,6 +15,7 @@ from app.models.memory_skills import EmotionRoom,RoomItem
 from app.security.jwt_auth import create_access_token
 from app.services import memory_skills as s
 from app.database import get_db
+from sqlalchemy import select
 
 async def main():
     async for db in get_db():
@@ -26,13 +28,22 @@ async def main():
     try:
         deleted=create_access_token(922337200000000001,'qa-deleted-account')
         tests='com.example.mydiary.MemorySkillsInstrumentedTest#nativeCreateRenderAndRoomWithDisposableAccount,com.example.mydiary.MemorySkillsInstrumentedTest#deletedAccountIsAnAuthFailureAndKeepsDraft'
-        result=await asyncio.to_thread(subprocess.run,[str(adb),'-s','emulator-5554','shell','am','instrument','-w','-e','class',tests,'-e','memory_qa_token',token,'-e','memory_qa_user',str(uid),'-e','memory_qa_deleted_token',deleted,'com.example.mydiary.test/androidx.test.runner.AndroidJUnitRunner'],capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=180)
+        include_main=os.getenv('MEMORY_QA_MAIN_PAGES')=='1'
+        if include_main: tests+=',com.example.mydiary.FunctionalUiInstrumentedTest#allMainPagesAndQuestionnaireRoutesMountWithoutCrash'
+        result=await asyncio.to_thread(run_instrumentation,[str(adb),'-s','emulator-5554','shell','am','instrument','-w','-e','class',tests,'-e','memory_qa_token',token,'-e','memory_qa_user',str(uid),'-e','qa_token',token,'-e','qa_user_id',str(uid),'-e','memory_qa_deleted_token',deleted,'com.example.mydiary.test/androidx.test.runner.AndroidJUnitRunner'],capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=300)
         print(result.stdout[-5000:]); print(result.stderr[-500:])
-        if result.returncode or 'OK (2 tests)' not in result.stdout: raise RuntimeError('Native acceptance did not pass')
+        expected=3 if include_main else 2
+        if result.returncode or f'OK ({expected} tests)' not in result.stdout: raise RuntimeError('Native acceptance did not pass')
     finally:
         async with httpx.AsyncClient(base_url='http://127.0.0.1:8000',headers={'Authorization':'Bearer '+token},timeout=60,trust_env=False) as client:
             rows=(await client.get('/future-letters')).json()
             for row in rows: await client.delete('/future-letters/'+row['id'])
+            async for db in get_db():
+                diary_ids=(await db.execute(select(Diary.id).where(Diary.user_id==uid))).scalars().all()
+            # The public deletion flow handles optional insight/media backrefs.
+            for diary_id in diary_ids:
+                response=await client.delete(f'/diaries/{diary_id}')
+                response.raise_for_status()
         async for db in get_db():
             row=await db.get(User,uid); await db.delete(row); await db.commit()
         print('Native acceptance account removed')

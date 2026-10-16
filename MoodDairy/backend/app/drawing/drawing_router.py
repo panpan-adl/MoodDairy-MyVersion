@@ -264,12 +264,24 @@ async def get_video_status(task_id: str) -> VideoStatusResponse:
             status=result["status"],
             video_url=result.get("video_url"),
             error=result.get("error"),
+            audio_status=result.get("audio_status"),
+            audio_error=result.get("audio_error"),
         )
     except VideoServiceError as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from exc
+
+
+@router.post("/video/audio/{task_id}/retry", response_model=VideoStatusResponse)
+async def retry_video_audio(task_id: str) -> VideoStatusResponse:
+    # Resolve the source through the existing provider task API, never accept a URL.
+    try:
+        result = await VideoService().get_video_status(task_id, retry_audio=True)
+        return VideoStatusResponse(**result)
+    except VideoServiceError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 # ========== 生成模式切换相关 ==========

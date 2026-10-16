@@ -72,7 +72,7 @@ fun Live2DScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "小嘉然",
+                        text = "数字人 · $currentModelName",
                         fontWeight = FontWeight.Bold,
                         color = TextPrimary
                     )

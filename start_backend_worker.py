@@ -14,6 +14,8 @@ sys.stdout = (logs / "server.stdout.log").open("w", encoding="utf-8", buffering=
 sys.stderr = (logs / "server.stderr.log").open("w", encoding="utf-8", buffering=1)
 os.chdir(backend)
 sys.path.insert(0, str(backend))
+from scripts.android_port_forward import supervise_connections
+threading.Thread(target=supervise_connections, name='android-connection-supervisor', daemon=True).start()
 worker_out=(logs / 'memory-worker.log').open('a',encoding='utf-8',buffering=1)
 def supervise_renderer():
     while True:
