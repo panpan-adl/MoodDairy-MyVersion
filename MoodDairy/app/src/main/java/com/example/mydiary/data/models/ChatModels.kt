@@ -57,6 +57,8 @@ data class ChatRequest(
     /** 深度思考开关 */
     @SerializedName("deep_thinking")
     val deepThinking: Boolean = false,
+    @SerializedName("companion_search_direct")
+    val companionSearchDirect: Boolean = false,
 )
 
 data class ChatResponse(

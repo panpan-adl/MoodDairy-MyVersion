@@ -7,6 +7,7 @@ import pytest
 from fastapi import HTTPException
 from app.models.personal_agent_schemas import PlanDraft, ReviewDraft
 from app.services import personal_agent_service as agent
+from app.services.diary_title_service import recommend_title
 
 
 def completion(content, finish_reason='stop'):
@@ -38,6 +39,24 @@ async def test_planning_request_allows_response_after_old_24_and_30_second_deadl
     assert len(calls) == 1
     assert plan.tasks[0].domain == 'study'
     assert calls[0].extensions['timeout']['read'] < 150  # Android AI client budget.
+    payload = json.loads(calls[0].content)
+    assert payload['max_tokens'] == 2200
+    assert 'thinking' not in payload
+
+
+@pytest.mark.asyncio
+async def test_title_uses_short_non_thinking_request(monkeypatch):
+    calls = []
+    def handle(request):
+        payload = json.loads(request.content)
+        calls.append(payload)
+        assert payload['thinking'] == {'type': 'disabled'}
+        assert payload['max_tokens'] == 128
+        return httpx.Response(200, json=completion('{"title":"清晨的豆浆"}'))
+    provider(monkeypatch, handle)
+    result = await recommend_title('清晨买了豆浆去上课。')
+    assert result.title == '清晨的豆浆'
+    assert len(calls) == 1
 
 
 @pytest.mark.asyncio

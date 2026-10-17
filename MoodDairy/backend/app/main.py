@@ -99,6 +99,9 @@ async def lifespan(app: FastAPI):
     from app.drawing.generator_config import is_drawing_enabled, is_sd_enabled
     print(f"AI Drawing enabled: {is_drawing_enabled()}, SD enabled: {is_sd_enabled()}")
 
+    from app.services.personal_agent_service import ensure_operation_schema
+    await ensure_operation_schema()
+
     from app.services.memory_skills import ensure_schema
     await ensure_schema()
 
@@ -213,3 +216,5 @@ if __name__ == "__main__":
 
 # Static responses bypass the BaseHTTPMiddleware stream wrappers.
 app.add_middleware(StaticMediaBypassMiddleware)
+from app.request_diagnostics import RequestDiagnosticsMiddleware
+app.add_middleware(RequestDiagnosticsMiddleware)

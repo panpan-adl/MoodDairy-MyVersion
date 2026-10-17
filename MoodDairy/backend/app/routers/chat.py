@@ -250,6 +250,7 @@ class ChatRequest(BaseModel):
 
     # 深度思考开关：开启后模型先推理再回答（更慢更聪明），并向前端推送思考过程
     deep_thinking: bool = Field(default=False, description="Enable deep thinking mode")
+    companion_search_direct: bool = Field(default=False, description="Direct API search from the companion")
 
     @model_validator(mode="after")
     def validate_payload(self) -> "ChatRequest":
@@ -597,10 +598,43 @@ async def _fetch_recent_face_signals(
         return []
 
 
+async def _handle_companion_search(request: ChatRequest, db: AsyncSession, arguments: Dict[str, Any]):
+    """Return actual search results directly, without pricing plans or provider billing prose."""
+    try:
+        result = await asyncio.wait_for(execute_tool(
+            tool_name="search_social_content", arguments=arguments, db=db,
+            user_id=request.user_id, conversation_id=request.conversation_id,
+            user_message=request.message, charge_confirmed=True, companion_search=True,
+        ), timeout=TOOL_EXECUTION_TIMEOUT_SECONDS)
+        items = result.data.get("items", []) if result.ok else []
+        ok = result.ok
+    except Exception:
+        logger.warning("Companion direct search unavailable", exc_info=False)
+        items, ok = [], False
+    yield {"type": "search_results", "keyword": arguments["keyword"],
+           "platform": arguments["platform"], "items": items, "locked": False,
+           "error_code": None if ok else "SEARCH_UNAVAILABLE"}
+    reply = (f"找到 {len(items)} 条相关内容，可以查看结果链接。" if items else
+             "暂时没有找到相关内容，可以换个关键词再试。" if ok else
+             "搜索暂时不可用，请稍后再试。")
+    yield _done_event(final_state="success" if ok else "error", reply=reply,
+                      error_code=None if ok else "SEARCH_UNAVAILABLE")
+
+
 async def _handle_agent_turn(request: ChatRequest, db: AsyncSession):
     deep_thinking = bool(getattr(request, "deep_thinking", False))
     message_text = _normalize_message(request.message, request.merged_image_data_urls)
     intent = match_client_action_intent(message_text)
+    if request.companion_search_direct and (not intent or intent[0] == "search_social_content"):
+        from app.services.social_search.charge_policy import companion_search_arguments
+        arguments = companion_search_arguments(message_text)
+        if not arguments and intent and intent[0] == "search_social_content":
+            from app.services.social_search.charge_policy import prepare_search_arguments
+            arguments = prepare_search_arguments(intent[1], message_text)
+        if arguments:
+            async for event in _handle_companion_search(request, db, arguments):
+                yield event
+            return
     full_context = _build_context(request.merged_diary_summaries) if intent else await _build_full_context(request.merged_diary_summaries, message_text)
     valid_images = _valid_images(request.merged_image_data_urls)
     face_signals = await _fetch_recent_face_signals(db, request.user_id)

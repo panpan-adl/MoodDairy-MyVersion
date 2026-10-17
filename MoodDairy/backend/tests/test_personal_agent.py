@@ -1,6 +1,7 @@
 """Personal-agent regressions with real ORM queries against an isolated SQLite database.
 Postgres advisory locking is bypassed here; retry behavior and account scoping are exercised.
 """
+import hashlib
 from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
@@ -14,14 +15,14 @@ from sqlalchemy import BigInteger, create_engine, select
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
 
-from app.models.database import User, Diary, Todo
+from app.models.database import User, Diary, Todo, PersonalAgentOperation
 from app.models.personal_agent_schemas import (TaskDraft, PlanDraft, PlanRequest, AdoptPlanRequest,
     TaskUpdate, ReviewRequest, SaveReviewRequest)
 from app.services import personal_agent_service as agent
 from app.routers.personal_agent import router
 from app.database import get_db
 from app.security.deps import get_current_user_id
-from app.security.field_crypto import decrypt_field
+from app.security.field_crypto import decrypt_field, encrypt_diary_fields
 
 @compiles(BigInteger, 'sqlite')
 def sqlite_bigint(element, compiler, **kw):
@@ -44,7 +45,7 @@ class AsyncSessionAdapter:
 @pytest.fixture
 def db():
     engine = create_engine('sqlite://')
-    for table in (User.__table__, Diary.__table__, Todo.__table__):
+    for table in (User.__table__, Diary.__table__, Todo.__table__, PersonalAgentOperation.__table__):
         table.create(engine)
     with Session(engine, expire_on_commit=False) as session:
         session.add_all([User(id=1, username='one', password='test'), User(id=2, username='two', password='test')])
@@ -99,11 +100,10 @@ async def test_adoption_is_atomic_and_retry_does_not_duplicate(db):
     await service.adopt(1, req)
     todos = await service.todos(1, req.date)
     diaries = db.session.scalars(select(Diary)).all()
-    assert len(todos) == 1 and len(diaries) == 1
+    assert len(todos) == 1 and len(diaries) == 0
+    assert len(db.session.scalars(select(PersonalAgentOperation)).all()) == 1
     assert agent.task_view(todos[0]).domain == 'work'
     assert agent.task_view(todos[0]).minutes == 30
-    assert diaries[0].is_private == 1
-    assert decrypt_field(diaries[0].content) == req.record
 
 @pytest.mark.asyncio
 async def test_same_title_is_not_readded_in_another_plan(db):
@@ -155,7 +155,8 @@ async def test_review_uses_owned_records_and_real_completion(db, monkeypatch):
     context = generate.call_args.args[1]
     assert context['tasks'][0]['is_done'] is True
     assert context['reflection'] == '有点累'
-    assert all('他人' not in d['content'] for d in context['recent_records'])
+    assert context['recent_records'] == []
+    assert 'record' not in context
 
 @pytest.mark.asyncio
 async def test_review_save_retry_is_idempotent_and_private(db):
@@ -195,34 +196,97 @@ async def test_agent_routes_require_login_before_database_access():
     assert response.status_code == 401
 
 @pytest.mark.asyncio
-async def test_record_only_save_creates_no_tasks_and_retry_is_idempotent(db):
-    from app.models.personal_agent_schemas import SaveRecordRequest
-    service = agent.PersonalAgentService(db)
-    req = SaveRecordRequest(date=date.today(), record='今天有些疲惫，想记录一下。', request_id=uuid4())
-    diary_id = await service.save_record(1, req)
-    assert await service.save_record(1, req) == diary_id
-    assert await service.todos(1, date.today()) == []
-    diary = db.session.get(Diary, diary_id)
-    assert diary.is_private == 1 and decrypt_field(diary.content) == req.record
+async def test_retired_record_route_returns_gone_without_creating_anything(db):
+    app = FastAPI()
+    app.include_router(router)
+    async def current_user():
+        return 1
+    async def current_db():
+        yield db
+    app.dependency_overrides[get_current_user_id] = current_user
+    app.dependency_overrides[get_db] = current_db
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+        response = await client.post('/agent/record', json=dict(
+            date=str(date.today()), record='不要存为日记', request_id=str(uuid4())))
+    assert response.status_code == 410
+    assert '仅用于安排任务' in response.json()['detail']
+    assert db.session.scalars(select(Diary)).all() == []
+    assert db.session.scalars(select(Todo)).all() == []
 
 @pytest.mark.asyncio
-async def test_record_and_review_request_ids_are_scoped_by_operation(db):
+async def test_retired_service_cannot_create_diary(db):
     from app.models.personal_agent_schemas import SaveRecordRequest
+    with pytest.raises(HTTPException) as exc:
+        await agent.PersonalAgentService(db).save_record(1, SaveRecordRequest(
+            date=date.today(), record='原文', request_id=uuid4()))
+    assert exc.value.status_code == 410
+    assert db.session.scalars(select(Diary)).all() == []
+
+@pytest.mark.asyncio
+async def test_receipts_scope_users_and_review_operation(db):
     service = agent.PersonalAgentService(db)
     token = uuid4()
-    record_id = await service.save_record(1, SaveRecordRequest(date=date.today(), record='今日记录', request_id=token))
-    review_id = await service.save_review(1, SaveReviewRequest(date=date.today(), content='晚间复盘', request_id=token))
-    assert record_id != review_id
+    await service.adopt(1, request(request_id=token))
+    await service.adopt(2, request(request_id=token))
+    assert len(await service.todos(1, date.today())) == 1
+    assert len(await service.todos(2, date.today())) == 1
+    assert len(db.session.scalars(select(PersonalAgentOperation)).all()) == 2
+    await service.save_review(1, SaveReviewRequest(date=date.today(), content='晚间复盘', request_id=token))
+    assert len(db.session.scalars(select(Diary)).all()) == 1
 
 @pytest.mark.asyncio
-async def test_failed_adoption_can_rollback_both_record_and_tasks(db, monkeypatch):
+async def test_retry_after_task_postponed_does_not_recreate_it(db):
+    service = agent.PersonalAgentService(db)
+    req = request()
+    todo = (await service.adopt(1, req))[0]
+    await service.update(1, todo.id, TaskUpdate(date=date.today() + timedelta(days=1)))
+    assert await service.adopt(1, req) == []
+    assert len(db.session.scalars(select(Todo)).all()) == 1
+    assert db.session.scalars(select(Diary)).all() == []
+
+@pytest.mark.asyncio
+async def test_legacy_diary_receipt_prevents_replay_and_history_is_preserved(db):
+    service = agent.PersonalAgentService(db)
+    req = request()
+    digest = hashlib.sha256(f'personal-agent:plan:1:{req.request_id}'.encode()).hexdigest()
+    title, content = encrypt_diary_fields('今日记录', '已有的历史记录')
+    db.add(Diary(user_id=1, diary_date=req.date, title=title, content=content, content_hash=digest))
+    await db.commit()
+    assert await service.adopt(1, req) == []
+    diaries = db.session.scalars(select(Diary)).all()
+    assert len(diaries) == 1 and decrypt_field(diaries[0].content) == '已有的历史记录'
+
+@pytest.mark.asyncio
+async def test_plan_does_not_save_input_and_review_keeps_owned_diaries(db, monkeypatch):
+    service = agent.PersonalAgentService(db)
+    title, content = encrypt_diary_fields('手写日记', '今天读了一本书')
+    db.add(Diary(user_id=1, diary_date=date.today(), title=title, content=content))
+    await db.commit()
+    generate = AsyncMock(return_value=PlanDraft(suggestion='安排一下', tasks=[]))
+    monkeypatch.setattr(agent, 'generate_json', generate)
+    await service.plan(1, PlanRequest(date=date.today(), record='安排英语学习'))
+    assert len(db.session.scalars(select(Diary)).all()) == 1
+    generate.return_value = agent.ReviewDraft(content='读书的一天')
+    await service.review(1, ReviewRequest(date=date.today(), reflection='很开心'))
+    context = generate.call_args.args[1]
+    assert context['recent_records'][0]['content'] == '今天读了一本书'
+    assert 'record' not in context
+
+@pytest.mark.asyncio
+async def test_failed_adoption_rolls_back_receipt_and_tasks_and_can_retry(db, monkeypatch):
     service = agent.PersonalAgentService(db)
     async def fail_commit():
         db.session.flush()
         raise RuntimeError('simulated database failure')
+    original_commit = db.commit
+    req = request()
     monkeypatch.setattr(db, 'commit', fail_commit)
     with pytest.raises(RuntimeError):
-        await service.adopt(1, request())
+        await service.adopt(1, req)
     db.session.rollback()
     assert db.session.scalars(select(Todo)).all() == []
     assert db.session.scalars(select(Diary)).all() == []
+    assert db.session.scalars(select(PersonalAgentOperation)).all() == []
+    monkeypatch.setattr(db, 'commit', original_commit)
+    assert len(await service.adopt(1, req)) == 1
+    assert len(db.session.scalars(select(PersonalAgentOperation)).all()) == 1

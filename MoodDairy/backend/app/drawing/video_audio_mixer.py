@@ -22,9 +22,10 @@ logger = logging.getLogger(__name__)
 _AUDIO_ASSET = Path(__file__).resolve().parent.parent / "assets" / "audio" / "healing.ogg"
 
 # 配乐参数
-_MUSIC_VOLUME = 0.55          # 背景音乐音量（避免盖过观感）
-_FADE_IN_SECONDS = 1.0        # 开头淡入
-_FADE_OUT_SECONDS = 2.0       # 结尾淡出
+_TARGET_LOUDNESS = -18        # LUFS: audible on phone speakers without clipping
+_FADE_IN_SECONDS = 0.2
+_FADE_OUT_SECONDS = 0.5
+_MIN_MEAN_VOLUME_DB = -28
 _FFMPEG_TIMEOUT = 120         # 单次混音超时（秒）
 _DOWNLOAD_TIMEOUT = 60        # 视频下载超时（秒）
 
@@ -110,19 +111,21 @@ def _mix_sync(video_url: str) -> str:
             logger.warning("下载无声视频失败，跳过配乐: %s", exc)
             raise AudioMixError("原视频下载失败，请重试配乐") from exc
 
-        # 2. 解析时长，构造结尾淡出时间点
+        # Normalize the actual short excerpt, rather than the whole music asset.
+        # Long fades and a fixed attenuation made five-second clips barely audible.
         duration = _probe_duration_seconds(silent_path)
         if not duration or duration <= 0:
-            logger.warning("无法解析视频时长，跳过配乐")
             raise AudioMixError("无法读取原视频时长")
-        fade_out_start = max(0.0, duration - _FADE_OUT_SECONDS)
+        fade_in = min(_FADE_IN_SECONDS, duration / 10)
+        fade_out = min(_FADE_OUT_SECONDS, duration / 10)
         audio_filter = (
-            f"volume={_MUSIC_VOLUME},"
-            f"afade=t=in:st=0:d={_FADE_IN_SECONDS},"
-            f"afade=t=out:st={fade_out_start:.2f}:d={_FADE_OUT_SECONDS}"
+            f"atrim=duration={duration},asetpts=PTS-STARTPTS,"
+            f"loudnorm=I={_TARGET_LOUDNESS}:TP=-1.5:LRA=7,"
+            f"afade=t=in:st=0:d={fade_in},"
+            f"afade=t=out:st={duration-fade_out:.3f}:d={fade_out}"
         )
 
-        # 3. ffmpeg 混音：视频流直接 copy，音频转 AAC；音乐比视频长，用 -shortest 裁齐
+        # Keep video unchanged, encode a default stereo AAC track for exports too.
         cmd = [
             ffmpeg, "-y",
             "-i", str(silent_path),
@@ -132,6 +135,9 @@ def _mix_sync(video_url: str) -> str:
             "-c:v", "copy",
             "-c:a", "aac",
             "-b:a", "128k",
+            "-ar", "48000",
+            "-ac", "2",
+            "-disposition:a:0", "default",
             "-af", audio_filter,
             "-t", str(duration),
             "-movflags", "+faststart",
@@ -153,12 +159,15 @@ def _mix_sync(video_url: str) -> str:
             raise AudioMixError("视频配乐处理超时")
 
         # Decode the completed AAC track before publishing it.
-        probe = subprocess.run([ffmpeg, "-v", "error", "-i", str(mixed_path),
-                                "-map", "0:a:0", "-f", "null", "-"],
-                               capture_output=True, timeout=30)
+        probe = subprocess.run([ffmpeg, "-i", str(mixed_path),
+                                "-map", "0:a:0", "-af", "volumedetect", "-f", "null", "-"],
+                               capture_output=True, text=True, timeout=30)
         mixed_duration = _probe_duration_seconds(mixed_path)
         if probe.returncode or not mixed_duration or abs(mixed_duration - duration) > 0.5:
             raise AudioMixError("配乐音轨校验失败")
+        mean = re.search(r"mean_volume:\s*(-?inf|[-\d.]+) dB", probe.stderr)
+        if not mean or float(mean.group(1)) < _MIN_MEAN_VOLUME_DB:
+            raise AudioMixError("配乐音量过低，请重试配乐")
 
         # 4. 上传 OSS
         try:

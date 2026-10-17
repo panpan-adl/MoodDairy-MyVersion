@@ -19,8 +19,6 @@ interface DiaryApiService {
     suspend fun relaxPlayback(@Path("songId") songId: String): Response<RelaxPlayback>
     @GET("agent/tasks/history")
     suspend fun agentTaskHistory(): Response<List<AgentTask>>
-    @POST("agent/record")
-    suspend fun agentSaveRecord(@Body request: AgentSaveRecord): Response<AgentSavedDiary>
     @GET("agent/today")
     suspend fun agentToday(@Query("date") date: String): Response<AgentToday>
     @POST("agent/plan")

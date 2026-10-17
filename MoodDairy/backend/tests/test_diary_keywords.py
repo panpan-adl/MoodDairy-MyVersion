@@ -49,6 +49,21 @@ def test_empty_or_symbols_do_not_get_example_words():
     assert review('。。。😊')['keywords'] == []
 
 
+@pytest.mark.parametrize('text', ['嗯', '今日完成作业。', '我不开心，也不怎么焦虑。', '。。。😊'])
+def test_dependency_free_extraction_keeps_real_source_when_model_fails(text):
+    from app.services.diary_keyword_service import extract_basic_review
+    value = extract_basic_review({'title': '', 'body': text, 'text_blocks': [], 'transcripts': []})
+    assert 1 <= len(value['keywords']) <= 12
+    assert all(word['text'] in text for word in value['keywords'])
+    if '不开心' in text:
+        assert all(word['category'] == 'neutral' for word in value['keywords'])
+
+
+def test_dependency_free_empty_content_stays_empty():
+    from app.services.diary_keyword_service import extract_basic_review
+    assert not extract_basic_review({'title': '', 'body': '', 'text_blocks': [], 'transcripts': []})['keywords']
+
+
 def test_available_local_keybert_model_runs_without_network(monkeypatch):
     import requests
     from app.services.diary_keyword_service import _model_path

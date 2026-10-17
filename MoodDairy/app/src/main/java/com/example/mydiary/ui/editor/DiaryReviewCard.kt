@@ -41,6 +41,7 @@ internal val DiarySerif = FontFamily(Font(R.font.diary_serif, FontWeight.Normal)
 internal fun DiaryReviewCard(
     review: DiaryReviewResponse?, dirty: Boolean, generating: Boolean,
     error: String?, onGenerate: () -> Unit, modifier: Modifier = Modifier,
+    hasSavedText: Boolean = false,
 ) {
     var opened by rememberSaveable(review?.diaryId) { mutableStateOf(false) }
     var waitingToOpen by remember { mutableStateOf(false) }
@@ -49,7 +50,7 @@ internal fun DiaryReviewCard(
     val words = review?.keywords.orEmpty().filter { it.text.isNotBlank() }
         .distinctBy { it.text }.sortedByDescending { it.weight }.take(12)
     val available = words.isNotEmpty() || review?.body != null
-    val canGenerate = !generating && !dirty && review?.hasText != false
+    val canGenerate = !generating && hasSavedText
     LaunchedEffect(review?.generatedAt, generating, error) {
         if (shouldOpenDiaryReview(waitingToOpen, generating, available, error)) {
             opened = true; replay++; waitingToOpen = false
@@ -84,15 +85,16 @@ internal fun DiaryReviewCard(
                 val envelopeHeight = maxWidth * .40f
                 val envelopeWidth = envelopeHeight / .69f
                 Box(Modifier.fillMaxWidth().height(envelopeHeight)) {
-                    DiaryPaperEnvelope(flap.value, Modifier.width(envelopeWidth)
-                        .fillMaxHeight().align(Alignment.Center))
-                    Box(Modifier.align(Alignment.BottomCenter).padding(bottom = envelopeHeight * .10f)
-                        .fillMaxWidth(.76f).height(envelopeHeight * .49f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable(enabled = available || canGenerate) {
+                    Box(Modifier.width(envelopeWidth).fillMaxHeight().align(Alignment.Center)
+                        .clickable(enabled = available || canGenerate, onClickLabel = if (opened) "收起信笺" else "打开信笺") {
                             if (available) { opened = !opened; if (opened) replay++ }
                             else { waitingToOpen = true; onGenerate() }
-                        }, contentAlignment = Alignment.BottomCenter) {
+                        }) {
+                        DiaryPaperEnvelope(flap.value, Modifier.fillMaxSize())
+                    }
+                    Box(Modifier.align(Alignment.BottomCenter).padding(bottom = envelopeHeight * .10f)
+                        .fillMaxWidth(.76f).height(envelopeHeight * .49f)
+                        .clip(RoundedCornerShape(12.dp)), contentAlignment = Alignment.BottomCenter) {
                         Text(if (generating) "正在整理词语…" else if (opened) "轻触收起信笺" else "轻触，打开这篇日记",
                             Modifier.padding(bottom = 6.dp), fontFamily = DiarySerif,
                             color = DiaryMutedGreen, fontSize = 11.sp)
@@ -101,11 +103,12 @@ internal fun DiaryReviewCard(
             }
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (dirty) Text("文字有修改，保存后可更新关键词；已有信笺仍可查看。", color = DiaryMutedGreen, fontSize = 12.sp)
+                if (dirty) Text(if (hasSavedText) "关键词使用已保存的文字，不必等待整篇日记保存。"
+                    else "先点文字卡片的 ✓ 保存文字，就能整理关键词；已有信笺仍可打开。", color = DiaryMutedGreen, fontSize = 12.sp)
                 else if (review?.hasText == false) Text("补充一些文字后，就能留下情绪关键词。", color = DiaryMutedGreen, fontSize = 12.sp)
                 if (review?.stale == true && !dirty) Text("文字已更新，重新整理后再回看。", color = Color(0xFF997F60), fontSize = 12.sp)
                 if (generating) LinearProgressIndicator(Modifier.fillMaxWidth(), color = DiaryGreen)
-                error?.takeUnless { dirty }?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
                 FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                     TextButton(enabled = canGenerate, onClick = { waitingToOpen = true; onGenerate() }) {
                         Text(if (available) "更新关键词" else "整理关键词", color = DiaryGreen)
@@ -116,6 +119,9 @@ internal fun DiaryReviewCard(
                     }
                 }
                 if (details) review?.body?.let {
+                    if (review.extractionMethod == "device-lexicon+source-phrases") {
+                        Text("本次由设备离线整理，结果尚未同步到服务端。", color = DiaryMutedGreen, fontSize = 12.sp)
+                    }
                     Text(it, color = DiaryMutedGreen, fontSize = 13.sp, lineHeight = 22.sp)
                 }
                 Text("词语来自这篇文字 · 大小表示相对重要程度", color = DiaryMutedGreen,

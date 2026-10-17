@@ -50,8 +50,3 @@ data class AgentSaveReview(
 )
 data class AgentSavedDiary(@SerializedName("diary_id") val diaryId: Long)
 
-data class AgentSaveRecord(
-    val date: String,
-    val record: String,
-    @SerializedName("request_id") val requestId: String
-)

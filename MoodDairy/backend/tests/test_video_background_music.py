@@ -62,11 +62,12 @@ async def test_audio_failure_requires_explicit_retry_and_does_not_regenerate_vid
     provider.create_video_task.assert_not_called()
 
 
-def test_real_ffmpeg_output_has_audible_music_and_keeps_video_duration(tmp_path, monkeypatch):
+@pytest.mark.parametrize("duration", [1, 3, 5.08])
+def test_real_ffmpeg_output_has_audible_music_and_keeps_video_duration(tmp_path, monkeypatch, duration):
     ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
     source = tmp_path / 'silent.mp4'
     subprocess.run([ffmpeg, '-y', '-f', 'lavfi', '-i', 'color=c=lightblue:s=128x128:r=12',
-                    '-t', '3', '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', str(source)],
+                    '-t', str(duration), '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', str(source)],
                    check=True, capture_output=True, timeout=30)
     response = MagicMock()
     response.iter_bytes.return_value = [source.read_bytes()]
@@ -85,12 +86,14 @@ def test_real_ffmpeg_output_has_audible_music_and_keeps_video_duration(tmp_path,
     oss.upload_bytes.side_effect = upload
     monkeypatch.setattr(mixer, '_get_oss_service', lambda: oss)
     assert mixer._mix_sync('https://example.com/silent.mp4').endswith('/music.mp4')
-    assert abs(mixer._probe_duration_seconds(saved) - 3) < 0.5
+    assert abs(mixer._probe_duration_seconds(saved) - duration) < 0.5
     probe = subprocess.run([ffmpeg, '-i', str(saved), '-map', '0:a:0', '-af', 'volumedetect',
                             '-f', 'null', '-'], capture_output=True, text=True, timeout=30)
     assert probe.returncode == 0 and 'Audio: aac' in probe.stderr
     volume = re.search(r'mean_volume:\s*([-\d.]+) dB', probe.stderr)
-    assert volume and float(volume.group(1)) > -65
+    assert volume and float(volume.group(1)) > -26
+    peak = re.search(r'max_volume:\s*([-\d.]+) dB', probe.stderr)
+    assert peak and float(peak.group(1)) <= 0
 
 
 def test_missing_music_and_storage_fail_explicitly(tmp_path, monkeypatch):
@@ -120,3 +123,26 @@ async def test_status_alias_and_retry_route_keep_audio_fields(monkeypatch):
         result = await c.post('/drawing/video/audio/qa/retry')
         assert result.status_code == 200 and result.json()['video_url'] is None
     service.get_video_status.assert_awaited_with('qa', retry_audio=True)
+
+
+def test_silent_music_is_rejected_before_upload(tmp_path, monkeypatch):
+    ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+    source = tmp_path / 'source.mp4'
+    music = tmp_path / 'silent.wav'
+    subprocess.run([ffmpeg, '-y', '-f', 'lavfi', '-i', 'color=s=128x128:r=12',
+                    '-t', '1', '-an', '-c:v', 'libx264', str(source)], check=True, capture_output=True)
+    subprocess.run([ffmpeg, '-y', '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo',
+                    '-t', '1', str(music)], check=True, capture_output=True)
+    monkeypatch.setattr(mixer, '_AUDIO_ASSET', music)
+    response = MagicMock()
+    response.iter_bytes.return_value = [source.read_bytes()]
+    stream = MagicMock()
+    stream.__enter__.return_value = response
+    client = MagicMock()
+    client.__enter__.return_value.stream.return_value = stream
+    monkeypatch.setattr(mixer.httpx, 'Client', lambda **kwargs: client)
+    oss = MagicMock()
+    monkeypatch.setattr(mixer, '_get_oss_service', lambda: oss)
+    with pytest.raises(mixer.AudioMixError, match='音量过低|合成失败'):
+        mixer._mix_sync('https://example.com/silent.mp4')
+    oss.upload_bytes.assert_not_called()

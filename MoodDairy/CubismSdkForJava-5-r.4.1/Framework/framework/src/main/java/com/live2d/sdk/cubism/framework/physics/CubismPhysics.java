@@ -473,6 +473,11 @@ public class CubismPhysics {
         float deltaTimeSeconds,
         float airResistance
     ) {
+        final ParticleScratch scratch = particleScratch.get();
+        final CubismVector2 direction = scratch.direction;
+        final CubismVector2 velocity = scratch.velocity;
+        final CubismVector2 force = scratch.force;
+        final CubismVector2 currentGravity = scratch.gravity;
         float totalRadian;
         float delay;
         float radian;
@@ -536,10 +541,16 @@ public class CubismPhysics {
 
     // There are only used by 'updateParticles' method.
     // Avoid creating a new CubismVector2 instance.
-    private static final CubismVector2 direction = new CubismVector2();
-    private static final CubismVector2 velocity = new CubismVector2();
-    private static final CubismVector2 force = new CubismVector2();
-    private static final CubismVector2 currentGravity = new CubismVector2();
+    private static final class ParticleScratch {
+        final CubismVector2 direction = new CubismVector2();
+        final CubismVector2 velocity = new CubismVector2();
+        final CubismVector2 force = new CubismVector2();
+        final CubismVector2 gravity = new CubismVector2();
+    }
+    // Hair and clothing physics on different model surfaces must not share vectors.
+    private static final ThreadLocal<ParticleScratch> particleScratch = new ThreadLocal<ParticleScratch>() {
+        @Override protected ParticleScratch initialValue() { return new ParticleScratch(); }
+    };
 
     private static void updateParticlesForStabilization(
         List<CubismPhysicsParticle> strand,
@@ -550,6 +561,9 @@ public class CubismPhysics {
         CubismVector2 windDirection,
         float thresholdValue
     ) {
+        final ParticleScratch scratch = stabilizationScratch.get();
+        final CubismVector2 currentGravityForStablization = scratch.gravity;
+        final CubismVector2 forceForStabilization = scratch.force;
         int i;
         float totalRadian;
 
@@ -581,8 +595,9 @@ public class CubismPhysics {
     }
 
     // updateParticlesForStabilization関数内でのみ使われるキャッシュ変数
-    private static final CubismVector2 currentGravityForStablization = new CubismVector2();
-    private static final CubismVector2 forceForStabilization = new CubismVector2();
+    private static final ThreadLocal<ParticleScratch> stabilizationScratch = new ThreadLocal<ParticleScratch>() {
+        @Override protected ParticleScratch initialValue() { return new ParticleScratch(); }
+    };
 
     private static void updateOutputParameterValue(
         float[] parameterValue,

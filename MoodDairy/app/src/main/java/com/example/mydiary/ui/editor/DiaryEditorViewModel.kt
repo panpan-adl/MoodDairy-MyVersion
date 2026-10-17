@@ -379,8 +379,19 @@ class DiaryEditorViewModel @Inject constructor(
         val state = _uiState.value
         if (state.reviewGenerating) return
         val diaryId = state.diaryId
-        if (diaryId == null || state.hasUnsavedChanges || state.isSaving) {
+        if (state.isSaving) {
             _uiState.update { it.copy(reviewError = "先保存这篇日记，再一起回顾吧。") }
+            return
+        }
+        if (diaryId == null || state.hasUnsavedChanges) {
+            val text = confirmedDiaryReviewText(state)
+            if (text.isBlank()) {
+                _uiState.update { it.copy(reviewError = "先点文字卡片的 ✓ 保存文字，再整理关键词吧。") }
+                return
+            }
+            ++reviewRequestSerial
+            _uiState.update { it.copy(diaryReview = localDiaryReview(diaryId ?: 0L, text, "confirmed-text"),
+                reviewError = null, reviewGenerating = false) }
             return
         }
         val serial = ++reviewRequestSerial
@@ -401,13 +412,23 @@ class DiaryEditorViewModel @Inject constructor(
                     refresh = cached.data.body != null)
             } else cached
             if (serial != reviewRequestSerial || _uiState.value.diaryId != diaryId) return@launch
+            val savedText = diaryReviewText(media)
+            // Network/model failures still produce real, explicitly local extraction from the saved snapshot.
+            val offline = if (savedText.isNotBlank() && (result !is ApiResult.Success ||
+                    (result.data.hasText && result.data.keywords.isEmpty()))) {
+                val failure = result as? ApiResult.Error
+                if (failure?.code == 401 || failure?.code == 403 || failure?.code == 404 || failure?.code == 409) null
+                else localDiaryReview(diaryId, savedText, (cached as? ApiResult.Success)?.data?.contentVersion ?: "local")
+            } else null
             _uiState.update { current ->
                 val changed = current.hasUnsavedChanges || current.title != title || current.mediaItems != media
                 when (result) {
                     is ApiResult.Success -> current.copy(reviewGenerating = false,
-                        diaryReview = result.data.copy(stale = result.data.stale || changed),
+                        diaryReview = (offline ?: result.data).copy(stale = result.data.stale || changed),
                         reviewError = if (changed) "内容有了变化，保存后再一起回顾吧。" else null)
-                    else -> current.copy(reviewGenerating = false,
+                    else -> if (offline != null && !changed) current.copy(reviewGenerating = false,
+                        diaryReview = offline, reviewError = null)
+                    else current.copy(reviewGenerating = false,
                         reviewError = "这次没能整理出来，你写下的内容还在，可以稍后再试。")
                 }
             }
@@ -822,7 +843,10 @@ class DiaryEditorViewModel @Inject constructor(
                         id
                     }
                     is ApiResult.Error -> {
-                        _uiState.update { it.copy(isSaving = false, errorMessage = phase1.message ?: "保存日记元数据失败") }
+                        _uiState.update { it.copy(isSaving = false, hasUnsavedChanges = true,
+                                errorMessage = if (phase1.exception is java.io.IOException)
+                                    "保存结果未确认，编辑内容已保留。请先查看日记列表确认是否已保存，再重试。"
+                                else phase1.message) }
                         return@launch
                     }
                     else -> {

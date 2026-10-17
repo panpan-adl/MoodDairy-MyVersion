@@ -1,4 +1,5 @@
 package com.example.mydiary.ui.chat
+import com.example.mydiary.ui.theme.PrimaryDark
 
 import android.Manifest
 import android.content.Context
@@ -109,6 +110,7 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.compose.AsyncImage
 import com.example.mydiary.data.local.StoredConversation
@@ -153,7 +155,6 @@ fun ChatScreen(
     val errorMessage by viewModel.errorMessage.collectAsState()
     val emotionConsent by viewModel.emotionConsentGranted.collectAsState()
     val emotionEnabled by viewModel.emotionCaptureEnabled.collectAsState()
-    val isVip by viewModel.isVip.collectAsState()
     val shouldAskEmotionConsent by viewModel.shouldAskEmotionConsent.collectAsState()
     val isEmotionCapturing by viewModel.isEmotionCapturing.collectAsState()
     val deepThinkingEnabled by viewModel.deepThinkingEnabled.collectAsState()
@@ -288,6 +289,19 @@ fun ChatScreen(
     LaunchedEffect(userId) {
         viewModel.initializeChat(userId)
     }
+    LaunchedEffect(userId, lifecycleOwner, viewModel) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            com.example.mydiary.live2d.CompanionChatInput.inputs.collect { input ->
+                if (input.userId == userId) viewModel.submitCompanionInput(input)
+            }
+        }
+    }
+    LaunchedEffect(isLoading) {
+        com.example.mydiary.live2d.PetOverlayService.setChatReplyBusy(isLoading)
+    }
+    DisposableEffect(viewModel) {
+        onDispose { com.example.mydiary.live2d.PetOverlayService.setChatReplyBusy(false) }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.clientActions.collect { action ->
@@ -316,8 +330,7 @@ fun ChatScreen(
             header = {
                 ChatTopBar(
                     onNavigateToLive2D = onNavigateToLive2D,
-                    onNavigateToRecharge = onNavigateToRecharge,
-                    isVip = isVip,
+                    onOpenRelax = { onClientAction(ChatClientAction("open_relax", emptyMap())) },
                     isEmotionCapturing = isEmotionCapturing,
                     faceEmotionStatus = faceEmotionStatus,
                     selectedMood = selectedMood,
@@ -327,6 +340,8 @@ fun ChatScreen(
                         showHistory = true
                     },
                     onNewConversation = { viewModel.startNewConversation() },
+                    deepThinkingEnabled = deepThinkingEnabled,
+                    onToggleDeepThinking = viewModel::toggleDeepThinking,
                 )
 
             },
@@ -374,8 +389,6 @@ fun ChatScreen(
                             selectedImageUris.clear()
                         }
                     },
-                    deepThinkingEnabled = deepThinkingEnabled,
-                    onToggleDeepThinking = { viewModel.toggleDeepThinking(it) },
                 )
             },
         ) {
@@ -632,14 +645,15 @@ private fun EditPlanDialog(
 @Composable
 internal fun ChatTopBar(
     onNavigateToLive2D: () -> Unit = {},
-    onNavigateToRecharge: () -> Unit = {},
-    isVip: Boolean = false,
+    onOpenRelax: () -> Unit = {},
     isEmotionCapturing: Boolean = false,
     faceEmotionStatus: FaceEmotionStatusUi = FaceEmotionStatusUi.Recognizing,
     selectedMood: String? = null,
     onSelectMood: () -> Unit = {},
     onOpenHistory: () -> Unit = {},
     onNewConversation: () -> Unit = {},
+    deepThinkingEnabled: Boolean = false,
+    onToggleDeepThinking: (Boolean) -> Unit = {},
 ) {
     val moodStatus = selectedMood?.let { FaceEmotionStatusUi.fromObservation(it, 1f) }
         ?: if (isEmotionCapturing) faceEmotionStatus else FaceEmotionStatusUi("🙂", "选择心情", "点击选择此刻的心情")
@@ -745,7 +759,7 @@ internal fun ChatTopBar(
                 IconButton(onClick = { menuExpanded = true }) {
                     Icon(
                         imageVector = Icons.Outlined.MoreVert,
-                        contentDescription = "more",
+                        contentDescription = "对话设置",
                         tint = TextSecondary,
                     )
                 }
@@ -754,20 +768,32 @@ internal fun ChatTopBar(
                     onDismissRequest = { menuExpanded = false },
                 ) {
                     DropdownMenuItem(
+                        text = { Text("放松一下", color = TextPrimary) },
+                        leadingIcon = { Icon(Icons.Default.MusicNote, null, tint = PrimaryDark) },
+                        onClick = { menuExpanded = false; onOpenRelax() },
+                    )
+                    DropdownMenuItem(
                         text = {
-                            Text("全网搜索 · 密钥账户")
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("深度思考", color = TextPrimary)
+                                Text("分析更深入，回复稍慢", fontSize = 12.sp, color = TextSecondary)
+                            }
                         },
                         leadingIcon = {
                             Icon(
-                                imageVector = Icons.Default.Star,
+                                imageVector = Icons.Default.Psychology,
                                 contentDescription = null,
-                                tint = Color(0xFFFF6B81),
+                                tint = if (deepThinkingEnabled) Primary else TextSecondary,
                             )
                         },
-                        onClick = {
-                            menuExpanded = false
-                            onNavigateToRecharge()
+                        trailingIcon = {
+                            // The entire menu row owns the click, including its switch area.
+                            androidx.compose.material3.Switch(
+                                checked = deepThinkingEnabled,
+                                onCheckedChange = null,
+                            )
                         },
+                        onClick = { onToggleDeepThinking(!deepThinkingEnabled) },
                     )
                 }
             }
@@ -1023,8 +1049,6 @@ internal fun ChatInputBar(
     onVoiceInput: () -> Unit,
     onRemoveImage: (Int) -> Unit,
     onSend: () -> Unit,
-    deepThinkingEnabled: Boolean = false,
-    onToggleDeepThinking: (Boolean) -> Unit = {},
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -1067,48 +1091,6 @@ internal fun ChatInputBar(
                         }
                     }
                 }
-            }
-
-            // 深度思考开关：开启后 AI 会先推理再回答，并展示思考过程（更慢但更聪明）
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Surface(
-                    modifier = Modifier.clip(RoundedCornerShape(16.dp)),
-                    color = if (deepThinkingEnabled) Primary.copy(alpha = 0.14f) else Color.Transparent,
-                    shape = RoundedCornerShape(16.dp),
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        if (deepThinkingEnabled) Primary else DividerColor,
-                    ),
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .clickable { onToggleDeepThinking(!deepThinkingEnabled) }
-                            .padding(horizontal = 10.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Psychology,
-                            contentDescription = "deep_thinking",
-                            tint = if (deepThinkingEnabled) Primary else TextTertiary,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "深度思考",
-                            fontSize = 12.sp,
-                            color = if (deepThinkingEnabled) Primary else TextTertiary,
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = if (deepThinkingEnabled) "已开启：AI 先思考再回答，速度较慢" else "开启后回答更深入，速度较慢",
-                    fontSize = 10.sp,
-                    color = TextTertiary,
-                )
             }
 
             Row(

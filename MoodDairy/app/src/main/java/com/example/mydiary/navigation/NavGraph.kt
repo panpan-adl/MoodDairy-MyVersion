@@ -110,7 +110,8 @@ object Routes {
 fun NavGraph(
     navController: NavHostController,
     startDestination: String,
-    sessionManager: SessionManager
+    sessionManager: SessionManager,
+    relaxController: com.example.mydiary.ui.relax.RelaxPlaybackController,
 ) {
     val context = LocalContext.current
     val navDebugLog = remember { java.io.File(context.filesDir, "debug_nav.log") }
@@ -643,10 +644,10 @@ fun NavGraph(
         }
 
         composable(Routes.RELAX) {
-            RelaxScreen(onNavigateBack = { navController.popBackStack() })
+            RelaxScreen(onNavigateBack = { navController.popBackStack() }, controller = relaxController)
         }
         composable(Routes.WHITE_NOISE) {
-            RelaxScreen(onNavigateBack = { navController.popBackStack() })
+            RelaxScreen(onNavigateBack = { navController.popBackStack() }, controller = relaxController, initialTab = 1)
         }
 
         composable(Routes.LIVE2D) {
@@ -700,8 +701,7 @@ internal fun handleClientAction(
             } else {
                 Log.w(TAG, "未找到匹配音频: soundName=$soundName")
             }
-            // 同时跳转到白噪音页面，方便用户看到播放状态
-            navController.navigate(Routes.WHITE_NOISE)
+            // Return to Assistant through the shared controller only after playback starts.
         }
         "open_test_hub" -> navController.navigate(Routes.TEST_HUB)
         "open_test" -> {

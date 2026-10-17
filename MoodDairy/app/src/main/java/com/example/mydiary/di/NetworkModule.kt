@@ -2,11 +2,15 @@ package com.example.mydiary.di
 
 import com.example.mydiary.data.network.ApiEndpoints
 import com.example.mydiary.data.network.DiaryApiService
+import com.example.mydiary.data.network.ReadRecoveryInterceptor
 import com.google.gson.Gson
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import android.util.Log
+import com.example.mydiary.data.network.LocalApiTransport
+import com.example.mydiary.data.network.RequestDiagnosticsInterceptor
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -38,11 +42,10 @@ object NetworkModule {
     @Singleton
     @Named("connectionClose")
     fun provideConnectionCloseInterceptor(): Interceptor = Interceptor { chain ->
-        chain.proceed(
-            chain.request().newBuilder()
-                .addHeader("Connection", "close")
-                .build()
-        )
+        val request = chain.request()
+        chain.proceed(if (LocalApiTransport.isLocal(request.url.host)) {
+            request.newBuilder().header("Connection", "close").build()
+        } else request)
     }
 
     /**
@@ -57,12 +60,14 @@ object NetworkModule {
         @Named("connectionClose") connectionCloseInterceptor: Interceptor,
         authInterceptor: AuthInterceptor,
     ): OkHttpClient {
-        return OkHttpClient.Builder()
+        return LocalApiTransport.configure(OkHttpClient.Builder(), ApiEndpoints.apiBaseUrl)
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
+            .addInterceptor(RequestDiagnosticsInterceptor { Log.i("ApiRequest", it) })
             .addInterceptor(authInterceptor)
             .addInterceptor(connectionCloseInterceptor)
+            .addInterceptor(ReadRecoveryInterceptor())
             .addInterceptor(loggingInterceptor)
             .retryOnConnectionFailure(false)
             .build()
@@ -80,12 +85,14 @@ object NetworkModule {
         @Named("connectionClose") connectionCloseInterceptor: Interceptor,
         authInterceptor: AuthInterceptor,
     ): OkHttpClient {
-        return OkHttpClient.Builder()
+        return LocalApiTransport.configure(OkHttpClient.Builder(), ApiEndpoints.apiBaseUrl)
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(150, TimeUnit.SECONDS)
             .writeTimeout(150, TimeUnit.SECONDS)
+            .addInterceptor(RequestDiagnosticsInterceptor { Log.i("ApiRequest", it) })
             .addInterceptor(authInterceptor)
             .addInterceptor(connectionCloseInterceptor)
+            .addInterceptor(ReadRecoveryInterceptor())
             .addInterceptor(loggingInterceptor)
             .retryOnConnectionFailure(false)
             .build()

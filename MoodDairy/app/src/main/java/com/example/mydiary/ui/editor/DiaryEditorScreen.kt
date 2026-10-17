@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -142,6 +143,13 @@ fun DiaryEditorScreen(
     
     // 本地UI状态
     var showMediaMenu by remember { mutableStateOf(false) }
+    val editorListState = rememberLazyListState()
+    LaunchedEffect(showMediaMenu) {
+        if (showMediaMenu) {
+            val menuIndex = uiState.mediaItems.size + if (uiState.mediaItems.isEmpty()) 1 else 0
+            editorListState.animateScrollToItem(menuIndex)
+        }
+    }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     
@@ -615,6 +623,7 @@ fun DiaryEditorScreen(
                     )
                     // Reflection shares the document scroll area instead of constraining media.
                     LazyColumn(
+                        state = editorListState,
                         modifier = Modifier.fillMaxWidth().weight(1f).padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
@@ -659,89 +668,88 @@ fun DiaryEditorScreen(
                                 )
                             }
                         }
-                        item(key = "diary_review") {
+                        if (uiState.mediaItems.isEmpty()) {
+                            item { Text("点击右下角按钮添加内容",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        }
+                        // 媒体添加菜单
+                        if (showMediaMenu) item(key = "add_media_menu") {
+                            MediaAddMenu(
+                                onDismiss = { showMediaMenu = false },
+                                // 图片选项
+                                onTakePhoto = {
+                                    // 检查相机权限
+                                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) 
+                                        == PackageManager.PERMISSION_GRANTED) {
+                                        tempPhotoUri = createTempImageFile()
+                                        tempPhotoUri?.let { takePictureLauncher.launch(it) }
+                                    } else {
+                                        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                    }
+                                    showMediaMenu = false
+                                },
+                                onPickImage = {
+                                    imagePickerLauncher.launch("image/*")
+                                    showMediaMenu = false
+                                },
+                                // 语音选项
+                                onRecordAudio = {
+                                    // 检查录音权限
+                                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) 
+                                        == PackageManager.PERMISSION_GRANTED) {
+                                        showAudioRecordingDialog = true
+                                    } else {
+                                        audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                    }
+                                    showMediaMenu = false
+                                },
+                                onPickAudio = {
+                                    audioPickerLauncher.launch("audio/*")
+                                    showMediaMenu = false
+                                },
+                                // 视频选项
+                                onRecordVideo = {
+                                    // 检查相机权限
+                                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) 
+                                        == PackageManager.PERMISSION_GRANTED) {
+                                        tempVideoUri = createTempVideoFile()
+                                        tempVideoUri?.let { takeVideoLauncher.launch(it) }
+                                    } else {
+                                        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                    }
+                                    showMediaMenu = false
+                                },
+                                onPickVideo = {
+                                    videoPickerLauncher.launch("video/*")
+                                    showMediaMenu = false
+                                },
+                                // 文字选项
+                                onTextClick = {
+                                    val textItem = MediaItem.Text(
+                                        id = "text_${System.currentTimeMillis()}",  // 使用前缀确保是临时 ID
+                                        content = "",
+                                        order = 0,
+                                        createdAt = Instant.now()
+                                    )
+                                    viewModel.addMediaItem(textItem)
+                                    showMediaMenu = false
+                                }
+                            )
+                        }
+                        if (shouldShowDiaryReview(uiState)) item(key = "diary_review") {
                             DiaryReviewCard(
                                 review = uiState.diaryReview,
                                 dirty = uiState.hasUnsavedChanges || uiState.diaryId == null,
                                 generating = uiState.reviewGenerating,
                                 error = uiState.reviewError,
-                                onGenerate = viewModel::generateDiaryReview
+                                onGenerate = viewModel::generateDiaryReview,
+                                hasSavedText = confirmedDiaryReviewText(uiState).isNotBlank(),
                             )
-                        }
-                        if (uiState.mediaItems.isEmpty()) {
-                            item { Text("点击右下角按钮添加内容",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(vertical = 24.dp)) }
                         }
                     }
                 }
                 
 
-                // 媒体添加菜单
-                if (showMediaMenu) {
-                    MediaAddMenu(
-                        onDismiss = { showMediaMenu = false },
-                        // 图片选项
-                        onTakePhoto = {
-                            // 检查相机权限
-                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) 
-                                == PackageManager.PERMISSION_GRANTED) {
-                                tempPhotoUri = createTempImageFile()
-                                tempPhotoUri?.let { takePictureLauncher.launch(it) }
-                            } else {
-                                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                            }
-                            showMediaMenu = false
-                        },
-                        onPickImage = {
-                            imagePickerLauncher.launch("image/*")
-                            showMediaMenu = false
-                        },
-                        // 语音选项
-                        onRecordAudio = {
-                            // 检查录音权限
-                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) 
-                                == PackageManager.PERMISSION_GRANTED) {
-                                showAudioRecordingDialog = true
-                            } else {
-                                audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                            }
-                            showMediaMenu = false
-                        },
-                        onPickAudio = {
-                            audioPickerLauncher.launch("audio/*")
-                            showMediaMenu = false
-                        },
-                        // 视频选项
-                        onRecordVideo = {
-                            // 检查相机权限
-                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) 
-                                == PackageManager.PERMISSION_GRANTED) {
-                                tempVideoUri = createTempVideoFile()
-                                tempVideoUri?.let { takeVideoLauncher.launch(it) }
-                            } else {
-                                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                            }
-                            showMediaMenu = false
-                        },
-                        onPickVideo = {
-                            videoPickerLauncher.launch("video/*")
-                            showMediaMenu = false
-                        },
-                        // 文字选项
-                        onTextClick = {
-                            val textItem = MediaItem.Text(
-                                id = "text_${System.currentTimeMillis()}",  // 使用前缀确保是临时 ID
-                                content = "",
-                                order = 0,
-                                createdAt = Instant.now()
-                            )
-                            viewModel.addMediaItem(textItem)
-                            showMediaMenu = false
-                        }
-                    )
-                }
-                
                 // 录音对话框
                 if (showAudioRecordingDialog) {
                     AudioRecordingDialog(
@@ -1033,8 +1041,7 @@ private fun MediaAddMenu(
 ) {
     Surface(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
+            .fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.secondaryContainer,
         shadowElevation = 8.dp

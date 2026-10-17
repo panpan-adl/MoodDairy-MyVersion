@@ -118,14 +118,6 @@ class TodayViewModel @Inject constructor(
             _state.update { it.copy(plan = plan, planRequestId = UUID.randomUUID().toString()) }
         }
     }
-    fun saveRecord() {
-        val s = _state.value
-        if (s.record.isBlank()) return
-        action {
-            call { api.agentSaveRecord(AgentSaveRecord(s.date, s.record, s.planRequestId)) }
-            _state.update { it.copy(record = "", plan = null, planRequestId = UUID.randomUUID().toString(), message = "记录已保存为私密日记") }
-        }
-    }
     fun manualPlan() {
         _state.update { it.copy(plan = AgentPlan("添加你想完成的任务，然后确认加入今天。", listOf(AgentTaskDraft()))) }
         persist()
@@ -150,7 +142,7 @@ class TodayViewModel @Inject constructor(
             val today = call { api.agentAdopt(AgentAdoptRequest(s.date, s.record.ifBlank { "今天计划：" + drafts.joinToString("、") { it.title } },
                 s.energy, s.availableMinutes, s.planRequestId, drafts)) }
             _state.update { it.copy(tasks = today.tasks, loaded = true, plan = null, record = "",
-                planRequestId = UUID.randomUUID().toString(), message = "任务已加入今天，原始记录已保存到日记") }
+                planRequestId = UUID.randomUUID().toString(), message = "任务已加入今天") }
         }
     }
     fun updateTask(task: AgentTask, draft: AgentTaskDraft) = action {

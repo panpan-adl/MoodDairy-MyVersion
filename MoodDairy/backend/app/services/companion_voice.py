@@ -52,11 +52,18 @@ async def _recognize_pcm(pcm: bytes) -> str:
         raise HTTPException(503, '语音识别暂不可用，请稍后再试')
     return ''.join(result.get('result') or []).strip()
 
-async def transcribe_companion_audio(data: bytes) -> str:
+async def transcribe_companion_audio(data: bytes, audio_format: str = 'm4a') -> str:
     started = time.monotonic()
     try:
         async with asyncio.timeout(30):
-            pcm = await asyncio.to_thread(_decode_pcm, data)
+            if audio_format == 'pcm':
+                if not data or len(data) % 2 or len(data) > 16000 * 2 * 16:
+                    raise HTTPException(400, 'PCM 录音规格无效或超过长度限制')
+                pcm = data
+            elif audio_format == 'm4a':
+                pcm = await asyncio.to_thread(_decode_pcm, data)
+            else:
+                raise HTTPException(400, '录音格式不支持')
             decoded = time.monotonic()
             text = await _recognize_pcm(pcm)
         logger.info('Companion ASR timing: audio_ms=%d decode_ms=%d total_ms=%d',

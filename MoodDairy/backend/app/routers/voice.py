@@ -36,11 +36,14 @@ router = APIRouter(prefix="/voice", tags=["voice"])
 @router.post('/companion-transcribe')
 async def transcribe_companion(current_user_id: AuthenticatedUserId, audio: UploadFile = File(...)):
     from app.services.companion_voice import transcribe_companion_audio
-    if os.path.splitext(audio.filename or '')[1].lower() != '.m4a':
-        raise HTTPException(400, '请上传 m4a 录音')
+    extension = os.path.splitext(audio.filename or '')[1].lower()
+    if extension not in ('.m4a', '.pcm'):
+        raise HTTPException(400, '请上传 m4a 或 16kHz 单声道 16bit PCM 录音')
     data = await audio.read(2 * 1024 * 1024 + 1)
     if not data or len(data) > 2 * 1024 * 1024:
         raise HTTPException(400, '录音为空或超过大小限制')
+    if extension == '.pcm':
+        return {'text': await transcribe_companion_audio(data, audio_format='pcm')}
     return {'text': await transcribe_companion_audio(data)}
 
 

@@ -243,7 +243,14 @@ class ChatViewModel @Inject constructor(
     private var userId: Long = 0L
     private var conversationId: String = ""
 
+    private val initializedChatUser = MutableStateFlow<Long?>(null)
+    private val companionDelivery by lazy {
+        com.example.mydiary.live2d.CompanionInputDelivery(initializedChatUser, _isLoading,
+            currentUser = { userId }, send = { sendMessage(it, fromCompanion = true) })
+    }
+
     fun initializeChat(userId: Long) {
+        initializedChatUser.value = null
         if (this.userId != userId) {
             _selectedMood.value = MoodChangeTracker.normalize(settingsPrefs.getString("selected_mood_$userId", null))
             _moodChangeSuggestion.value = null
@@ -269,6 +276,13 @@ class ChatViewModel @Inject constructor(
                 )
             }
             fetchRecentSummaries()
+            initializedChatUser.value = userId
+        }
+    }
+
+    fun submitCompanionInput(input: com.example.mydiary.live2d.CompanionUtterance) {
+        viewModelScope.launch {
+            companionDelivery.deliver(input)
         }
     }
 
@@ -287,8 +301,8 @@ class ChatViewModel @Inject constructor(
     }
 
     private fun fetchRecentSummaries() {
+        _isLoading.value = true
         viewModelScope.launch {
-            _isLoading.value = true
             _errorMessage.value = null
 
             val requestedUserId = userId
@@ -305,8 +319,9 @@ class ChatViewModel @Inject constructor(
         content: String,
         imageUris: List<String> = emptyList(),
         imagePreviewUris: List<String> = emptyList(),
+        fromCompanion: Boolean = false,
     ) {
-        if (content.isBlank() && imageUris.isEmpty()) {
+        if (_isLoading.value || (content.isBlank() && imageUris.isEmpty())) {
             return
         }
 
@@ -334,8 +349,8 @@ class ChatViewModel @Inject constructor(
             ),
         )
 
+        _isLoading.value = true
         viewModelScope.launch {
-            _isLoading.value = true
             _errorMessage.value = null
 
             val uploadedImageUrls = when (val uploaded = uploadImagesForChat(imageUris)) {
@@ -363,6 +378,7 @@ class ChatViewModel @Inject constructor(
                 ),
                 confirmation = null,
                 deepThinking = _deepThinkingEnabled.value,
+                companionSearchDirect = fromCompanion,
             )
 
             try {

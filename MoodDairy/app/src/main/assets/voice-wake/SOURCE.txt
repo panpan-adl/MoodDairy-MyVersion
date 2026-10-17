@@ -1,0 +1,13 @@
+Runtime: sherpa-onnx v1.13.8 (Apache-2.0), official Kotlin Android API.
+https://github.com/k2-fsa/sherpa-onnx/releases/tag/v1.13.8
+Original static-link AAR SHA256: b22c3fc1b6a45666d28892bb2f7694beeb77a8362d7ebd77c1a5431ec9435471
+The packaged AAR omits its dynamically-linked 32-bit x86 binaries to avoid
+conflicting with the application's ONNX Runtime. arm64-v8a, armeabi-v7a and
+x86_64 retain the official statically-linked libraries. On unsupported x86,
+wake initialization fails gracefully; tap-to-talk remains available.
+
+Model: sherpa-onnx-kws-zipformer-zh-en-3M-2025-12-20, chunk-8, int8 encoder/joiner.
+https://github.com/k2-fsa/sherpa-onnx/releases/tag/kws-models
+Original model archive SHA256: 68447f4fbc67e70eee3a93961f36e81e98f47aef73ce7e7ca00885c6cd3616a6
+Bundled encoder/decoder/joiner renamed to encoder.onnx/decoder.onnx/joiner.onnx.
+Custom keyword uses the model's partial-pinyin tokens for 然然.

@@ -28,7 +28,7 @@ async def resolve_song_audio(song_id: str) -> str:
         # alternate-source substitution is involved.
         try:
             metadata = await client.get("https://music.163.com/api/song/enhance/player/url",
-                params={"ids": f"[{song_id}]", "br": "128000"},
+                params={"ids": f"[{song_id}]", "br": "320000"},
                 headers={"Referer": "https://music.163.com/"})
             metadata.raise_for_status()
             entries = metadata.json().get("data") or []

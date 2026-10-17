@@ -12,7 +12,7 @@ from openai import AsyncOpenAI, APIConnectionError, APIStatusError, APITimeoutEr
 from pydantic import ValidationError
 from sqlalchemy import select, text
 
-from app.models.database import Diary, Todo
+from app.models.database import Diary, Todo, PersonalAgentOperation
 from app.models.personal_agent_schemas import AgentTask, PlanDraft, ReviewDraft
 from app.security.field_crypto import decrypt_field, encrypt_diary_fields
 from app.security.pii import sanitize_for_llm
@@ -63,7 +63,7 @@ def fit_plan(plan, minutes, energy):
     return PlanDraft(suggestion=suggestion[:1500], tasks=selected)
 
 
-async def generate_json(instruction, context, schema):
+async def generate_json(instruction, context, schema, *, max_tokens=2200, thinking=None):
     if not os.getenv('ARK_API_KEY'):
         raise HTTPException(503, 'AI 服务尚未配置，请先手动创建任务，或配置 ARK_API_KEY。')
     started = time.monotonic()
@@ -78,7 +78,9 @@ async def generate_json(instruction, context, schema):
                            '\n请输出符合约束的实例对象，最外层业务字段为：' + json.dumps(list(schema.model_fields), ensure_ascii=False) +
                            '。不要用 properties、required 包裹结果，也不要输出 Schema 本身。'},
                           {'role': 'user', 'content': sanitize_for_llm(json.dumps(context, ensure_ascii=False), max_length=64000)}],
-                temperature=0.4, max_tokens=2200,
+                temperature=0.4, max_tokens=max_tokens,
+                **({'extra_body': {'thinking': {'type': 'enabled' if thinking else 'disabled'}}}
+                   if thinking is not None else {}),
             )
         if not result.choices:
             raise ValueError('empty completion choices')
@@ -157,7 +159,9 @@ class PersonalAgentService:
 
     async def adopt(self, user_id, request):
         digest, saved = await self._saved(user_id, request.request_id, 'plan', request.date)
-        if saved:
+        receipt = await self.db.execute(select(PersonalAgentOperation).where(
+            PersonalAgentOperation.digest == digest, PersonalAgentOperation.user_id == user_id))
+        if saved or receipt.scalar_one_or_none():
             return await self.todos(user_id, request.date)
         todos = await self.todos(user_id, request.date)
         existing = {task_view(t).title.casefold() for t in todos}
@@ -170,9 +174,7 @@ class PersonalAgentService:
             self.db.add(Todo(user_id=user_id, todo_date=request.date, title=title, note=note,
                              is_done=0, sort_order=order))
             order += 1
-        title, content = encrypt_diary_fields('今日记录', request.record)
-        self.db.add(Diary(user_id=user_id, diary_date=request.date, title=title, content=content,
-                          content_hash=digest, word_count=len(request.record), is_private=1))
+        self.db.add(PersonalAgentOperation(digest=digest, user_id=user_id, operation_date=request.date))
         await self.db.commit()
         return await self.todos(user_id, request.date)
 
@@ -222,13 +224,13 @@ class PersonalAgentService:
         return diary.id
 
     async def save_record(self, user_id, request):
-        digest, saved = await self._saved(user_id, request.request_id, 'record', request.date)
-        if saved:
-            return saved.id
-        title, content = encrypt_diary_fields('今日记录', request.record)
-        diary = Diary(user_id=user_id, diary_date=request.date, title=title, content=content,
-                      content_hash=digest, word_count=len(request.record), is_private=1)
-        self.db.add(diary)
-        await self.db.commit()
-        await self.db.refresh(diary)
-        return diary.id
+        raise HTTPException(410, '今日记录仅用于安排任务，请在晚间复盘中保存日记')
+
+
+async def ensure_operation_schema():
+    """Create only the receipt table, using the configured active database."""
+    from app.database import get_db
+    async for db in get_db():
+        conn = await db.connection()
+        await conn.run_sync(lambda sync: PersonalAgentOperation.__table__.create(sync, checkfirst=True))
+        await db.commit()

@@ -25,6 +25,36 @@ STOP = set('今天 昨天 明天 现在 时候 自己 觉得 感觉 然后 一�
 _lock = threading.Lock()
 
 
+def extract_basic_review(source):
+    """Always-available exact-source phrases; no model, tokenizer, network, or invented mood."""
+    text = '\n'.join([source['body'], *source['text_blocks'], *source['transcripts']])[:24000]
+    words = {}
+    for match in PATTERN.finditer(text):
+        prefix = text[max(0, match.start() - 8):match.start()]
+        negation = NEGATION.search(prefix)
+        word = (negation.group() if negation else '') + match.group()
+        words[word] = {'text': word, 'weight': .82,
+                       'category': 'neutral' if negation else CATEGORY[match.group()], 'kind': 'emotion'}
+    candidates = []
+    for span in re.findall(r'[\u3400-\u9fffA-Za-z0-9]+', text):
+        for phrase in re.split(r'然后|但是|因为|所以|今天|昨天|自己|觉得|感觉|一个|一些|没有|已经|正在|的|了|和|也|在|我|是|很|又|就|都|着|与', span):
+            candidates.extend(phrase[i:i + 6] for i in range(0, len(phrase), 6))
+    for word, count in Counter(candidates).most_common():
+        if len(words) >= 12:
+            break
+        if word and word not in STOP and not any(word in other or other in word for other in words):
+            words[word] = {'text': word, 'weight': min(.7, .35 + count * .04), 'category': 'neutral', 'kind': 'keyword'}
+    if not words and text.strip():
+        word = text.strip()[:8]
+        words[word] = {'text': word, 'weight': .5, 'category': 'neutral', 'kind': 'keyword'}
+    selected = sorted(words.values(), key=lambda word: -word['weight'])[:12]
+    emotional = [word for word in selected if word['kind'] == 'emotion' and word['category'] != 'neutral']
+    return {'body': ('原文留下了' + '、'.join('“' + w['text'] + '”' for w in emotional[:3]) + '这些感受。'
+                     if emotional else '已从原文整理关键词；文字没有明确的情绪表达，不额外推断心情。'),
+            'primary_emotion': '、'.join(dict.fromkeys(LABELS[w['category']] for w in emotional)) or '情绪不明确',
+            'keywords': selected, 'extraction_method': 'source-phrases+lexicon'}
+
+
 @lru_cache(maxsize=1)
 def _extractor():
     import jieba

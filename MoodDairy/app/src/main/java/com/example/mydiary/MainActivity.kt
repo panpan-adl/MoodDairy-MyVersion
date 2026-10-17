@@ -48,6 +48,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -82,6 +83,9 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var musicWidgetController: MusicWidgetController
 
+    @Inject
+    lateinit var relaxController: com.example.mydiary.ui.relax.RelaxPlaybackController
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -90,6 +94,7 @@ class MainActivity : ComponentActivity() {
                 MainScreen(
                     sessionManager = sessionManager,
                     musicWidgetController = musicWidgetController,
+                    relaxController = relaxController,
                 )
             }
         }
@@ -100,6 +105,7 @@ class MainActivity : ComponentActivity() {
 fun MainScreen(
     sessionManager: SessionManager,
     musicWidgetController: MusicWidgetController,
+    relaxController: com.example.mydiary.ui.relax.RelaxPlaybackController,
 ) {
     val memoryContext = androidx.compose.ui.platform.LocalContext.current
     val navController = rememberNavController()
@@ -111,9 +117,29 @@ fun MainScreen(
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    val relaxState by relaxController.state.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(relaxState.assistantRequest) {
+        relaxState.assistantRequest?.let { token ->
+            if (relaxController.consumeAssistantRequest(token) && sessionManager.isLoggedIn()) {
+                navController.navigate(Routes.CHAT) {
+                    popUpTo(Routes.CHAT) { inclusive = false }
+                    launchSingleTop = true
+                }
+            }
+        }
+    }
+    val hostLifecycle = androidx.lifecycle.ProcessLifecycleOwner.get()
+    androidx.compose.runtime.DisposableEffect(hostLifecycle, relaxController) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) relaxController.pause()
+        }
+        hostLifecycle.lifecycle.addObserver(observer)
+        onDispose { hostLifecycle.lifecycle.removeObserver(observer) }
+    }
     com.example.mydiary.live2d.CompanionHost(
-        active = currentRoute != null && currentRoute != Routes.LOGIN && currentRoute != Routes.REGISTER && currentRoute != Routes.LIVE2D,
+        active = currentRoute != null && currentRoute != Routes.LOGIN && currentRoute != Routes.REGISTER,
         assistant = currentRoute == Routes.CHAT,
+        showcase = currentRoute == Routes.LIVE2D,
     )
     androidx.compose.runtime.LaunchedEffect(navController) {
         com.example.mydiary.live2d.PetOverlayService.clientActions.collect { action ->
@@ -127,6 +153,7 @@ fun MainScreen(
 
     androidx.compose.runtime.LaunchedEffect(currentRoute) {
         if (currentRoute == Routes.LOGIN) {
+            relaxController.stop()
             com.example.mydiary.live2d.PetOverlayService.clearVoiceActivation()
             com.example.mydiary.whitenoise.WhiteNoiseManager.getInstance().stopAllSounds()
         }
@@ -188,7 +215,8 @@ fun MainScreen(
                 NavGraph(
                     navController = navController,
                     startDestination = startDestination,
-                    sessionManager = sessionManager
+                    sessionManager = sessionManager,
+                    relaxController = relaxController,
                 )
         }
 
@@ -207,7 +235,9 @@ fun MainScreen(
         }
 
         // 「听点音乐」悬浮层：推荐弹窗 + 可拖拽迷你播放条，跨页面存活
-        MusicFloatingLayer(controller = musicWidgetController)
+        if (currentRoute != Routes.LOGIN && currentRoute != Routes.REGISTER)
+            MusicFloatingLayer(controller = relaxController,
+                onChoose = { navController.navigate(Routes.RELAX) { launchSingleTop = true } })
     }
 }
 

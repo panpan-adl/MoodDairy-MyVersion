@@ -133,6 +133,7 @@ android {
 dependencies {
     // Live2D Cubism SDK
     implementation(files("libs/Live2DCubismCore.aar"))
+    implementation(files("libs/sherpa-onnx-static-link-onnxruntime-1.13.8.aar"))
     implementation(project(":Framework:framework"))
 
     // Core Android
@@ -152,6 +153,7 @@ dependencies {
     // Lifecycle & ViewModel
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
+    implementation("androidx.lifecycle:lifecycle-process:2.7.0")
     
     // Navigation
     implementation("androidx.navigation:navigation-compose:2.7.7")

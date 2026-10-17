@@ -6,9 +6,12 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.example.mydiary.data.models.ChatMessage
+import com.example.mydiary.live2d.PetOverlayService
 import kotlinx.coroutines.flow.collect
 
 internal data class ChatTimelineEntry(val key: String, val message: ChatMessage)
@@ -33,6 +36,10 @@ internal fun ChatViewport(
     composer: @Composable () -> Unit,
     content: LazyListScope.() -> Unit,
 ) {
+    val boundaryOwner = remember { Any() }
+    DisposableEffect(boundaryOwner) {
+        onDispose { PetOverlayService.setComposerBoundary(boundaryOwner, null) }
+    }
     var followingLatest by remember(listState) { mutableStateOf(true) }
     var movingToLatest by remember(listState) { mutableStateOf(false) }
     var previousUserKey by remember(listState) { mutableStateOf<String?>(null) }
@@ -64,6 +71,8 @@ internal fun ChatViewport(
             contentPadding = PaddingValues(vertical = 16.dp),
             content = content,
         )
-        Box(Modifier.fillMaxWidth().testTag("chat_composer")) { composer() }
+        Box(Modifier.fillMaxWidth().testTag("chat_composer").onGloballyPositioned { coordinates ->
+            if (coordinates.isAttached) PetOverlayService.setComposerBoundary(boundaryOwner, coordinates.positionInWindow().y)
+        }) { composer() }
     }
 }

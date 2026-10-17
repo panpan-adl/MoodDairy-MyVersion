@@ -72,9 +72,10 @@ public class CubismMatrix44 {
             throw new IllegalArgumentException("The passed array is either 'null' or does not have a size of 16.");
         }
 
-        for (int i = 0; i < 16; i++) {
-            matrixForMultiplication[i] = 0.0f;
-        }
+        // Several model surfaces render on separate GL threads. Scratch memory
+        // must never be shared between them, including aliased dst calculations.
+        final float[] matrixForMultiplication = multiplicationScratch.get();
+        Arrays.fill(matrixForMultiplication, 0.0f);
         for (int i = 0; i < 4; i++) {
             for (int j = 0; j < 4; j++) {
                 for (int k = 0; k < 4; k++) {
@@ -342,7 +343,7 @@ public class CubismMatrix44 {
     /**
      * Resets the variable '_4x4MatrixForCalculation' to a unit matrix.
      */
-    private static void resetMatrixForCalcToUnitMatrix() {
+    private void resetMatrixForCalcToUnitMatrix() {
         for (int i = 0; i < 16; i++) {
             matrixForCalculation[i] = 0.0f;
         }
@@ -356,10 +357,12 @@ public class CubismMatrix44 {
      * The 4x4 matrix array for matrix calculation.
      * This exists for avoiding creating a new float array at running method.
      */
-    private static final float[] matrixForCalculation = new float[16];
+    private final float[] matrixForCalculation = new float[16];
     /**
      * The 4x4 matrix array for 'multiply' method.
      * Prevents _4x4MatrixForCalculation from resetting the multiplicand information when it is passed to the 'multiply' method.
      */
-    private static final float[] matrixForMultiplication = new float[16];
+    private static final ThreadLocal<float[]> multiplicationScratch = new ThreadLocal<float[]>() {
+        @Override protected float[] initialValue() { return new float[16]; }
+    };
 }

@@ -5,6 +5,7 @@ from .schemas import Platform
 
 user_search_message = ContextVar("user_search_message", default="")
 search_charge_confirmed = ContextVar("search_charge_confirmed", default=False)
+direct_companion_search = ContextVar("direct_companion_search", default=False)
 PAID_NAMES = {
     Platform.XHS: ("小红书", "xiaohongshu", "xhs"),
     Platform.DOUYIN: ("抖音", "douyin"),
@@ -40,3 +41,18 @@ def prepare_search_arguments(arguments, message):
     except (TypeError, ValueError, OverflowError):
         cleaned["limit"] = 8
     return {key:cleaned[key] for key in ("platform", "keyword", "limit")}
+
+
+def companion_search_arguments(message):
+    """Only explicit searches use the companion's user-authorized direct API path."""
+    text = (message or "").strip()
+    if re.search(r"(?:不要|别|不用|不想|取消).{0,8}(?:搜|查|找)", text):
+        return None
+    if not re.search(r"搜索|搜一下|搜一搜|帮我搜|帮我找|找一下|找找|查一下|查查", text):
+        return None
+    if re.search(r"(?:搜|找|查).{0,8}日记", text):
+        return None
+    aliases = (("小红书", "xhs"), ("抖音", "douyin"), ("b站", "bilibili"),
+               ("知乎", "zhihu"), ("快手", "kuaishou"), ("微博", "weibo"))
+    platform = next((value for name, value in aliases if name in text.lower()), "auto")
+    return prepare_search_arguments({"keyword": text, "platform": platform, "limit": 8}, text)

@@ -35,7 +35,7 @@ object SafeApiCall {
         } catch (io: IOException) {
             ApiResult.Error(
                 code = -1,
-                message = "网络连接失败: ${io.message}",
+                message = "与服务的连接中断，请稍后刷新；若刚刚保存过，请先查看记录确认是否已保存。",
                 exception = io,
             )
         } catch (error: Exception) {

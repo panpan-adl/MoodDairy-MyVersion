@@ -46,6 +46,14 @@
 
 ### 后续再次复发的确切来源及电脑端验证
 
+### Studio 默认启动入口修正与验证
+
+之后重启再次失效时，进程参数是 `-qt-hide-window -grpc-use-token`，但两种指针模式均已关闭，说明另一条复发链路来自 Studio 内嵌启动。此前中断的设置修改没有落盘，不能报告其已生效。现已实际通过 Studio Settings → Tools → Emulator 取消 `Launch in the Running Devices tool window` 并点击 OK；只读确认 `%APPDATA%/Google/AndroidStudio2025.3.2/options/emulator.xml` 存在 `launchInToolWindow=false`。
+
+在无活动 instrumentation 时正常关闭原实例，然后实际通过 Studio Device Manager 的 Cold Boot 启动同一 AVD（不是通过专用脚本代替验证）。新命令行是 `-netdelay none -netspeed full -no-snapstorage -avd Medium_Phone_API_36.1`，没有 `-qt-hide-window`；输入模式及前台检查通过。通过电脑端 sky.scroll 在个人中心向下滚到退出登录与版本号，再向上滚回头像，均正常。未清数据、未安装测试包或运行 instrumentation。后端与麦克风已恢复。
+
+Assert-EmulatorWheelMode 现除 Android 输入设备外还检查对应 qemu 进程命令行，拒绝 `-qt-hide-window` / `-no-window`，防止输入设备正确却仍在内嵌窗口的情况漏检。Studio 的 Running Devices 面板“+”明确启动内嵌窗口，应使用 Device Manager 的启动按钮/Cold Boot 或根目录正式入口。
+
 只读核对另一个聊天“修复报错”的近期命令，确认其在 2026-10-17 09:09 左右启动 emulator.exe 时直接传入 `-feature -VirtioMouse,VirtioTablet`，绕过已有公共入口；运行进程命令行及 Android QEMU Virtio Tablet 设备与之对应。本机配置文件和两个正式启动脚本保持关闭模式，不能把此次复发误判为这些文件被改回。
 
 增加 Assert-EmulatorWheelMode，共享恢复脚本在确认 APP 前台后也检查输入设备，冲突模式不再静默通过。专用冷启动入口同样检查。统一 Android 工程新增 AGENTS.md，明确禁止手写启动参数、禁止为渲染/点击/语音问题启用绘图板或相对鼠标模式；根目录增加可双击的 start_emulator_wheel.cmd。四个启动/恢复脚本语法检查通过，本地模拟检查确认触摸回退模式通过、两种冲突设备均被拒绝。

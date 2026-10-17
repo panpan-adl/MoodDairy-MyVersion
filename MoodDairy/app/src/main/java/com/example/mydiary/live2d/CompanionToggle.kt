@@ -13,20 +13,40 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.*
+import androidx.core.content.ContextCompat
+import android.content.pm.PackageManager
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 
 /** An app-window companion needs no draw-over-other-apps permission. */
 @Composable
-fun CompanionHost(active: Boolean, assistant: Boolean = false) {
+fun CompanionHost(active: Boolean, assistant: Boolean = false, showcase: Boolean = false) {
     val activity = LocalContext.current.findActivity() ?: return
     val owner = LocalLifecycleOwner.current
     val assistantNow by androidx.compose.runtime.rememberUpdatedState(assistant)
+    VoiceWakeSettings.initialize(activity)
+    val wakeEnabled by VoiceWakeSettings.enabled.collectAsState()
+    val companionEnabled by PetOverlayService.enabled.collectAsState()
+    var autoRequested by remember { mutableStateOf(false) }
+    val wakePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        PetOverlayService.refreshVoiceWake()
+    }
     val microphone = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         PetOverlayService.onMicrophoneResult(it)
     }
     androidx.compose.runtime.LaunchedEffect(assistant) { PetOverlayService.setAssistantPage(assistant) }
+    LaunchedEffect(showcase) { PetOverlayService.setShowcasePage(showcase) }
+    LaunchedEffect(active, assistant, wakeEnabled, companionEnabled) {
+        if (active && assistant && wakeEnabled && companionEnabled &&
+            ContextCompat.checkSelfPermission(activity, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED &&
+            !autoRequested && !activity.getSharedPreferences("companion", Context.MODE_PRIVATE).getBoolean("wake_permission_asked", false)) {
+            autoRequested = true
+            activity.getSharedPreferences("companion", Context.MODE_PRIVATE).edit().putBoolean("wake_permission_asked", true).apply()
+            wakePermission.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
     DisposableEffect(activity, owner, active) {
         fun resume() {
             if (active) {

@@ -13,12 +13,13 @@ from app.models.database import Diary, DiaryMultimodalInsight
 from app.security.field_crypto import decrypt_field, encrypt_field
 from app.services.multimodal_insight_service import MultimodalInsightService
 from starlette.concurrency import run_in_threadpool
-from app.services.diary_keyword_service import extract_review
+from app.services.diary_keyword_service import extract_review, extract_basic_review
 
 CACHE_KEY = 'gentle_review'
 FAILURE = '这次没能整理出来，你写下的内容还在，可以稍后再试。'
 MEDIA_ONLY = '添加一些文字后，可以分析这篇日记表达的情绪。'
 ANALYSIS_VERSION = 3
+EXTRACTION_TIMEOUT_SECONDS = 8
 _locks = weakref.WeakValueDictionary()
 
 
@@ -138,10 +139,12 @@ class DiaryReviewService:
                     raise HTTPException(409, '正在帮你回顾，请稍等一下。')
             source = source_text(diary)
             try:
-                async with asyncio.timeout(30):
+                async with asyncio.timeout(EXTRACTION_TIMEOUT_SECONDS):
                     result = await run_in_threadpool(extract_review, source)
-            except Exception as exc:
-                raise HTTPException(503, FAILURE) from exc
+            except Exception:
+                result = extract_basic_review(source)
+            if not result['keywords']:
+                result = extract_basic_review(source)
             # Lock only while checking the latest saved version and writing the cache.
             await self.db.execute(select(Diary.id).where(Diary.id == diary_id, Diary.user_id == user_id).with_for_update())
             self.db.expire_all()

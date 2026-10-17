@@ -47,31 +47,13 @@ class Live2DView @JvmOverloads constructor(
     private var lastTapX = 0f
     private var lastTapY = 0f
     private val doubleTapSlopPx = DOUBLE_TAP_SLOP_DP * context.resources.displayMetrics.density
-    private var hasBeenVisible = false
-
     override fun onWindowVisibilityChanged(visibility: Int) {
         super.onWindowVisibilityChanged(visibility)
-        if (visibility == View.VISIBLE) {
-            // 恢复渲染
-            renderer?.isRenderingEnabled = true
-            if (hasBeenVisible) {
-                val path = live2DManager.currentModel
-                if (!path.isNullOrBlank()) {
-                    Log.d(TAG, "窗口再次可见，刷新模型: $path")
-                    queueEvent {
-                        live2DManager.loadModel(path)
-                        performModelRendering("onWindowVisibilityChanged")
-                    }
-                }
-            } else {
-                hasBeenVisible = true
-            }
-        } else {
-            // 窗口不可见时立即停止渲染（让页面退出动画更自然）
-            renderer?.isRenderingEnabled = false
-        }
+        // Visibility does not invalidate textures. Actual context loss is handled
+        // exclusively by onSurfaceCreated/onSurfaceRecreated on the GL thread.
+        renderer?.isRenderingEnabled = visibility == View.VISIBLE
     }
-    
+
     override fun onDetachedFromWindow() {
         // 分离时立即停止渲染
         renderer?.isRenderingEnabled = false
@@ -79,6 +61,7 @@ class Live2DView @JvmOverloads constructor(
     }
 
     init {
+        preserveEGLContextOnPause = true
         setEGLContextClientVersion(2)
         // 与官方 TranslucentGLSurfaceView 一致：RGBA 8+8+8+8，depth 16，stencil 0
         setEGLConfigChooser(8, 8, 8, 8, 16, 0)
@@ -91,30 +74,6 @@ class Live2DView @JvmOverloads constructor(
         renderMode = RENDERMODE_CONTINUOUSLY
     }
 
-    override fun onAttachedToWindow() {
-        super.onAttachedToWindow()
-        // 切页返回后重设透明与置顶，避免人物消失、黑底
-        holder.setFormat(PixelFormat.TRANSLUCENT)
-        setZOrderOnTop(true)
-        setBackgroundColor(Color.TRANSPARENT)
-        // 延迟在 GL 线程重载当前模型（Surface 就绪后再执行，解决切回后人物不显示）
-        // 捕获当前路径，用于延迟后的一致性检查
-        val pathAtAttach = live2DManager.currentModel
-        mainHandler.postDelayed({
-            val currentPath = live2DManager.currentModel
-            // 仅当路径未改变时才重载，避免覆盖用户切换的模型
-            if (!currentPath.isNullOrBlank() && currentPath == pathAtAttach) {
-                Log.d(TAG, "onAttachedToWindow 延迟重载模型: $currentPath")
-                queueEvent {
-                    live2DManager.loadModel(currentPath)
-                    performModelRendering("onAttachedToWindow")
-                }
-            } else if (currentPath != pathAtAttach) {
-                Log.d(TAG, "onAttachedToWindow 跳过重载，模型已切换: $pathAtAttach -> $currentPath")
-            }
-        }, 250)
-    }
-    
     /**
      * Surface 被重新创建时调用（如切页返回后），重新加载当前模型以恢复显示
      */
@@ -319,6 +278,9 @@ class Live2DRenderer(
      * 注意：此方法应在 OpenGL 线程中调用
      */
     fun clearBuffers() {
+        // Restore write masks before clearing: Cubism clipping changes GL state.
+        GLES20.glDisable(GLES20.GL_SCISSOR_TEST)
+        GLES20.glColorMask(true, true, true, true)
         GLES20.glClearColor(0f, 0f, 0f, 0f) // 透明，使页面背景透出
         GLES20.glClearDepthf(1.0f)
         GLES20.glDepthMask(true)

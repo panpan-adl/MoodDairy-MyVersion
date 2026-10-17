@@ -229,6 +229,10 @@ fun CalendarScreen(
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     }
                 }
+                uiState.calendarLoadError?.let { message ->
+                    Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                    TextButton(onClick = viewModel::refreshRecords) { Text("重新加载日历") }
+                }
 
                 if (uiState.selectedDate != null) {
                     Spacer(modifier = Modifier.height(16.dp))
@@ -238,6 +242,8 @@ fun CalendarScreen(
                                 diaries = uiState.selectedDateDiaries,
                                 isLoading = uiState.isLoadingDiaries,
                                 isDeleting = uiState.isDeleting,
+                                loadError = uiState.diaryLoadError,
+                                onRetry = viewModel::reloadSelectedDateData,
                                 onDiaryClick = { diaryId ->
                                     onDiaryClick(diaryId, uiState.selectedDate!!)
                                 },
@@ -470,6 +476,8 @@ private fun DiaryListSection(
     diaries: List<Diary>,
     isLoading: Boolean,
     isDeleting: Boolean,
+    loadError: String? = null,
+    onRetry: () -> Unit = {},
     onDiaryClick: (Long) -> Unit,
     onDeleteClick: (Diary) -> Unit
 ) {
@@ -482,7 +490,11 @@ private fun DiaryListSection(
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
-        if (isLoading || isDeleting) {
+        if (loadError != null) {
+            Text(loadError, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+            TextButton(onClick = onRetry) { Text("重新加载日记") }
+        }
+        if ((isLoading && diaries.isEmpty()) || isDeleting) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -491,9 +503,9 @@ private fun DiaryListSection(
             ) {
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
-        } else if (diaries.isEmpty()) {
+        } else if (diaries.isEmpty() && loadError == null) {
             EmptyState("这一天还没有日记")
-        } else {
+        } else if (diaries.isNotEmpty()) {
             LazyColumn(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)

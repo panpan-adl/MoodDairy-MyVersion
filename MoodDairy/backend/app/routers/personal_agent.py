@@ -47,9 +47,6 @@ async def save_review(request: SaveReviewRequest, current_user_id: Authenticated
     diary_id = await PersonalAgentService(db).save_review(current_user_id, request)
     return SavedDiary(diary_id=diary_id)
 
-@router.post('/record', response_model=SavedDiary)
+@router.post('/record', deprecated=True)
 async def save_record(request: SaveRecordRequest, current_user_id: AuthenticatedUserId, db: AsyncSession = Depends(get_db)):
-    if request.date > datetime.now(ZoneInfo('Asia/Shanghai')).date():
-        raise HTTPException(422, '记录不能保存到未来日期')
-    diary_id = await PersonalAgentService(db).save_record(current_user_id, request)
-    return SavedDiary(diary_id=diary_id)
+    raise HTTPException(410, '今日记录仅用于安排任务，请在晚间复盘中保存日记')

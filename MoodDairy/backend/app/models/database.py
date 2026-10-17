@@ -90,6 +90,16 @@ class Todo(Base):
     user = relationship("User", back_populates="todos")
 
 
+class PersonalAgentOperation(Base):
+    """Committed plan receipts; no input text or generated diary is stored."""
+    __tablename__ = "personal_agent_operations"
+
+    digest = Column(String(64), primary_key=True)
+    user_id = Column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    operation_date = Column(Date, nullable=False)
+    created_at = Column(TIMESTAMP, default=datetime.now, nullable=False)
+
+
 class ChatAgentPlan(Base):
     """Pending/confirmed plan records for chat agent tool operations."""
     __tablename__ = "chat_agent_plans"

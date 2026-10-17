@@ -32,6 +32,12 @@ import androidx.compose.ui.unit.sp
 import com.example.mydiary.live2d.Live2DComposable
 import com.example.mydiary.live2d.Live2DConfig
 import com.example.mydiary.live2d.PetOverlayService
+import com.example.mydiary.live2d.VoiceWakeSettings
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import com.example.mydiary.ui.theme.*
 import kotlinx.coroutines.delay
 
@@ -211,7 +217,9 @@ fun Live2DScreen(
                             }
                         }
                     }
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(8.dp))
+                    VoiceWakeSwitch()
+                    Spacer(Modifier.height(8.dp))
                     // 交互提示
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -233,6 +241,35 @@ fun Live2DScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun VoiceWakeSwitch() {
+    val context = LocalContext.current
+    remember { VoiceWakeSettings.initialize(context) }
+    val enabled by VoiceWakeSettings.enabled.collectAsState()
+    val status by VoiceWakeSettings.status.collectAsState()
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        PetOverlayService.refreshVoiceWake()
+    }
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("语音唤醒", fontSize = 14.sp, color = PrimaryDark)
+            Text(if (enabled) "$status · 仅在助手界面生效" else "已关闭，仍可点击然然说话", fontSize = 11.sp, color = TextSecondary)
+        }
+        Switch(checked = enabled, modifier = Modifier.semantics { contentDescription = "语音唤醒" },
+            onCheckedChange = { value ->
+                VoiceWakeSettings.setEnabled(context, value)
+                if (value && ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                    context.getSharedPreferences("companion", android.content.Context.MODE_PRIVATE)
+                        .edit().putBoolean("wake_permission_asked", true).apply()
+                    permission.launch(Manifest.permission.RECORD_AUDIO)
+                }
+            }, colors = SwitchDefaults.colors(checkedThumbColor = Surface,
+                checkedTrackColor = MintGreen, checkedBorderColor = MintGreen,
+                uncheckedThumbColor = TextTertiary, uncheckedTrackColor = SurfaceVariant,
+                uncheckedBorderColor = SurfaceVariant))
     }
 }
 

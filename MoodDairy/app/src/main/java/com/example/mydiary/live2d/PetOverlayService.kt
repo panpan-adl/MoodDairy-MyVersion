@@ -10,9 +10,6 @@ import android.graphics.drawable.ColorDrawable
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import android.speech.RecognitionListener
-import android.speech.RecognizerIntent
-import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
@@ -51,7 +48,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 /**
  * 小猫桌宠悬浮窗服务：
  * - 打开 App 时由 MainActivity 启动，悬浮在界面右下角，可拖动
- * - 点一下小猫 → 语音听你说 → 走聊天接口 → 气泡显示回复 + TTS 念出来（服务老人/视障用户）
+ * - Capture companion input and hand it to the assistant conversation UI.
  */
 @AndroidEntryPoint
 class PetOverlayService : Service() {
@@ -75,12 +72,46 @@ class PetOverlayService : Service() {
         val enabled: kotlinx.coroutines.flow.StateFlow<Boolean> = _enabled
         var requestMicrophone: (() -> Unit)? = null
         private var pendingVoiceStart = false
-        private var assistantPage = false
+        @Volatile private var assistantPage = false
+        @Volatile private var showcasePage = false
+        private val composerBoundary = CompanionBoundary()
+        fun setComposerBoundary(owner: Any, topInWindow: Float?) {
+            composerBoundary.update(owner, topInWindow)
+            instance?.schedulePositionCat()
+        }
+        fun setShowcasePage(value: Boolean) {
+            showcasePage = value
+            instance?.mainHandler?.post { instance?.applyPagePresence() }
+        }
+        fun setChatReplyBusy(busy: Boolean) {
+            instance?.let { service ->
+                service.isChatting = busy
+                if (!busy) service.scheduleVoiceResume()
+            }
+        }
+        fun refreshVoiceWake() {
+            instance?.let { service ->
+                service.mainHandler.post {
+                    service.manualVoiceInput?.stop()
+                    service.isListening = false
+                    service.manualVoiceInput?.resetWakeFailure()
+                    service.voiceInputFailed = false
+                    if (!VoiceWakeSettings.enabled.value) {
+                        service.cancelVoiceSession()
+                    }
+                    service.scheduleVoiceResume()
+                }
+            }
+        }
         private var voiceSessionActivated = false
 
         fun setAssistantPage(assistant: Boolean) {
             assistantPage = assistant
-            instance?.mainHandler?.post { instance?.applyPagePresence() }
+            instance?.let { service -> service.mainHandler.post {
+                // Preserve exit cancellation even if navigation returns before this post runs.
+                if (!assistant) service.cancelVoiceSession()
+                service.applyPagePresence()
+            } }
         }
 
         fun clearVoiceActivation() { voiceSessionActivated = false }
@@ -102,6 +133,7 @@ class PetOverlayService : Service() {
         fun detach(activity: android.app.Activity) {
             if (host.get() === activity) {
                 host.clear()
+                instance?.cancelVoiceSession()
                 instance?.pauseCharacter()
                 activity.stopService(startIntent(activity))
             }
@@ -110,6 +142,7 @@ class PetOverlayService : Service() {
         fun setEnabled(context: Context, enabled: Boolean) {
             _enabled.value = enabled
             if (!enabled) {
+                instance?.cancelVoiceSession()
                 voiceSessionActivated = false
                 pendingVoiceStart = false
             }
@@ -121,7 +154,7 @@ class PetOverlayService : Service() {
         }
 
         fun onMicrophoneResult(granted: Boolean) {
-            if (!_enabled.value) return
+            if (!_enabled.value || !assistantPage || showcasePage) return
             pendingVoiceStart = granted && instance == null
             instance?.let {
                 if (granted) it.onTapCat()
@@ -213,8 +246,6 @@ class PetOverlayService : Service() {
     private var inputRow: LinearLayout? = null
     private var inputEdit: EditText? = null
     private var inputVisible = false
-    private var inputRestY = 0
-    private var busyRetried = false
 
     private var tts: TextToSpeech? = null
     private var ttsReady = false
@@ -227,9 +258,10 @@ class PetOverlayService : Service() {
     private val sentencePlayer by lazy {
         CompanionSpeechPlayer(onBusy = { busy ->
             ttsSpeaking = busy
+            com.example.mydiary.whitenoise.WhiteNoiseManager.getInstance().setSpeechActive(busy)
             if (!busy && !destroyed && !isChatting && !isListening) {
                 scheduleRetreat()
-                maybeStartWakeListening()
+                scheduleVoiceResume()
             }
         }, fallback = { text, done ->
             if (ttsReady && tts?.voice?.isNetworkConnectionRequired == false) {
@@ -241,7 +273,6 @@ class PetOverlayService : Service() {
         })
     }
 
-    private var recognizer: SpeechRecognizer? = null
     private var isListening = false
     private var isChatting = false
 
@@ -257,8 +288,10 @@ class PetOverlayService : Service() {
     private var awaitCommandUntil = 0L
 
     // System speech recognition; availability and network/model support depend on the device.
-    private var sherpaEngine: SherpaAsrEngine? = null
-    private var manualVoiceInput: CompanionVoiceInput? = null
+    private var manualVoiceInput: ForegroundVoiceInput? = null
+    private var continuousConversation = false
+    private var voiceInputFailed = false
+    private val resumeVoice = Runnable { maybeStartWakeListening() }
     private var manualListenTimeout: Runnable? = null
 
     private fun clearManualListenTimeout() {
@@ -286,7 +319,7 @@ class PetOverlayService : Service() {
         instance = this
         initTts()
         try {
-            showCat()
+            if (!showcasePage) showCat()
         } catch (error: android.view.WindowManager.BadTokenException) {
             Log.w(TAG, "Activity window is no longer available", error)
             stopSelf()
@@ -294,7 +327,7 @@ class PetOverlayService : Service() {
         }
         applyPagePresence()
         _running.value = true
-        // Prepare available system speech support; stay in text mode until the user taps.
+        // Prepare local wake detection as soon as the assistant page is eligible.
         initSherpaEngine()
         if (pendingVoiceStart) {
             pendingVoiceStart = false
@@ -304,98 +337,102 @@ class PetOverlayService : Service() {
 
     /** Initialize the system recognizer used by manual input and wake listening. */
     private fun initSherpaEngine() {
-            val callback = object : SherpaAsrEngine.Callback {
-                override fun onReady() {
-                    mainHandler.post {
-                        showBubble("我是然然，点我就可以说话～")
-                        maybeStartWakeListening()
+        VoiceWakeSettings.initialize(this)
+        val callback = object : SherpaAsrEngine.Callback {
+            override fun onReady() = Unit
+            override fun onSegment(text: String) {
+                clearManualListenTimeout()
+                isListening = false
+                val clean = VoiceSessionText.stripWake(text)
+                if (VoiceSessionText.endsConversation(text)) {
+                    continuousConversation = false
+                    showBubble("好，需要时再喊然然～")
+                    scheduleVoiceResume()
+                } else if (clean.isBlank()) {
+                    scheduleVoiceResume()
+                } else {
+                    hideBubble()
+                    sendToChat(clean)
+                }
+            }
+            override fun onProcessing() {
+                isListening = false
+                VoiceWakeSettings.updateStatus("正在识别…")
+                showBubble("正在识别…")
+            }
+            override fun onError(message: String) {
+                isListening = false
+                continuousConversation = false
+                voiceInputFailed = message.startsWith("麦克风") || message.startsWith("本地唤醒")
+                VoiceWakeSettings.updateStatus(message)
+                showBubble(message)
+                if (!voiceInputFailed) scheduleVoiceResume()
+            }
+        }
+        manualVoiceInput = ForegroundVoiceInput(this, okHttpClient, callback,
+            onWake = {
+                continuousConversation = true
+                isListening = true
+                revealForInteraction()
+                showBubble("我在听…")
+                VoiceWakeSettings.updateStatus("我在听…")
+                runCatching {
+                    android.media.ToneGenerator(android.media.AudioManager.STREAM_MUSIC, 30).also { tone ->
+                        tone.startTone(android.media.ToneGenerator.TONE_PROP_BEEP, 80)
+                        mainHandler.postDelayed({ tone.release() }, 150)
                     }
                 }
-
-                override fun onSegment(text: String) {
-                        clearManualListenTimeout()
-                        wakeListening = false
-                        onSherpaHeard(text)
-                        mainHandler.postDelayed({ maybeStartWakeListening() }, 500)
-                }
-
-                override fun onError(message: String) {
-                    Log.e(TAG, "Sherpa 引擎出错: $message")
-                        clearManualListenTimeout()
-                        wakeListening = false
-                        val manual = isListening
-                        isListening = false
-                        if (manual) showBubble(message)
-                        if (!manual && (message.startsWith("没有识别到") || message.startsWith("没有听到"))) {
-                            mainHandler.postDelayed({ maybeStartWakeListening() }, 3000)
-                        } else {
-                            // A failed provider must not restart itself in an endless wake loop.
-                            voiceActivated = false
-                            voiceSessionActivated = false
-                        }
-                }
-
-                override fun onProcessing() {
-                        clearManualListenTimeout()
-                        if (isListening) showBubble("正在识别，稍等一下……")
-                }
-            }
-        manualVoiceInput = CompanionVoiceInput(this, okHttpClient, callback)
-        sherpaEngine = SherpaAsrEngine(this).apply {
-            setCallback(callback)
-            prepare()
-        }
-    }
-
-    /** Sherpa 听到一段语音：手动模式直接当聊天，常听模式检查唤醒词 */
-    private fun onSherpaHeard(text: String) {
-        if (text.isBlank()) return
-        Log.i(TAG, "Speech recognition completed")
-        // 打断：然然在念话或聊天时，听到「停下」「然然」立即停止
-        if (ttsSpeaking || isChatting) {
-            if (isInterruptWord(text)) {
-                interruptCurrent()
-                return
-            }
-        }
-        if (isListening) {
-            isListening = false
-            hideBubble()
-            listenFailCount = 0
-            sendToChat(text)
-            return
-        }
-        onWakeHeard(text)
-    }
-
-    /** 打断词检查：「停下」「然然」都算 */
-    private fun isInterruptWord(text: String): Boolean {
-        val compact = text.filterNot { it.isWhitespace() }
-        return compact.contains("停下") || compact.contains("然然")
-    }
-
-    /** 打断当前说话/聊天：立即停止 TTS 和请求，恢复常听 */
-    private fun interruptCurrent() {
-        localSpeechCallbacks.clear()
-        runCatching { tts?.stop() }
-        dialogueGeneration++
-        activeChatCall?.cancel()
-        sentencePlayer.clear()
-        Log.i(TAG, "用户打断当前操作")
-        // 停止 TTS 播放
-        ttsSpeaking = false
-        mainHandler.post { scheduleRetreat() }
-        currentTtsPlayer?.let { player ->
-            runCatching { player.stop() }
-            runCatching { player.release() }
-        }
-        currentTtsPlayer = null
-        // 取消聊天请求
-        isChatting = false
-        // 恢复常听
+            },
+            onIdle = {
+                isListening = false
+                continuousConversation = false
+                hideBubble()
+                scheduleVoiceResume()
+            },
+            allowed = { voiceHostAvailable() }
+        )
         maybeStartWakeListening()
-        // 简短确认
-        speak("好的，停了")
+    }
+
+    private fun voiceHostAvailable(): Boolean {
+        val activity = host.get() ?: return false
+        return AssistantVoicePolicy.available(
+            assistant = assistantPage, showcase = showcasePage, enabled = !destroyed && _enabled.value,
+            resumed = (activity as? androidx.lifecycle.LifecycleOwner)?.lifecycle?.currentState
+                ?.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) == true,
+            unlocked = !getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked,
+            interactive = getSystemService(android.os.PowerManager::class.java).isInteractive,
+            microphone = androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED,
+        )
+    }
+
+    private fun scheduleVoiceResume() {
+        mainHandler.removeCallbacks(resumeVoice)
+        if (!destroyed) mainHandler.postDelayed(resumeVoice, 500)
+    }
+
+    private fun cancelVoiceSession() {
+        dialogueGeneration++
+        ttsGeneration++
+        activeChatCall?.cancel()
+        activeChatCall = null
+        clearManualListenTimeout()
+        manualVoiceInput?.stop()
+        wakeListening = false
+        mainHandler.removeCallbacks(resumeVoice)
+        localSpeechCallbacks.clear()
+        sentencePlayer.clear(notify = false)
+        runCatching { currentTtsPlayer?.stop() }
+        runCatching { currentTtsPlayer?.release() }
+        currentTtsPlayer = null
+        runCatching { tts?.stop() }
+        isListening = false
+        isChatting = false
+        ttsSpeaking = false
+        continuousConversation = false
+        VoiceWakeSettings.updateStatus(if (!assistantPage || showcasePage)
+            "已暂停，请返回助手界面" else VoiceWakeSettings.WAITING)
     }
 
     private fun initTts() {
@@ -621,6 +658,7 @@ class PetOverlayService : Service() {
         }
         root.viewTreeObserver.addOnGlobalLayoutListener {
             if (popup.isShowing) updateClosePopup()
+            schedulePositionCat()
         }
         rootView = root
         bubbleText = bubble
@@ -630,7 +668,6 @@ class PetOverlayService : Service() {
         var downRawX = 0f
         var downRawY = 0f
         var startX = 0
-        var startY = 0
         var moved = false
         var downAt = 0L
         val slop = (DRAG_SLOP_DP * density).toInt()
@@ -642,7 +679,6 @@ class PetOverlayService : Service() {
                     downRawX = event.rawX
                     downRawY = event.rawY
                     startX = petPosition?.x ?: 0
-                    startY = petPosition?.y ?: 0
                     downAt = System.currentTimeMillis()
                     moved = false
                     true
@@ -653,8 +689,7 @@ class PetOverlayService : Service() {
                     if (moved || Math.abs(dx) > slop || Math.abs(dy) > slop) {
                         moved = true
                         petPosition?.let {
-                            it.x = (startX + dx).coerceIn(0, (resources.displayMetrics.widthPixels - root.width).coerceAtLeast(0))
-                            it.y = (startY + dy).coerceIn(0, (resources.displayMetrics.heightPixels - root.height - (72 * density).toInt()).coerceAtLeast(0))
+                            it.x = startX + dx
                             positionCat()
                         }
                     }
@@ -683,14 +718,15 @@ class PetOverlayService : Service() {
         val dm = resources.displayMetrics
         petPosition = android.graphics.Point(
             (dm.widthPixels - (BUBBLE_WIDTH_DP * density).toInt() - (12 * density).toInt()).coerceAtLeast(0),
-            (dm.heightPixels - catSize - (300 * density).toInt()).coerceAtLeast(0),
+            0,
         )
         val parent = host.get()?.window?.decorView as? android.view.ViewGroup
             ?: throw android.view.WindowManager.BadTokenException("Activity decor is unavailable")
+        root.visibility = View.INVISIBLE
         parent.addView(root, android.widget.FrameLayout.LayoutParams(
             (BUBBLE_WIDTH_DP * density).toInt(), android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
         ).apply { gravity = Gravity.TOP or Gravity.START })
-        positionCat()
+        schedulePositionCat()
         CompanionAppearance.initialize(this)
         appearanceScope.launch {
             CompanionAppearance.current.collectLatest { model ->
@@ -717,17 +753,40 @@ class PetOverlayService : Service() {
         view.onPause()
     }
 
+    private val positionCatFrame = Runnable { positionCat() }
+
+    private fun schedulePositionCat() {
+        val root = rootView ?: return
+        root.removeCallbacks(positionCatFrame)
+        root.postOnAnimation(positionCatFrame)
+    }
+
     private fun positionCat() {
         val root = rootView ?: return
         val position = petPosition ?: return
+        if (!assistantPage || showcasePage) { root.visibility = View.GONE; return }
+        val boundary = composerBoundary.topInWindow
+        val parent = root.parent as? android.view.ViewGroup ?: return
+        if (boundary == null || root.height == 0 || parent.width == 0) {
+            root.visibility = View.INVISIBLE
+            return
+        }
+        val origin = IntArray(2)
+        parent.getLocationInWindow(origin)
+        position.y = CompanionAnchorGeometry.top(boundary, origin[1], parent.paddingTop, root.height)
+        position.x = CompanionAnchorGeometry.horizontal(position.x, parent.width, parent.paddingLeft, parent.paddingRight, root.width)
         val params = root.layoutParams as? android.widget.FrameLayout.LayoutParams ?: return
-        params.leftMargin = position.x
-        params.topMargin = position.y
-        root.layoutParams = params
+        if (params.leftMargin != position.x || params.topMargin != position.y) {
+            params.leftMargin = position.x
+            params.topMargin = position.y
+            root.layoutParams = params
+        }
+        root.visibility = View.VISIBLE
     }
 
     /** 点小猫：开始听你说话 */
     private fun onTapCat() {
+        if (!assistantPage || showcasePage) return
         localSpeechCallbacks.clear()
         dialogueGeneration++
         activeChatCall?.cancel()
@@ -752,7 +811,9 @@ class PetOverlayService : Service() {
             requestMicrophone?.invoke()
             return
         }
-        // A tap starts one utterance, not an implicit continuous Google recognition loop.
+        // With wake disabled a tap records one turn, without automatic microphone resume.
+        continuousConversation = VoiceWakeSettings.enabled.value
+        voiceInputFailed = false
         voiceActivated = false
         voiceSessionActivated = false
         startListening()
@@ -762,24 +823,10 @@ class PetOverlayService : Service() {
         if (isListening) return
         stopWakeListening() // 手动听时先让出麦克风
         if (manualVoiceInput == null) {
-            speak("然然还在叫醒耳朵，等我几秒再点一下哦")
+            showBubble("语音输入正在准备，请稍后再试")
             return
         }
         startSherpaListening()
-    }
-
-    /** 连续听不到声音的次数；连续两次就直接引导用户打字，避免一直卡在「没听清」 */
-    private var listenFailCount = 0
-    private fun onListenMissed() {
-        listenFailCount++
-        if (listenFailCount >= 2) {
-            listenFailCount = 0
-            Log.w(TAG, "连续两次未接收到声音，改用打字引导（请检查设备麦克风是否可用）")
-            speak("我这边好像没接收到声音，先用打字跟我说吧～")
-            toggleTextInput(true)
-        } else {
-            speak("我没听清，再点我说一遍好不好")
-        }
     }
 
     /** Sherpa 手动聆听：点一下猫，下一段语音直接当聊天内容 */
@@ -789,92 +836,40 @@ class PetOverlayService : Service() {
         stopWakeListening()
         isListening = true
         showBubble("我在听，说完可以再点我一下。")
-        if (!engine.start()) return
+        if (!engine.start()) isListening = false
         // 15 秒没识别到内容自动结束
         clearManualListenTimeout()
-        manualListenTimeout = Runnable {
-            if (isListening) {
-                engine.finish()
-            }
-        }.also { mainHandler.postDelayed(it, 15000) }
+        // Silence (20s) and utterance limits are enforced by the microphone worker.
     }
 
     // ===== 常听模式：一直听，只有喊「然然」才应答 =====
 
-    /** Start voice only after an explicit tap and the normal microphone permission flow. */
-    private fun canListenNow(): Boolean = !destroyed && host.get() != null && _enabled.value &&
-        !getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked &&
-        getSystemService(android.os.PowerManager::class.java).isInteractive &&
-        androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED && voiceActivated &&
-        sherpaEngine != null && !isListening && !isChatting && !ttsSpeaking &&
-            !inputVisible
-
+    /** Automatic listening is permitted only on the visible assistant page. */
     private fun maybeStartWakeListening() {
-        if (canListenNow()) startWakeListening()
-    }
-
-    private fun startWakeListening() {
-        if (wakeListening || !canListenNow()) return
-        val engine = sherpaEngine ?: return
-        wakeListening = true
-        if (!engine.start()) wakeListening = false
-        Log.i(TAG, "常听模式已开启")
+        when (AssistantVoicePolicy.resume(
+            available = voiceHostAvailable() && !voiceInputFailed,
+            busy = isListening || isChatting || ttsSpeaking || inputVisible,
+            wakeEnabled = VoiceWakeSettings.enabled.value,
+            continuous = continuousConversation,
+        )) {
+            AssistantVoicePolicy.Resume.CONTINUE_CONVERSATION -> {
+                isListening = true
+                showBubble("我在听…")
+                VoiceWakeSettings.updateStatus("我在听…")
+                if (manualVoiceInput?.start() != true) isListening = false
+            }
+            AssistantVoicePolicy.Resume.WAIT_FOR_WAKE -> {
+                VoiceWakeSettings.updateStatus(VoiceWakeSettings.WAITING)
+                manualVoiceInput?.standby()
+            }
+            AssistantVoicePolicy.Resume.NONE -> Unit
+        }
     }
 
     private fun stopWakeListening() {
-        if (!wakeListening) return
+        mainHandler.removeCallbacks(resumeVoice)
         wakeListening = false
-        sherpaEngine?.stop()
-    }
-
-    /** 常听听到一句话：没喊「然然」就当没听见；喊了就应答 */
-    private fun onWakeHeard(text: String) {
-        if (!canListenNow()) return
-        if (PetIntentRouter.containsWakeWord(text)) {
-            revealForInteraction()
-            val rest = PetIntentRouter.stripWakeWord(text).orEmpty()
-            awaitCommandUntil = 0L
-            Log.i(TAG, "常听唤醒: $text")
-            if (rest.isNotBlank()) {
-                // 「然然，打开日记」一口气说完
-                sendToChat(rest)
-            } else {
-                // 只喊了声名字，开 10 秒指令窗口
-                awaitCommandUntil = android.os.SystemClock.uptimeMillis() + 10_000
-                speak("我在听，说吧～")
-            }
-            return
-        }
-        if (awaitCommandUntil > 0L && android.os.SystemClock.uptimeMillis() < awaitCommandUntil) {
-            awaitCommandUntil = 0L
-            Log.i(TAG, "指令窗口收到: $text")
-            sendToChat(text)
-            return
-        }
-        Log.d(TAG, "常听忽略（没喊然然）: $text")
-    }
-
-    /** 兜底：系统 Google 语音识别（需要联网，多数模拟器环境会失败） */
-    private fun startGoogleListening() {
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            speak("这台设备没有语音识别，用打字跟我说吧～")
-            toggleTextInput(true)
-            return
-        }
-        isListening = true
-        showBubble("我在听……")
-        if (recognizer == null) {
-            recognizer = SpeechRecognizer.createSpeechRecognizer(this)
-            recognizer?.setRecognitionListener(recognitionListener)
-        }
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-        }
-        recognizer?.startListening(intent)
-        // 15 秒没说话自动收起
-        mainHandler.postDelayed({ if (isListening) stopListening() }, 15000)
+        manualVoiceInput?.stop()
     }
 
     private fun stopListening() {
@@ -891,7 +886,6 @@ class PetOverlayService : Service() {
             isListening = false
         }
         val root = rootView ?: return
-        val params = petPosition ?: return
         if (inputVisible == show) return
         if (show && root.visibility != View.VISIBLE) return
         inputVisible = show
@@ -899,9 +893,7 @@ class PetOverlayService : Service() {
         if (show) {
             hideBubble()
             inputRow?.visibility = View.VISIBLE
-            inputRestY = params.y
-            params.y = (140 * resources.displayMetrics.density).toInt()
-            positionCat()
+            schedulePositionCat()
             mainHandler.postDelayed({
                 val edit = inputEdit ?: return@postDelayed
                 edit.requestFocus()
@@ -911,8 +903,7 @@ class PetOverlayService : Service() {
             runCatching { inputEdit?.let { imm.hideSoftInputFromWindow(it.windowToken, 0) } }
             inputEdit?.clearFocus()
             inputRow?.visibility = View.GONE
-            params.y = inputRestY
-            positionCat()
+            schedulePositionCat()
             scheduleRetreat()
             maybeStartWakeListening() // 收起打字框后恢复常听
         }
@@ -922,7 +913,7 @@ class PetOverlayService : Service() {
     private fun sendInputText() {
         val raw = inputEdit?.text?.toString()
         val text = raw?.trim().orEmpty()
-        Log.i(TAG, "sendInputText: raw='$raw' trimmed='$text'")
+        Log.i(TAG, "Companion text input submitted")
         if (text.isEmpty()) {
             Log.w(TAG, "sendInputText: text empty, abort (hint=${inputEdit?.hint})")
             return
@@ -932,334 +923,19 @@ class PetOverlayService : Service() {
         sendToChat(text)
     }
 
-    private val recognitionListener = object : RecognitionListener {
-        override fun onResults(results: android.os.Bundle) {
-            isListening = false
-            val spoken = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
-            if (spoken.isNullOrBlank()) {
-                speak("我没听清，再点我说一遍好不好")
-            } else {
-                sendToChat(spoken)
-            }
-        }
-
-        override fun onError(error: Int) {
-            isListening = false
-            Log.w(TAG, "语音识别错误: $error")
-            // 出错后销毁重建识别器，防止服务卡在忙状态导致后续一直失败
-            runCatching { recognizer?.destroy() }
-            recognizer = null
-            when (error) {
-                SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT ->
-                    speak("我没听清，再点我说一遍好不好")
-                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ->
-                    speak("需要麦克风权限才能听你说话哦")
-                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> {
-                    if (!busyRetried) {
-                        busyRetried = true
-                        showBubble("耳朵有点忙，我缓一下再听……")
-                        mainHandler.postDelayed({ if (!isChatting && !inputVisible) startListening() }, 1500)
-                    } else {
-                        speak("耳朵有点忙，稍后再点我试试")
-                    }
-                }
-                // 网络类错误：Google 语音服务连不上（模拟器/无外网环境常态），自动转打字
-                SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_SERVER -> {
-                    speak("网络连不上语音服务，用打字跟我说吧～")
-                    toggleTextInput(true)
-                }
-                else -> speak("耳朵有点忙，稍后再试试")
-            }
-        }
-
-        override fun onReadyForSpeech(params: android.os.Bundle?) { busyRetried = false }
-        override fun onBeginningOfSpeech() {}
-        override fun onRmsChanged(rmsdB: Float) {}
-        override fun onBufferReceived(buffer: ByteArray?) {}
-        override fun onEndOfSpeech() { showBubble("让我想想……") }
-        override fun onPartialResults(partialResults: android.os.Bundle?) {}
-        override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
-    }
-
-    /**
-     * 本地就能办的指令：直接跳页面，或引导用户说清要打开什么。处理掉了返回 true。
-     */
-    private fun routeLocalCommand(text: String): Boolean {
-        if (text.trim().trimEnd('？', '?', '。') in listOf("你叫什么", "你叫什么名字", "你是谁", "你的名字")) {
-            speak("我是然然，你的日记助手。可以陪你聊天，也可以帮你打开记录和放松页面。")
-            return true
-        }
-        // 链接跳转指代词（「打开第一个链接」等）交给 sendToChat 里的 handleLinkJump 处理，
-        // 别被 looksLikeOpenOnly 拦截成「只听到打开没目标」的引导语。
-        if (PetIntentRouter.matchLinkJump(text, 1) != null) return false
-        PetIntentRouter.match(text)?.let { action ->
-            Log.d(TAG, "本地指令命中: ${action.action} payload=${action.payload}")
-            _clientActions.tryEmit(action)
-            speak(confirmationFor(action.action))
-            return true
-        }
-        // 只听到「打开」却没说要打开什么：别当普通聊天乱答，直接问清楚
-        if (PetIntentRouter.looksLikeOpenOnly(text)) {
-            Log.d(TAG, "只听到「打开」没有目标，回引导语")
-            awaitCommandUntil = android.os.SystemClock.uptimeMillis() + 10_000
-            speak(PetIntentRouter.OPEN_PROMPT)
-            return true
-        }
-        return false
-    }
-
-    /** 把你说的话发给聊天接口，流式收回复 */
+    /** The companion only captures input; the chat screen owns conversation and replies. */
     private fun sendToChat(text: String) {
-        // 唤醒词常被连在句子里（「然然 打开日记」），先摘掉再判断
-        val cleanText = PetIntentRouter.stripWakeWord(text)?.takeIf { it.isNotBlank() } ?: text
+        val clean = (PetIntentRouter.stripWakeWord(text)?.takeIf { it.isNotBlank() } ?: text).trim()
         val userId = sessionManager.getUserId()
-        Log.i(TAG, "sendToChat called: text='$cleanText' userId=$userId")
         if (userId == null || userId <= 0L) {
-            speak("请先登录，再回来找我玩哦")
-            maybeStartWakeListening()
+            showBubble("请先登录，再使用语音输入")
+            scheduleVoiceResume()
             return
         }
-        // 本地兜底：不依赖网络的指令识别，命中就直接跳页面（零延迟，也省一次请求）
-        if (routeLocalCommand(cleanText)) {
-            maybeStartWakeListening()
-            return
-        }
-
-        // 链接跳转：对上一次搜索结果说「打开第一个/链接」——零延迟本地处理
-        val cachedResults = recentSearchResults
-        if (cachedResults != null) {
-            val idx = PetIntentRouter.matchLinkJump(cleanText, cachedResults.size)
-            if (idx != null) {
-                val item = cachedResults[idx]
-                Log.i(TAG, "跳转链接: index=$idx url=${item.url}")
-                runCatching {
-                    val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(item.url))
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    startActivity(intent)
-                }.onFailure { Log.e(TAG, "跳转链接失败", it) }
-                val platform = when (item.platform) {
-                    "douyin" -> "抖音"; "bilibili" -> "B站"; "zhihu" -> "知乎"
-                    "kuaishou" -> "快手"; "weibo" -> "微博"; "netease" -> "网易云"
-                    else -> "小红书"
-                }
-                speak("好的，帮你打开第 ${idx + 1} 条《${item.title}》，来自${platform}～")
-                maybeStartWakeListening()
-                return
-            }
-        } else if (PetIntentRouter.matchLinkJump(cleanText, 1) != null) {
-            // 说了链接跳转但没缓存 → 提示先搜
-            speak("还没有搜索结果哦，先搜一下你想看的内容吧～")
-            maybeStartWakeListening()
-            return
-        }
-
-        stopWakeListening() // 聊天期间让出麦克风
-        isChatting = true
-        showBubble("思考中……")
-        // 关闭深度思考时模型经常偷懒不调搜索工具（项目已知问题）；对明确的搜索意图
-        // 单独打开深度思考换工具触发率，普通闲聊仍保持快速通道
-        val wantsSearch = Regex("(搜索|搜一下|搜一搜|帮我找|找一下|找找|查一下|查查)").containsMatchIn(cleanText)
-        val turn = ++dialogueGeneration
-        val replyStarted = android.os.SystemClock.elapsedRealtime()
-        sentencePlayer.clear()
-        Log.i(TAG, "准备发网络请求: cleanText='$cleanText' deepThinking=$wantsSearch api=${ApiEndpoints.apiBaseUrl}")
-        Thread {
-            Log.i(TAG, "Thread 开始执行网络请求")
-            try {
-                val conversationId = "conv_${userId}_pet"
-                val client = okHttpClient.newBuilder().apply {
-                    interceptors().clear()
-                    networkInterceptors().clear()
-                    addInterceptor(authInterceptor)
-                    connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
-                    readTimeout(180, java.util.concurrent.TimeUnit.SECONDS)
-                }.build()
-
-                val sb = StringBuilder()
-                var actionConfirm: String? = null
-                var searchItems: List<com.example.mydiary.data.models.SocialSearchItem>? = null
-                var searchKeyword: String? = null
-                var searchLocked = false
-                var pendingPlanId: String? = null
-                var pendingPlanTitle: String? = null
-                val sentences = SpeechSentences()
-                var spokeStreaming = false
-                var sawDelta = false
-                val streamSpeech = !wantsSearch
-
-                fun speakPieces(pieces: List<String>) {
-                    if (pieces.isEmpty()) return
-                    spokeStreaming = true
-                    mainHandler.post {
-                        if (turn == dialogueGeneration && !destroyed) {
-                            stopWakeListening()
-                            pieces.forEach(sentencePlayer::enqueue)
-                        }
-                    }
-                }
-
-                fun handleEvent(event: ChatStreamEvent) {
-                    if (turn != dialogueGeneration || destroyed) throw java.util.concurrent.CancellationException()
-                    when (event.type) {
-                        "delta" -> {
-                            if (!sawDelta) Log.i("CompanionLatency", "reply_first_delta_ms=${android.os.SystemClock.elapsedRealtime()-replyStarted}")
-                            sawDelta = true
-                            val delta = event.delta.orEmpty()
-                            sb.append(delta)
-                            if (streamSpeech && actionConfirm == null && pendingPlanId == null && searchItems == null) {
-                                speakPieces(sentences.append(delta))
-                                val display = sb.toString()
-                                mainHandler.post { if (turn == dialogueGeneration && !destroyed) showBubble(display) }
-                            }
-                        }
-                        "reply" -> {
-                            // 完整回复事件：以它为准（后端会在结尾发）
-                            event.reply?.takeIf { it.isNotBlank() }?.let { sb.clear(); sb.append(it) }
-                        }
-                        "error" -> throw IllegalStateException(event.error.orEmpty().ifBlank { "回复失败" })
-                        "client_action" -> {
-                            // 后端判定的「操作 App」指令：转给 MainActivity 去跳真实页面
-                            val act = event.action.orEmpty()
-                            if (act.isNotBlank()) {
-                                Log.d(TAG, "后端指令命中: $act payload=${event.payload}")
-                                _clientActions.tryEmit(ChatClientAction(act, event.payload.toStringMap()))
-                                actionConfirm = confirmationFor(act)
-                            }
-                        }
-                        "tool_plan" -> {
-                            // 付费操作（如搜索）的待确认计划：先记下来，流结束后由然然代确认
-                            if (event.requiresConfirmation != false && !event.planId.isNullOrBlank()) {
-                                pendingPlanId = event.planId
-                                pendingPlanTitle = event.title ?: event.tool
-                                Log.d(TAG, "收到待确认计划: planId=${event.planId} tool=${event.tool}")
-                            }
-                        }
-                        "search_results" -> {
-                            // 小嘉然返回的搜索结果：保存起来等会读给用户听，同时写入 companion 让后续链接跳转能访问
-                            if (event.locked == true) {
-                                searchLocked = true
-                                recentSearchResults = null
-                                recentSearchKeyword = null
-                                recentSearchLocked = true
-                                Log.w(TAG, "搜索被锁定（未绑密钥或余额不足）: ${event.errorCode}")
-                            } else {
-                                searchItems = event.items
-                                searchKeyword = event.keyword
-                                // companion 缓存让"打开第 N 个链接"这类后续指令能直接跳转
-                                recentSearchResults = event.items
-                                recentSearchKeyword = event.keyword
-                                recentSearchLocked = false
-                            }
-                            Log.d(TAG, "收到搜索结果: keyword=${event.keyword}, ${event.items?.size ?: 0} 条, locked=${event.locked}")
-                        }
-                    }
-                }
-
-                // 第一轮：把用户的话发给小嘉然
-                if (wantsSearch) Log.d(TAG, "检测到搜索意图，本条打开深度思考以稳定触发搜索工具")
-                streamChat(
-                    client,
-                    ChatRequest(userId = userId, message = cleanText, conversationId = conversationId, deepThinking = wantsSearch),
-                    ::handleEvent,
-                )
-
-                // Voice activation is not authorization for a charge or write.
-                if (pendingPlanId != null) {
-                    sb.clear()
-                    sb.append("这项操作需要你确认。请在助手对话中重新提出请求，查看费用后再决定是否继续。")
-                }
-                val reply = sb.toString().trim()
-                if (streamSpeech && actionConfirm == null && pendingPlanId == null && searchItems == null) {
-                    if (sawDelta) speakPieces(sentences.finish())
-                    else if (reply.isNotBlank()) speakPieces(SpeechSentences().let { it.append(reply) + it.finish() })
-                }
-                mainHandler.post {
-                    if (turn != dialogueGeneration || destroyed) return@post
-                    isChatting = false
-                    val confirm = actionConfirm
-                    val items = searchItems
-                    val locked = searchLocked
-                    when {
-                        // 已经帮你把页面打开了，就只报一句确认语（别念后端的「**完成**」）
-                        confirm != null -> speak(confirm)
-                        // 有搜索结果：气泡里放标题+链接，嘴里只念标题和平台（网址念出来没用，还容易把 TTS 念崩）
-                        !items.isNullOrEmpty() -> {
-                            fun platformName(code: String?) = when (code) {
-                                "douyin" -> "抖音"; "bilibili" -> "B站"; "zhihu" -> "知乎"
-                                "kuaishou" -> "快手"; "weibo" -> "微博"; "netease" -> "网易云"
-                                else -> "小红书"
-                            }
-                            val keywordText = searchKeyword?.let { "关于「$it」" } ?: ""
-                            val bubbleSb = StringBuilder("$keywordText 找到 ${items.size} 条结果：")
-                            val speakSb = StringBuilder("$keywordText 找到 ${items.size} 条结果：")
-                            items.take(3).forEachIndexed { index, item ->
-                                bubbleSb.append("第${index + 1}条，${item.title}，来自${platformName(item.platform)}，链接是 ${item.url}")
-                                speakSb.append("第${index + 1}条，${item.title}，来自${platformName(item.platform)}。")
-                            }
-                            if (items.size > 3) {
-                                bubbleSb.append("，还有 ${items.size - 3} 条，想听更多跟我说")
-                                speakSb.append("，还有 ${items.size - 3} 条，链接我都放在气泡里了，想听更多跟我说")
-                            }
-                            speak(speakSb.toString())
-                            showBubble(bubbleSb.toString())
-                        }
-                        // 搜索被锁（没绑密钥/没余额）且小嘉然没给文字说明时，给个明确提示
-                        locked && reply.isBlank() ->
-                            speak("搜索功能还没开通哦，去账户页看看密钥和余额吧～")
-                        reply.isBlank() -> speak("这条我没想好怎么回答，换个说法试试")
-                        else -> {
-                            showBubble(reply)
-                            if (!spokeStreaming || pendingPlanId != null) speak(reply)
-                        }
-                    }
-                    maybeStartWakeListening()
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "桌宠对话失败", e)
-                mainHandler.post {
-                    if (turn != dialogueGeneration || destroyed) return@post
-                    isChatting = false
-                    speak("网络开小差了，稍后再试试")
-                    maybeStartWakeListening()
-                }
-            }
-        }.start()
-    }
-
-    /** 发起一次 chat/stream 请求，把每个 SSE 事件交给 handler；HTTP 非 200 或后端 error 事件会抛异常 */
-    private fun streamChat(
-        client: OkHttpClient,
-        request: ChatRequest,
-        handler: (ChatStreamEvent) -> Unit,
-    ) {
-        val url = "${ApiEndpoints.apiBaseUrl}chat/stream"
-        Log.i(TAG, "streamChat POST $url body=${gson.toJson(request).take(100)}")
-        val body = gson.toJson(request)
-            .toRequestBody("application/json; charset=utf-8".toMediaType())
-        val httpRequest = Request.Builder()
-            .url("${ApiEndpoints.apiBaseUrl}chat/stream")
-            .post(body)
-            .header("Accept", "text/event-stream")
-            .build()
-        val call = client.newCall(httpRequest)
-        activeChatCall = call
-        call.execute().use { response ->
-            if (!response.isSuccessful) {
-                throw IllegalStateException("HTTP ${response.code}")
-            }
-            val source = response.body?.source() ?: throw IllegalStateException("空回复")
-            var lineCount = 0
-            while (!source.exhausted()) {
-                val line = source.readUtf8Line() ?: break
-                if (!line.startsWith("data:")) continue
-                val payload = line.removePrefix("data:").trim()
-                if (payload.isBlank()) continue
-                val event = runCatching { gson.fromJson(payload, ChatStreamEvent::class.java) }.getOrNull() ?: continue
-                handler(event)
-                lineCount++
-            }
-            Log.d(TAG, "SSE 流结束，共 $lineCount 个事件")
-        }
+        if (!assistantPage || showcasePage || clean.isBlank()) return
+        hideBubble()
+        if (!CompanionChatInput.submit(userId, clean)) showBubble("输入队列已满，请稍后再试")
+        scheduleVoiceResume()
     }
 
     private var temporarilyVisible = false
@@ -1284,19 +960,27 @@ class PetOverlayService : Service() {
     }
 
     private fun revealForInteraction() {
+        if (showcasePage) return
         temporarilyVisible = true
-        rootView?.visibility = View.VISIBLE
+        schedulePositionCat()
         scheduleRetreat()
     }
 
     private fun applyPagePresence() {
+        if (!showcasePage && rootView == null && !destroyed) showCat()
         mainHandler.removeCallbacks(retreatRunnable)
         temporarilyVisible = false
-        if (!assistantPage) {
+        if (!assistantPage || showcasePage) {
+            cancelVoiceSession()
             if (inputVisible) toggleTextInput(false)
             hideBubble()
+        } else {
+            voiceInputFailed = false
+            manualVoiceInput?.resetWakeFailure()
+            scheduleVoiceResume()
         }
-        rootView?.visibility = if (assistantPage) View.VISIBLE else View.GONE
+        if (!assistantPage || showcasePage) rootView?.visibility = View.GONE
+        else schedulePositionCat()
     }
 
     /** 气泡自动隐藏延迟（毫秒）。30 秒足够用户看清长搜索结果，点击气泡可手动提前收起 */
@@ -1363,11 +1047,7 @@ class PetOverlayService : Service() {
         runCatching { rootView?.let { (it.parent as? android.view.ViewGroup)?.removeView(it) } }
         rootView = null
         bubbleText = null
-        runCatching { recognizer?.destroy() }
-        recognizer = null
-        sherpaEngine?.release()
-        sherpaEngine = null
-        manualVoiceInput?.stop()
+        manualVoiceInput?.release()
         manualVoiceInput = null
         runCatching { tts?.stop(); tts?.shutdown() }
         tts = null

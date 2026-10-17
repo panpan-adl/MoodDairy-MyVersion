@@ -36,6 +36,7 @@ async def recommend_title(text: str) -> TitleRecommendationResponse:
                 '根据用户这一篇日记的文字，推荐一个自然、具体的中文标题，优先6至18个字，最多30个字符。'
                 '只概括原文明确写出的经历或感受，不编造人物、事件、天气或情绪，不作心理评估。'
                 '不要使用“无标题”“日记标题”等占位词，不加引号、标题前缀或说明。返回title字段。',
-                {'diary_text': text}, TitleRecommendationResponse)
+                {'diary_text': text}, TitleRecommendationResponse,
+                max_tokens=128, thinking=False)
     except Exception:
         raise HTTPException(503, '暂时无法推荐标题，你可以手动填写或直接保存。') from None

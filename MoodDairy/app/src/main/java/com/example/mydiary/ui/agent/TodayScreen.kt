@@ -48,7 +48,7 @@ internal data class TodayActions(
     val history: () -> Unit = {}, val toggleHistorical: (AgentTask) -> Unit = {}, val bringToToday: (AgentTask) -> Unit = {},
     val refresh: () -> Unit = {}, val record: (String) -> Unit = {},
     val energy: (String) -> Unit = {}, val minutes: (Int) -> Unit = {},
-    val generatePlan: () -> Unit = {}, val saveRecord: () -> Unit = {}, val manualPlan: () -> Unit = {},
+    val generatePlan: () -> Unit = {}, val manualPlan: () -> Unit = {},
     val editDraft: (Int, AgentTaskDraft) -> Unit = { _, _ -> }, val addDraft: () -> Unit = {},
     val removeDraft: (Int) -> Unit = {}, val adopt: () -> Unit = {},
     val editTask: (AgentTask, AgentTaskDraft) -> Unit = { _, _ -> },
@@ -71,7 +71,7 @@ fun TodayScreen(onOpenAssistant: () -> Unit, onOpenRecords: () -> Unit, onOpenDi
     TodayDashboard(state, TodayActions(
         history = viewModel::loadHistory, toggleHistorical = viewModel::toggleHistorical, bringToToday = viewModel::bringToToday,
         refresh = viewModel::refresh, record = viewModel::updateRecord, energy = viewModel::updateEnergy,
-        minutes = viewModel::updateMinutes, generatePlan = viewModel::generatePlan, saveRecord = viewModel::saveRecord,
+        minutes = viewModel::updateMinutes, generatePlan = viewModel::generatePlan,
         manualPlan = viewModel::manualPlan, editDraft = viewModel::editDraft, addDraft = viewModel::addDraft,
         removeDraft = viewModel::removeDraft, adopt = viewModel::adopt, editTask = viewModel::updateTask,
         toggle = viewModel::toggle, postpone = viewModel::postpone, reflection = viewModel::updateReflection,
@@ -109,7 +109,7 @@ internal fun TodayDashboard(state: TodayState, actions: TodayActions, showTitle:
     }
     Column(Modifier.fillMaxSize().background(Brush.verticalGradient(
         listOf(MintGreen.copy(alpha = 0.3f), PaleYellow.copy(alpha = 0.3f), SoftWhite)))) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = if (showTitle) 12.dp else 0.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 if (showTitle) Text("今天", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                 val dateLabel = runCatching { LocalDate.parse(state.date).format(DateTimeFormatter.ofPattern("M月d日  EEEE", Locale.CHINA)) }.getOrDefault(state.date)
@@ -172,15 +172,9 @@ internal fun TodayDashboard(state: TodayState, actions: TodayActions, showTitle:
             when (selected) {
                 TodaySection.RECORD -> {
                     item(key = "record") {
-                        AgentPanel("随手记录", "写下目标、想法或感受，选择记录或生成计划", Icons.Outlined.EditNote) {
+                        AgentPanel("随手记录", "写下今天的目标和待办，用于安排任务", Icons.Outlined.EditNote) {
                             AgentTextField(state.record, actions.record, "今天，我想……", enabled = !state.busy,
                                 placeholder = "例如：完成工作方案、复习英语，晚饭后散步。", minLines = 3)
-                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("仅记录，不创建任务", fontSize = 12.sp, color = TextSecondary)
-                                TextButton(onClick = actions.saveRecord, enabled = canOperate && state.record.isNotBlank(), colors = ButtonDefaults.textButtonColors(contentColor = PrimaryDark)) {
-                                    Icon(Icons.Outlined.BookmarkBorder, null, Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)); Text("保存日记", fontSize = 13.sp)
-                                }
-                            }
                         }
                     }
                     item(key = "planning") {

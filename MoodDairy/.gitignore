@@ -6105,3 +6105,6 @@ CubismSdkForJava-5-r.4.1/**/.transforms/
 
 # Personal agent local runtime data
 /backend/data/
+
+# Required local wake-word model inputs and attribution
+!app/src/main/assets/voice-wake/*.txt

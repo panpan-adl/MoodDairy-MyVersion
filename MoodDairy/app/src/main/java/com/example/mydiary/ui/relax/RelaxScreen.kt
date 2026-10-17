@@ -1,5 +1,22 @@
 package com.example.mydiary.ui.relax
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import com.example.mydiary.ui.theme.*
+import com.example.mydiary.whitenoise.WhiteNoiseSound
+import com.example.mydiary.whitenoise.WhiteNoiseSoundList
+
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -47,26 +64,14 @@ class RelaxViewModel @Inject constructor(private val api: DiaryApiService) : Vie
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RelaxScreen(onNavigateBack: () -> Unit, viewModel: RelaxViewModel = hiltViewModel(),
-                playerViewModel: RelaxPlayerViewModel = hiltViewModel()) {
+fun RelaxScreen(onNavigateBack: () -> Unit, controller: RelaxPlaybackController,
+                initialTab: Int = 0, viewModel: RelaxViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsState()
-    val playback by playerViewModel.state.collectAsState()
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(playerViewModel, lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) playerViewModel.pause()
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-            playerViewModel.pause()
-        }
-    }
-    RelaxContent(state = state, onReload = viewModel::load, onNavigateBack = onNavigateBack,
-        playback = playback, onPlay = playerViewModel::toggle, onPause = playerViewModel::pause,
-        onSeek = playerViewModel::seekTo, onStop = playerViewModel::stop)
+    val playback by controller.state.collectAsState()
+    RelaxContent(state, viewModel::load, onNavigateBack, playback, controller::toggle,
+        controller::pause, controller::seekTo, controller::stop,
+        onNoise = controller::playNoise, initialTab = initialTab)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -74,62 +79,102 @@ fun RelaxScreen(onNavigateBack: () -> Unit, viewModel: RelaxViewModel = hiltView
 internal fun RelaxContent(state: RelaxMusicState, onReload: () -> Unit, onNavigateBack: () -> Unit,
                           playback: RelaxPlaybackState = RelaxPlaybackState(),
                           onPlay: (RelaxTrack) -> Unit = {}, onPause: () -> Unit = {},
-                          onSeek: (Long) -> Unit = {}, onStop: () -> Unit = {}) {
-    var tab by rememberSaveable { mutableIntStateOf(0) }
+                          onSeek: (Long) -> Unit = {}, onStop: () -> Unit = {},
+                          onNoise: (WhiteNoiseSound) -> Unit = {}, initialTab: Int = 0) {
+    var tab by rememberSaveable { mutableIntStateOf(initialTab) }
+    var category by rememberSaveable { mutableStateOf("全部") }
+    var query by rememberSaveable { mutableStateOf("") }
+    val sounds = remember { WhiteNoiseSoundList.getAllSounds() }
+    val categories = remember { linkedMapOf("全部" to "全部", "RAIN" to "雨声", "NATURE" to "自然",
+        "ANIMALS" to "动物", "PLACES" to "场所", "THINGS" to "物品", "TRANSPORT" to "交通",
+        "URBAN" to "城市", "NOISE" to "噪音") }
     LaunchedEffect(tab) { if (tab == 0 && state.tracks.isEmpty()) onReload() }
-    Scaffold(topBar = {
-        TopAppBar(title = { Text("放松一下") }, navigationIcon = {
-            IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, "返回") }
-        })
-    }) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            TabRow(selectedTabIndex = tab) {
-                Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("音乐") })
-                Tab(selected = tab == 1, onClick = { onPause(); tab = 1 }, text = { Text("白噪音") })
-            }
-            if (tab == 1) {
-                WhiteNoiseScreen(onNavigateBack = onNavigateBack, embedded = true)
-            } else LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                item { Text("挑一首喜欢的歌，在这里播放。你可以随时暂停或换一首。", Modifier.padding(top = 16.dp)) }
-                if (state.loading) item { CircularProgressIndicator() }
-                state.error?.let { error -> item { Text(error); TextButton(onClick = onReload) { Text("重试") } } }
-                items(state.tracks, key = { it.id }) { track ->
-                    OutlinedCard(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(16.dp)) {
-                            Text(track.title, style = MaterialTheme.typography.titleMedium)
-                            Text(track.artist)
-                            val selected = playback.trackId == track.id
-                            Row {
-                                TextButton(onClick = { onPlay(track) }, enabled = !(selected && playback.loading)) {
-                                    Text(when {
-                                        selected && playback.loading -> "加载中…"
-                                        selected && playback.playing -> "暂停"
-                                        selected && playback.error != null -> "重试播放"
-                                        selected && playback.positionMs > 0 -> "继续播放"
-                                        else -> "播放"
-                                    })
+    Scaffold(containerColor = Color.Transparent, topBar = {
+        TopAppBar(title = { Text("放松一下", color = TextPrimary, fontWeight = FontWeight.Bold) },
+            navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, "返回", tint = PrimaryDark) } },
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent))
+    }, modifier = Modifier.background(Brush.verticalGradient(listOf(PrimaryLight, SoftWhite, SoftWhite)))) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
+            Text("留一点时间，听听喜欢的声音", color = TextSecondary, fontSize = 13.sp,
+                modifier = Modifier.padding(bottom = 16.dp))
+            Surface(shape = RoundedCornerShape(18.dp), color = Color.White) {
+                Row(Modifier.fillMaxWidth().padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("音乐" to Icons.Default.MusicNote, "白噪音" to Icons.Default.Spa).forEachIndexed { index, (label, icon) ->
+                        Surface(Modifier.weight(1f), shape = RoundedCornerShape(14.dp),
+                            color = if (tab == index) PrimaryLight else Color.Transparent) {
+                            Tab(selected = tab == index, onClick = { tab = index },
+                                selectedContentColor = TextPrimary, unselectedContentColor = TextSecondary) {
+                                Row(Modifier.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(icon, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
+                                    Text(label, fontSize = 15.sp, fontWeight = if (tab == index) FontWeight.Bold else FontWeight.Normal)
                                 }
-                                if (selected) TextButton(onClick = onStop) { Text("停止") }
-                            }
-                            if (selected) {
-                                if (playback.durationMs > 0) {
-                                    Slider(value = playback.positionMs.coerceIn(0, playback.durationMs).toFloat(),
-                                        valueRange = 0f..playback.durationMs.toFloat(),
-                                        onValueChange = { onSeek(it.toLong()) })
-                                    Text("${playbackTime(playback.positionMs)} / ${playbackTime(playback.durationMs)}")
-                                }
-                                playback.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                             }
                         }
                     }
                 }
-                item { Spacer(Modifier.height(80.dp)) }
+            }
+            Text("开始播放后会回到助手，小播放器陪你继续记录。", fontSize = 12.sp, color = PrimaryDark,
+                modifier = Modifier.padding(vertical = 14.dp))
+            if (tab == 1) {
+                OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true,
+                    placeholder = { Text("搜索雨声、鸟鸣、海浪…") }, leadingIcon = { Icon(Icons.Default.Search, null) },
+                    shape = RoundedCornerShape(16.dp))
+                androidx.compose.foundation.lazy.LazyRow(Modifier.padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(categories.keys.toList()) { key -> FilterChip(selected = category == key, onClick = { category = key },
+                        label = { Text(categories.getValue(key)) }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = PrimaryLight)) }
+                }
+                val visible = sounds.filter { (category == "全部" || it.category == category) && it.name.contains(query.trim(), true) }
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 160.dp)) {
+                    if (visible.isEmpty()) item { Text("没有找到这个声音，试试其他关键词。", color = TextSecondary) }
+                    items(visible, key = { it.id }) { sound ->
+                        val selected = playback.whiteNoise && playback.trackId == sound.id
+                        SoundRow(sound.name, categories[sound.category] ?: "环境声", selected, playback,
+                            onClick = { if (selected && playback.playing) onPause() else onNoise(sound) },
+                            artwork = { Text(sound.icon, fontSize = 25.sp) })
+                    }
+                }
+            } else LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 160.dp)) {
+                if (state.loading) item { LinearProgressIndicator(Modifier.fillMaxWidth(), color = PrimaryVariant) }
+                state.error?.let { error -> item { Text(error, color = TextSecondary); TextButton(onClick = onReload) { Text("重新加载", color = PrimaryDark) } } }
+                items(state.tracks, key = { it.id }) { track ->
+                    SoundRow(track.title, track.artist, !playback.whiteNoise && playback.trackId == track.id, playback,
+                        onClick = { onPlay(track) }, artwork = {
+                            if (track.coverUrl != null) AsyncImage(track.coverUrl, null, Modifier.fillMaxSize(),
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+                            else Icon(Icons.Default.MusicNote, null, tint = PrimaryDark, modifier = Modifier.size(26.dp))
+                        })
+                }
             }
         }
     }
 }
 
-private fun playbackTime(ms: Long): String {
-    val seconds = ms.coerceAtLeast(0) / 1000
-    return "%d:%02d".format(seconds / 60, seconds % 60)
+@Composable
+private fun SoundRow(title: String, subtitle: String, selected: Boolean, playback: RelaxPlaybackState,
+                     onClick: () -> Unit, artwork: @Composable () -> Unit) {
+    Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = Color.White,
+        border = if (selected) androidx.compose.foundation.BorderStroke(1.dp, PrimaryVariant) else null) {
+        Column {
+            Row(Modifier.fillMaxWidth().clickable(enabled = !(selected && playback.loading), onClick = onClick).padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(58.dp).clip(RoundedCornerShape(14.dp)).background(PrimaryLight.copy(alpha = .6f)),
+                    contentAlignment = Alignment.Center) { artwork() }
+                Column(Modifier.weight(1f).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text(title, color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(if (selected && playback.loading) "正在准备声音…" else subtitle, color = TextSecondary, fontSize = 12.sp,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                FilledTonalIconButton(onClick = onClick, enabled = !(selected && playback.loading),
+                    colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = PrimaryLight, contentColor = PrimaryDark)) {
+                    if (selected && playback.loading) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = PrimaryDark)
+                    else Icon(if (selected && playback.playing) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        if (selected && playback.playing) "暂停" else "播放")
+                }
+            }
+            if (selected) playback.error?.let { Text(it, color = MaterialTheme.colorScheme.error,
+                fontSize = 12.sp, modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)) }
+        }
+    }
 }
+

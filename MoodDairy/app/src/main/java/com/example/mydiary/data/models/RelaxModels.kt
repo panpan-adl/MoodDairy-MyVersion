@@ -7,6 +7,7 @@ data class RelaxTrack(
     val title: String,
     val artist: String,
     @SerializedName("jump_url") val jumpUrl: String,
+    @SerializedName("cover_url") val coverUrl: String? = null,
 )
 data class RelaxRecommendations(val tracks: List<RelaxTrack> = emptyList())
 

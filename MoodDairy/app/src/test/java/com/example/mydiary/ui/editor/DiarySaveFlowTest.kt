@@ -163,4 +163,23 @@ class DiarySaveFlowTest {
             assertTrue(state.value.canConfirmText("server_id"))
         } finally { cleanup() }
     }
+    @Test fun connectionLossKeepsNewDiaryDraftAndDoesNotReplayTheSave() = runTest {
+        val (vm, state, diaries) = harness()
+        try {
+            state.value = state.value.copy(diaryId = null, hasUnsavedChanges = true)
+            val original = state.value
+            every { diaries.createDiary(any()) } returns flowOf(ApiResult.Error(-1, "interrupted", java.io.IOException("EOF")))
+            vm.saveDiary(); advanceUntilIdle()
+            verify(exactly = 1) { diaries.createDiary(any()) }
+            verify(exactly = 0) { diaries.syncMediaItems(any(), any()) }
+            assertEquals(original.title, state.value.title)
+            assertEquals(original.mediaItems, state.value.mediaItems)
+            assertNull(state.value.diaryId)
+            assertNull(state.value.saveCompletion)
+            assertFalse(state.value.isSaving)
+            assertTrue(state.value.hasUnsavedChanges)
+            assertTrue(state.value.errorMessage!!.contains("保存结果未确认"))
+        } finally { cleanup() }
+    }
+
 }

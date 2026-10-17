@@ -501,8 +501,8 @@ async def _exec_search_social_content(
         return ToolExecutionResult(ok=False, tool="search_social_content", mode="read_only", summary="请先确认本次平台搜索的接口费用", data={"items":[], "error_code":"CHARGE_CONFIRMATION_REQUIRED"}, error="CHARGE_CONFIRMATION_REQUIRED")
 
     from app.agent.support_intents import is_psychology_search, resource_label
-    from app.services.social_search.charge_policy import user_search_message
-    if not is_psychology_search(user_search_message.get()):
+    from app.services.social_search.charge_policy import user_search_message, direct_companion_search
+    if not direct_companion_search.get() and not is_psychology_search(user_search_message.get()):
         return ToolExecutionResult(ok=False, tool="search_social_content", mode="read_only",
             summary="我可以帮你找心理相关书籍、纪录片、科普或放松内容。请说说想了解的主题。",
             data={"items": [], "error_code": "OUT_OF_SCOPE"}, error="OUT_OF_SCOPE")
@@ -981,19 +981,22 @@ async def execute_tool(
     conversation_id: str,
     user_message: str = "",
     charge_confirmed: bool = False,
+    companion_search: bool = False,
 ) -> ToolExecutionResult:
     definition = get_tool_definition(tool_name)
     if not definition:
         raise ValueError(f"unknown tool: {tool_name}")
 
-    from app.services.social_search.charge_policy import user_search_message, search_charge_confirmed
+    from app.services.social_search.charge_policy import user_search_message, search_charge_confirmed, direct_companion_search
     context_token = user_search_message.set(user_message)
     charge_token = search_charge_confirmed.set(charge_confirmed)
+    companion_token = direct_companion_search.set(companion_search and charge_confirmed and tool_name == "search_social_content")
     try:
         return await definition.executor(arguments, db, user_id, conversation_id)
     finally:
         user_search_message.reset(context_token)
         search_charge_confirmed.reset(charge_token)
+        direct_companion_search.reset(companion_token)
 
 
 def build_tool_plan_preview(tool_name: str, arguments: Dict[str, Any]) -> str:

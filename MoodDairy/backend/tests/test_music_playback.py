@@ -54,6 +54,7 @@ async def test_resolver_rejects_webpages_and_preserves_real_audio(monkeypatch, a
     def handle(request):
         requests.append(request)
         if "enhance/player/url" in request.url.path:
+            assert request.url.params['br'] == '320000'
             return httpx.Response(200, json={"data": [{"url": "http://m801.music.126.net/test.mp3"}]})
         assert request.url.scheme == "https"
         return httpx.Response(200, headers={"Content-Type": audio_type}, content=b"audio")

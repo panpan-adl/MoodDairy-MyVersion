@@ -109,7 +109,7 @@ async def test_explicit_generation_encrypted_cache_and_refresh_preservation(env)
 
 
 @pytest.mark.asyncio
-async def test_edits_mark_stale_and_failures_keep_previous_review(env):
+async def test_edits_mark_stale_and_model_failure_returns_real_offline_review(env):
     c, maker, _, model = env
     old = (await c.post(URL, json={})).json()
     async with maker() as db:
@@ -120,9 +120,13 @@ async def test_edits_mark_stale_and_failures_keep_previous_review(env):
     assert stale['stale'] and stale['body'] == old['body']
     assert (await c.post(URL, json={'content_version': old['content_version']})).status_code == 409
     model.side_effect = RuntimeError('provider unavailable')
-    failed = await c.post(URL, json={'refresh': True})
-    assert failed.status_code == 503 and failed.json()['detail'] == service.FAILURE
-    assert (await c.get(URL)).json()['body'] == old['body']
+    fallback = await c.post(URL, json={'refresh': True})
+    assert fallback.status_code == 200, fallback.text
+    value = fallback.json()
+    assert value['keywords'] and value['extraction_method'] == 'source-phrases+lexicon'
+    assert all(word['text'] in '下午很疲惫，报告还没写完。' for word in value['keywords'])
+    assert not value['stale']
+    assert (await c.get(URL)).json()['body'] == value['body']
 
 
 @pytest.mark.asyncio
@@ -252,4 +256,18 @@ async def test_real_offline_extraction_http_round_trip(env, monkeypatch):
     assert value['keywords'] and value['extraction_method'] == 'textrank+lexicon'
     original = '实验报告今天完成了机器学习实验报告，累但松了一口气。'
     assert all(word['text'] in original for word in value['keywords'])
+    assert (await c.get(URL)).json() == value
+
+
+@pytest.mark.asyncio
+async def test_slow_cold_model_returns_basic_keywords_instead_of_failure(env, monkeypatch):
+    c, _, _, model = env
+    monkeypatch.setattr(service, 'EXTRACTION_TIMEOUT_SECONDS', .01)
+    async def slow_model(*args):
+        await asyncio.sleep(10)
+    model.side_effect = slow_model
+    response = await c.post(URL, json={})
+    assert response.status_code == 200
+    value = response.json()
+    assert value['keywords'] and value['extraction_method'] == 'source-phrases+lexicon'
     assert (await c.get(URL)).json() == value
