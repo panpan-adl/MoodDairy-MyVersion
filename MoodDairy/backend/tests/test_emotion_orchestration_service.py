@@ -14,6 +14,9 @@ def test_current_low_message_triggers_bundle():
     assert result.bundle is not None
     assert result.bundle.auto_actions == []
     assert any(action.action == "open_relax" for action in result.bundle.services)
+    assert [action.id for action in result.bundle.services] == [
+        "relax", "healing_drawing", "daily_mood_check", "adjust_todo", "continue_chat"
+    ]
 
 
 def test_sustained_low_summaries_trigger_bundle():

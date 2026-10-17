@@ -87,6 +87,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -144,6 +146,9 @@ fun ChatScreen(
     val serviceBundles by viewModel.serviceBundles.collectAsState()
     val faceEmotionPrompt by viewModel.faceEmotionPrompt.collectAsState()
     val faceEmotionStatus by viewModel.faceEmotionStatus.collectAsState()
+    val selectedMood by viewModel.selectedMood.collectAsState()
+    val moodChangeSuggestion by viewModel.moodChangeSuggestion.collectAsState()
+    var showMoodPicker by remember { mutableStateOf(false) }
     val isLoading by viewModel.isLoading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
     val emotionConsent by viewModel.emotionConsentGranted.collectAsState()
@@ -314,20 +319,16 @@ fun ChatScreen(
                     onNavigateToRecharge = onNavigateToRecharge,
                     isVip = isVip,
                     isEmotionCapturing = isEmotionCapturing,
+                    faceEmotionStatus = faceEmotionStatus,
+                    selectedMood = selectedMood,
+                    onSelectMood = { showMoodPicker = true },
                     onOpenHistory = {
                         viewModel.loadHistoryConversations()
                         showHistory = true
                     },
                     onNewConversation = { viewModel.startNewConversation() },
                 )
-                if (isEmotionCapturing) {
-                    Text(
-                        text = faceEmotionStatus,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+
             },
             composer = {
                 ChatInputBar(
@@ -461,18 +462,24 @@ fun ChatScreen(
         )
     }
 
-    if (faceEmotionPrompt != null && !shouldAskEmotionConsent && editingPlan == null) {
-        AlertDialog(
-            onDismissRequest = { viewModel.dismissFaceEmotionPrompt(false) },
-            title = { Text("想休息一下吗？") },
-            text = { Text("我注意到你可能有些不舒服。表情识别也可能有误，你愿意看看音乐、放松和心情记录建议吗？") },
-            confirmButton = {
-                TextButton(onClick = { viewModel.dismissFaceEmotionPrompt(true) }) { Text("看看建议") }
-            },
-            dismissButton = {
-                TextButton(onClick = { viewModel.dismissFaceEmotionPrompt(false) }) { Text("暂时不用") }
-            },
+    if (showMoodPicker && !shouldAskEmotionConsent) {
+        MoodPickerDialog(
+            selectedMood = selectedMood,
+            onSelect = { mood -> viewModel.selectMood(mood); showMoodPicker = false },
+            onDismiss = { showMoodPicker = false },
         )
+    }
+
+    if (moodChangeSuggestion != null && !showMoodPicker && !shouldAskEmotionConsent && editingPlan == null) {
+        MoodChangeDialog(
+            current = FaceEmotionStatusUi.fromObservation(selectedMood, 1f),
+            suggested = FaceEmotionStatusUi.fromObservation(moodChangeSuggestion, 1f),
+            onRespond = viewModel::respondToMoodChange,
+        )
+    }
+
+    if (faceEmotionPrompt != null && !showMoodPicker && moodChangeSuggestion == null && !shouldAskEmotionConsent && editingPlan == null) {
+        MoodCareDialog(onRespond = viewModel::dismissFaceEmotionPrompt)
     }
 
     if (editingPlan != null) {
@@ -628,9 +635,15 @@ internal fun ChatTopBar(
     onNavigateToRecharge: () -> Unit = {},
     isVip: Boolean = false,
     isEmotionCapturing: Boolean = false,
+    faceEmotionStatus: FaceEmotionStatusUi = FaceEmotionStatusUi.Recognizing,
+    selectedMood: String? = null,
+    onSelectMood: () -> Unit = {},
     onOpenHistory: () -> Unit = {},
     onNewConversation: () -> Unit = {},
 ) {
+    val moodStatus = selectedMood?.let { FaceEmotionStatusUi.fromObservation(it, 1f) }
+        ?: if (isEmotionCapturing) faceEmotionStatus else FaceEmotionStatusUi("🙂", "选择心情", "点击选择此刻的心情")
+    val appearance = com.example.mydiary.live2d.rememberCompanionAppearance()
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = Color.Transparent,
@@ -642,7 +655,7 @@ internal fun ChatTopBar(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             AsyncImage(
-                model = "file:///android_asset/live2d/Diana/raw.preview.png",
+                model = "file:///android_asset/${appearance.avatarPath}",
                 contentDescription = "assistant_avatar",
                 modifier = Modifier
                     .size(80.dp)
@@ -659,7 +672,7 @@ internal fun ChatTopBar(
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "然然",
                     fontSize = 18.sp,
@@ -670,15 +683,31 @@ internal fun ChatTopBar(
                     text = "你的日记助手",
                     fontSize = 12.sp,
                     color = TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = onNavigateToLive2D) { Text("数字人", color = TextPrimary) }
-                    com.example.mydiary.live2d.CompanionToggle()
+                run {
+                    Row(
+                        modifier = Modifier.padding(top = 3.dp).fillMaxWidth().heightIn(min = 32.dp)
+                            .clickable(onClickLabel = "选择心情", onClick = onSelectMood),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(text = moodStatus.icon, fontSize = 18.sp, maxLines = 1,
+                            modifier = Modifier.clearAndSetSemantics { contentDescription = moodStatus.description })
+                        Text(
+                            text = moodStatus.label + if (selectedMood != null) " · 自选" else "",
+                            fontSize = 11.sp,
+                            color = TextSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
-
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.width(4.dp))
 
             // 表情采集指示点：采集期间显示小相机图标
             if (isEmotionCapturing) {
@@ -805,20 +834,26 @@ private fun EmotionServiceBundleSection(
                         )
                     }
 
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(bundle.services, key = { service -> "${bundle.bundleId}-${service.id}" }) { service ->
-                            Button(
-                                onClick = { onAction(service) },
-                                modifier = Modifier.width(152.dp),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
-                            ) {
-                                Icon(
-                                    imageVector = serviceActionIcon(service.action, service.id),
-                                    contentDescription = service.action,
-                                    modifier = Modifier.size(18.dp),
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(text = service.title, fontSize = 13.sp, maxLines = 1)
+                    val visibleServices = bundle.services.filterNot {
+                        it.id == "healing_video" || it.payload["mode"] == "healing_video"
+                    }
+                    visibleServices.chunked(2).forEach { rowServices ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            rowServices.forEach { service ->
+                                Button(
+                                    onClick = { onAction(service) },
+                                    modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = serviceActionIcon(service.action, service.id),
+                                        contentDescription = service.action,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(text = service.title, fontSize = 13.sp,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                                }
                             }
                         }
                     }
@@ -842,6 +877,7 @@ private fun serviceActionIcon(action: String, id: String): ImageVector {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun ChatMessageItem(message: ChatMessage, onNavigateToRecharge: () -> Unit = {}, onEntryAction: (com.example.mydiary.data.models.ChatServiceAction) -> Unit = {}) {
+    val appearance = com.example.mydiary.live2d.rememberCompanionAppearance()
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -851,7 +887,7 @@ internal fun ChatMessageItem(message: ChatMessage, onNavigateToRecharge: () -> U
     ) {
         if (!message.isFromUser) {
             AsyncImage(
-                model = "file:///android_asset/live2d/Diana/raw.preview.png",
+                model = "file:///android_asset/${appearance.avatarPath}",
                 contentDescription = "assistant_avatar_small",
                 modifier = Modifier
                     .size(36.dp)

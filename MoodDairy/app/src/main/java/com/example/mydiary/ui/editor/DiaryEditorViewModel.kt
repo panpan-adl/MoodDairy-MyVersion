@@ -224,7 +224,9 @@ class DiaryEditorViewModel @Inject constructor(
         }
 
         ++reviewRequestSerial
-        _uiState.update { it.copy(diaryReview = null, reviewGenerating = false, reviewError = null) }
+        pendingSaveAction = null
+        _uiState.update { it.copy(diaryReview = null, reviewGenerating = false, reviewError = null,
+            confirmedText = emptyMap(), saveSuccess = false, saveCompletion = null, drawingPromptDiaryId = null) }
         // 记录本次初始化的参数
         lastInitializedDiaryId = diaryId
         lastInitializedDate = resolvedDate
@@ -313,8 +315,10 @@ class DiaryEditorViewModel @Inject constructor(
                             _uiState.update { 
                                 it.copy(
                                     diaryId = diary.id,
+                                    date = diary.date,
                                     title = diary.title ?: "",
                                     mediaItems = diary.mediaItems,
+                                    confirmedText = diary.mediaItems.filterIsInstance<MediaItem.Text>().associate { text -> text.id to text.content },
                                     weather = diary.weather,
                                     location = diary.location,
                                     moodScore = diary.moodScore,
@@ -673,8 +677,91 @@ class DiaryEditorViewModel @Inject constructor(
      * 
      * 需求：2.4
      */
+    private var titleRequestSerial = 0L
+    private var pendingSaveAction: DiarySaveAction? = null
+
     fun saveDiary() {
+        requestSave(DiarySaveAction.ReturnToCalendar)
+    }
+
+    fun confirmText(mediaId: String) {
         val state = _uiState.value
+        if (!state.canConfirmText(mediaId)) return
+        val text = state.mediaItems.filterIsInstance<MediaItem.Text>().first { it.id == mediaId }
+        requestSave(DiarySaveAction.ConfirmText(mediaId, text.content))
+    }
+
+    private fun requestSave(action: DiarySaveAction) {
+        val state = _uiState.value
+        if (state.isSaving || state.isRecommendingTitle || state.showTitleSuggestion) return
+        if (state.diaryId == null && state.date.isAfter(LocalDate.now())) {
+            _uiState.update { it.copy(errorMessage = FUTURE_DIARY_DATE_MESSAGE) }
+            return
+        }
+        pendingSaveAction = action
+        _uiState.update { it.copy(saveSuccess = false, saveCompletion = null) }
+        val text = titleSource(state)
+        if (state.title.isNotBlank() || text.isBlank()) {
+            persistDiary()
+            return
+        }
+        _uiState.update { it.copy(isRecommendingTitle = true, showTitleSuggestion = true,
+            suggestedTitle = "", titleSuggestionError = null) }
+        val requestSerial = ++titleRequestSerial
+        viewModelScope.launch {
+            val result = growthPortraitRepository.recommendDiaryTitle(text)
+            val latest = _uiState.value
+            if (!latest.showTitleSuggestion || requestSerial != titleRequestSerial) return@launch
+            if (latest.diaryId != state.diaryId || latest.date != state.date || titleSource(latest) != text) {
+                _uiState.update { it.copy(isRecommendingTitle = false, showTitleSuggestion = false,
+                    errorMessage = "内容已变化，请重新保存以生成新标题。") }
+                pendingSaveAction = null
+                return@launch
+            }
+            _uiState.update { it.copy(isRecommendingTitle = false,
+                suggestedTitle = if (result is ApiResult.Success) result.data.title else "",
+                titleSuggestionError = if (result is ApiResult.Success) null else "暂时无法推荐标题，你可以手动填写或直接保存。") }
+        }
+    }
+
+    private fun titleSource(state: DiaryEditorUiState): String = state.mediaItems.sortedBy { it.order }
+        .mapNotNull { item -> when (item) {
+            is MediaItem.Text -> item.content
+            is MediaItem.Audio -> item.transcription?.let { it.processedText.ifBlank { it.originalText } }
+            else -> null
+        } }.filter { it.isNotBlank() }.joinToString("\n").take(12000)
+
+    fun editSuggestedTitle(title: String) {
+        _uiState.update { it.copy(suggestedTitle = title.take(100)) }
+    }
+
+    fun dismissTitleSuggestion() {
+        titleRequestSerial++
+        pendingSaveAction = null
+        _uiState.update { it.copy(showTitleSuggestion = false, isRecommendingTitle = false) }
+    }
+
+    fun saveWithSuggestedTitle(useTitle: Boolean) {
+        val state = _uiState.value
+        if (!state.showTitleSuggestion || (useTitle && state.isRecommendingTitle) || state.isSaving) return
+        if (useTitle && state.suggestedTitle.isBlank()) return
+        val action = pendingSaveAction ?: return
+        dismissTitleSuggestion()
+        pendingSaveAction = action
+        if (useTitle && _uiState.value.title.isBlank()) updateTitle(state.suggestedTitle.trim())
+        persistDiary()
+    }
+
+    private fun persistDiary() {
+        val state = _uiState.value
+        if (state.isSaving) return
+        val saveAction = pendingSaveAction ?: return
+        pendingSaveAction = null
+        if (saveAction is DiarySaveAction.ConfirmText && state.mediaItems.filterIsInstance<MediaItem.Text>()
+                .none { it.id == saveAction.mediaId && it.content == saveAction.content }) {
+            _uiState.update { it.copy(errorMessage = "文字已变化，请再次点击文字模块的对勾确认。") }
+            return
+        }
 
         if (state.diaryId == null && state.date.isAfter(LocalDate.now())) {
             _uiState.update {
@@ -693,8 +780,8 @@ class DiaryEditorViewModel @Inject constructor(
             return
         }
         
+        _uiState.update { it.copy(isSaving = true, errorMessage = null) }
         viewModelScope.launch {
-            _uiState.update { it.copy(isSaving = true, errorMessage = null) }
             
             try {
                 // ========== Phase 1: 保存日记元数据 ==========
@@ -730,6 +817,8 @@ class DiaryEditorViewModel @Inject constructor(
                             return@launch
                         }
                         Log.d(TAG, "Phase 1 成功: diaryId = $id")
+                        // A media-sync retry must update this diary rather than create a second one.
+                        _uiState.update { it.copy(diaryId = id) }
                         id
                     }
                     is ApiResult.Error -> {
@@ -772,13 +861,18 @@ class DiaryEditorViewModel @Inject constructor(
                 // ========== Phase 3: 更新 UIState（真实 ID 覆盖临时 ID） ==========
                 // 再次读取最新状态用于更新 localCache
                 val latestState = _uiState.value
+                val changedDuringSave = !state.contentMatches(latestState)
+                val visibleItems = reconcileSavedMedia(latestItems, finalMediaItems, latestState.mediaItems)
+                val completion = if (changedDuringSave) null else DiarySaveCompletion(saveAction, savedDiaryId, state.date)
+                val confirmedText = remapConfirmedText(latestItems, finalMediaItems, latestState.confirmedText,
+                    if (changedDuringSave) null else saveAction)
                 
                 localCache = Diary(
                     id = savedDiaryId,
                     userId = latestState.userId,
                     title = latestState.title.ifBlank { null },
                     date = latestState.date,
-                    mediaItems = finalMediaItems,
+                    mediaItems = visibleItems,
                     weather = latestState.weather,
                     location = latestState.location,
                     moodScore = latestState.moodScore,
@@ -790,10 +884,13 @@ class DiaryEditorViewModel @Inject constructor(
                 _uiState.update { 
                     it.copy(
                         diaryId = savedDiaryId,
-                        mediaItems = finalMediaItems, // 用后端返回的真实 ID 覆盖临时 ID
+                        mediaItems = visibleItems,
+                        confirmedText = confirmedText,
                         isSaving = false,
-                        hasUnsavedChanges = false,
-                        saveSuccess = true
+                        hasUnsavedChanges = changedDuringSave,
+                        saveSuccess = completion != null,
+                        saveCompletion = completion,
+                        errorMessage = if (changedDuringSave) "保存期间内容又有修改，请再次确认保存。" else null
                     )
                 }
                 
@@ -870,7 +967,19 @@ class DiaryEditorViewModel @Inject constructor(
      * 重置保存成功状态
      */
     fun resetSaveSuccess() {
-        _uiState.update { it.copy(saveSuccess = false) }
+        _uiState.update { it.copy(saveSuccess = false, saveCompletion = null) }
+    }
+
+    fun consumeSaveCompletion(drawingEnabled: Boolean): DiarySaveCompletion? {
+        val completion = _uiState.value.saveCompletion ?: return null
+        _uiState.update { it.copy(saveSuccess = false, saveCompletion = null,
+            drawingPromptDiaryId = if (completion.action is DiarySaveAction.ConfirmText && drawingEnabled)
+                completion.diaryId else null) }
+        return completion
+    }
+
+    fun dismissDrawingPrompt() {
+        _uiState.update { it.copy(drawingPromptDiaryId = null) }
     }
     
     /**
@@ -1578,6 +1687,7 @@ class DiaryEditorViewModel @Inject constructor(
                         _uiState.update { currentState ->
                             currentState.copy(
                                 mediaItems = diary.mediaItems,
+                                confirmedText = remapConfirmedText(currentState.mediaItems, diary.mediaItems, currentState.confirmedText, null),
                                 hasUnsavedChanges = true
                             )
                         }
@@ -1960,16 +2070,29 @@ data class DiaryEditorUiState(
     val isLittleJoy: Boolean = false,  // 是否小确幸
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
+    val isRecommendingTitle: Boolean = false,
+    val showTitleSuggestion: Boolean = false,
+    val suggestedTitle: String = "",
+    val titleSuggestionError: String? = null,
     val isUploading: Boolean = false,  // 媒体上传中状态
     val hasUnsavedChanges: Boolean = false,
     val saveSuccess: Boolean = false,
+    val saveCompletion: DiarySaveCompletion? = null,
+    val confirmedText: Map<String, String> = emptyMap(),
+    val drawingPromptDiaryId: Long? = null,
     val errorMessage: String? = null,
     val diaryReview: DiaryReviewResponse? = null,
     val reviewGenerating: Boolean = false,
     val reviewError: String? = null,
     val multimodalInsight: DiaryMultimodalInsightResponse? = null,
     val voiceProcessingState: VoiceProcessingState = VoiceProcessingState.Idle
-)
+) {
+    fun canConfirmText(mediaId: String): Boolean {
+        if (isLoading || isSaving || isRecommendingTitle || showTitleSuggestion || saveCompletion != null || drawingPromptDiaryId != null) return false
+        val text = mediaItems.filterIsInstance<MediaItem.Text>().firstOrNull { it.id == mediaId } ?: return false
+        return text.content.isNotBlank() && confirmedText[mediaId] != text.content
+    }
+}
 
 /**
  * 语音处理状态

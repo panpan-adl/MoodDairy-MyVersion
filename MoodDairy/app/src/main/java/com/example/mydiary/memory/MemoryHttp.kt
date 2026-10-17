@@ -13,6 +13,6 @@ internal object MemoryHttp {
         .addInterceptor { chain ->
             chain.proceed(chain.request().newBuilder().header("Connection", "close").build())
         }
-        .retryOnConnectionFailure(true)
+        .retryOnConnectionFailure(false)
         .build()
 }

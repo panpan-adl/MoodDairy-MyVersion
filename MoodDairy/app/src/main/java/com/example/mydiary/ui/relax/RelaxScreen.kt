@@ -1,7 +1,5 @@
 package com.example.mydiary.ui.relax
 
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -11,11 +9,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.mydiary.data.network.DiaryApiService
 import com.example.mydiary.data.models.RelaxTrack
 import com.example.mydiary.whitenoise.WhiteNoiseScreen
@@ -49,17 +49,33 @@ class RelaxViewModel @Inject constructor(private val api: DiaryApiService) : Vie
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RelaxScreen(onNavigateBack: () -> Unit, viewModel: RelaxViewModel = hiltViewModel()) {
+fun RelaxScreen(onNavigateBack: () -> Unit, viewModel: RelaxViewModel = hiltViewModel(),
+                playerViewModel: RelaxPlayerViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsState()
-    RelaxContent(state = state, onReload = viewModel::load, onNavigateBack = onNavigateBack)
+    val playback by playerViewModel.state.collectAsState()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(playerViewModel, lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) playerViewModel.pause()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            playerViewModel.pause()
+        }
+    }
+    RelaxContent(state = state, onReload = viewModel::load, onNavigateBack = onNavigateBack,
+        playback = playback, onPlay = playerViewModel::toggle, onPause = playerViewModel::pause,
+        onSeek = playerViewModel::seekTo, onStop = playerViewModel::stop)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun RelaxContent(state: RelaxMusicState, onReload: () -> Unit, onNavigateBack: () -> Unit) {
+internal fun RelaxContent(state: RelaxMusicState, onReload: () -> Unit, onNavigateBack: () -> Unit,
+                          playback: RelaxPlaybackState = RelaxPlaybackState(),
+                          onPlay: (RelaxTrack) -> Unit = {}, onPause: () -> Unit = {},
+                          onSeek: (Long) -> Unit = {}, onStop: () -> Unit = {}) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
-    val context = LocalContext.current
-    var playbackError by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(tab) { if (tab == 0 && state.tracks.isEmpty()) onReload() }
     Scaffold(topBar = {
         TopAppBar(title = { Text("放松一下") }, navigationIcon = {
@@ -69,28 +85,41 @@ internal fun RelaxContent(state: RelaxMusicState, onReload: () -> Unit, onNaviga
         Column(Modifier.fillMaxSize().padding(padding)) {
             TabRow(selectedTabIndex = tab) {
                 Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("音乐") })
-                Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("白噪音") })
+                Tab(selected = tab == 1, onClick = { onPause(); tab = 1 }, text = { Text("白噪音") })
             }
             if (tab == 1) {
                 WhiteNoiseScreen(onNavigateBack = onNavigateBack, embedded = true)
             } else LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                item { Text("挑一首喜欢的歌。歌曲在网易云音乐或浏览器中播放，播放与暂停由其控制；不会自动播放。", Modifier.padding(top = 16.dp)) }
+                item { Text("挑一首喜欢的歌，在这里播放。你可以随时暂停或换一首。", Modifier.padding(top = 16.dp)) }
                 if (state.loading) item { CircularProgressIndicator() }
                 state.error?.let { error -> item { Text(error); TextButton(onClick = onReload) { Text("重试") } } }
-                playbackError?.let { error -> item { Text(error, color = MaterialTheme.colorScheme.error) } }
                 items(state.tracks, key = { it.id }) { track ->
                     OutlinedCard(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp)) {
                             Text(track.title, style = MaterialTheme.typography.titleMedium)
                             Text(track.artist)
-                            TextButton(onClick = {
-                                val uri = Uri.parse(track.jumpUrl)
-                                if (uri.scheme == "https" && uri.host == "music.163.com") {
-                                    playbackError = runCatching {
-                                        context.startActivity(Intent(Intent.ACTION_VIEW, uri))
-                                    }.exceptionOrNull()?.let { "无法打开歌曲，请安装网易云音乐或浏览器。" }
-                                } else playbackError = "歌曲链接暂不可用。"
-                            }) { Text("去网易云播放") }
+                            val selected = playback.trackId == track.id
+                            Row {
+                                TextButton(onClick = { onPlay(track) }, enabled = !(selected && playback.loading)) {
+                                    Text(when {
+                                        selected && playback.loading -> "加载中…"
+                                        selected && playback.playing -> "暂停"
+                                        selected && playback.error != null -> "重试播放"
+                                        selected && playback.positionMs > 0 -> "继续播放"
+                                        else -> "播放"
+                                    })
+                                }
+                                if (selected) TextButton(onClick = onStop) { Text("停止") }
+                            }
+                            if (selected) {
+                                if (playback.durationMs > 0) {
+                                    Slider(value = playback.positionMs.coerceIn(0, playback.durationMs).toFloat(),
+                                        valueRange = 0f..playback.durationMs.toFloat(),
+                                        onValueChange = { onSeek(it.toLong()) })
+                                    Text("${playbackTime(playback.positionMs)} / ${playbackTime(playback.durationMs)}")
+                                }
+                                playback.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                            }
                         }
                     }
                 }
@@ -98,4 +127,9 @@ internal fun RelaxContent(state: RelaxMusicState, onReload: () -> Unit, onNaviga
             }
         }
     }
+}
+
+private fun playbackTime(ms: Long): String {
+    val seconds = ms.coerceAtLeast(0) / 1000
+    return "%d:%02d".format(seconds / 60, seconds % 60)
 }

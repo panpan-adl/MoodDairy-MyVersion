@@ -66,6 +66,7 @@ import com.example.mydiary.ui.theme.Error
 import com.example.mydiary.ui.theme.MintGreen
 import com.example.mydiary.ui.theme.PaleYellow
 import com.example.mydiary.ui.theme.Primary
+import com.example.mydiary.ui.theme.PrimaryDark
 import com.example.mydiary.ui.theme.SoftWhite
 import com.example.mydiary.ui.theme.Surface
 import com.example.mydiary.ui.theme.TextPrimary
@@ -105,7 +106,7 @@ fun ProfileScreen(
         }
     }
 
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .background(
@@ -118,6 +119,18 @@ fun ProfileScreen(
                 ),
             ),
     ) {
+        Box(
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "个人中心",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Medium,
+                color = PrimaryDark,
+            )
+        }
+        Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
         when (val state = profileState) {
             is ProfileState.Loading -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -302,6 +315,7 @@ fun ProfileScreen(
                     }
                 }
             }
+        }
         }
     }
 

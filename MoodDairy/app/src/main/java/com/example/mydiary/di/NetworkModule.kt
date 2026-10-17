@@ -64,7 +64,7 @@ object NetworkModule {
             .addInterceptor(authInterceptor)
             .addInterceptor(connectionCloseInterceptor)
             .addInterceptor(loggingInterceptor)
-            .retryOnConnectionFailure(true)
+            .retryOnConnectionFailure(false)
             .build()
     }
 
@@ -87,7 +87,7 @@ object NetworkModule {
             .addInterceptor(authInterceptor)
             .addInterceptor(connectionCloseInterceptor)
             .addInterceptor(loggingInterceptor)
-            .retryOnConnectionFailure(true)
+            .retryOnConnectionFailure(false)
             .build()
     }
 
@@ -138,6 +138,20 @@ object NetworkModule {
     ): DiaryApiService {
         return retrofit.create(DiaryApiService::class.java)
     }
+
+    /** Summary reads own their single explicit retry; disable hidden transport replays. */
+    @Provides
+    @Singleton
+    @Named("diarySummary")
+    fun provideDiarySummaryApiService(
+        @Named("shortTimeout") client: OkHttpClient,
+        gson: Gson,
+    ): DiaryApiService = Retrofit.Builder()
+        .baseUrl(ApiEndpoints.apiBaseUrl)
+        .client(client.newBuilder().retryOnConnectionFailure(false).build())
+        .addConverterFactory(GsonConverterFactory.create(gson))
+        .build()
+        .create(DiaryApiService::class.java)
 
     /** Model generation can outlast ordinary reads. Never transparently replay a refresh POST. */
     @Provides

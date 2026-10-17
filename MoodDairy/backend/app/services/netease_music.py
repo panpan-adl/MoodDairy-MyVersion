@@ -17,6 +17,39 @@ _SEARCH_URL = "https://music.163.com/api/search/get"
 _DETAIL_URL = "https://music.163.com/api/song/detail/"
 _SONG_PAGE = "https://music.163.com/song?id={}"
 
+
+async def resolve_song_audio(song_id: str) -> str:
+    """Resolve the public audio link; unavailable songs stay unavailable."""
+    if not song_id.isascii() or not song_id.isdigit() or len(song_id) > 20 or int(song_id) <= 0:
+        raise ValueError("Invalid song id")
+    url = f"https://music.163.com/song/media/outer/url?id={song_id}.mp3"
+    async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+        # Public playback metadata respects unavailable/paid tracks; no login or
+        # alternate-source substitution is involved.
+        try:
+            metadata = await client.get("https://music.163.com/api/song/enhance/player/url",
+                params={"ids": f"[{song_id}]", "br": "128000"},
+                headers={"Referer": "https://music.163.com/"})
+            metadata.raise_for_status()
+            entries = metadata.json().get("data") or []
+            candidate = entries[0].get("url") if entries else None
+            if candidate:
+                audio_url = httpx.URL(candidate)
+                if audio_url.host and (audio_url.host.endswith(".music.126.net") or audio_url.host.endswith(".music.163.com")):
+                    url = str(audio_url.copy_with(scheme="https"))
+        except (httpx.HTTPError, ValueError, TypeError, KeyError):
+            pass  # Try the public media redirect when metadata is unavailable.
+        # Inspect headers without downloading the song into the backend.
+        async with client.stream("GET", url, headers={"Referer": "https://music.163.com/"}) as response:
+            response.raise_for_status()
+            content_type = response.headers.get("content-type", "").split(";", 1)[0].lower().strip()
+            resolved = response.url
+            if content_type not in {"audio/mpeg", "audio/mp3", "audio/mp4", "audio/aac", "audio/x-m4a", "application/octet-stream"}:
+                raise ValueError("Song has no publicly playable audio")
+            if resolved.scheme != "https" or not resolved.host or resolved.path.lower().endswith((".html", ".htm")):
+                raise ValueError("Invalid audio URL")
+            return str(resolved)
+
 _HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "

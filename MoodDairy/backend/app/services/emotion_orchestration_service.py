@@ -252,13 +252,6 @@ class EmotionOrchestrationService:
                 payload={"source": "emotion_bundle", "prompt": prompt},
             ),
             ServiceAction(
-                id="healing_video",
-                title="制作疗愈视频",
-                description="先进入绘图流程，生成画面后再做情绪转化视频。",
-                action="open_drawing",
-                payload={"source": "emotion_bundle", "mode": "healing_video", "prompt": prompt},
-            ),
-            ServiceAction(
                 id="daily_mood_check",
                 title="做心情打卡",
                 description="用一分钟记录今天的状态。",

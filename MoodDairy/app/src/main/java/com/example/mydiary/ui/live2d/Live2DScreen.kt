@@ -7,6 +7,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
+import com.example.mydiary.live2d.CompanionAppearance
+import com.example.mydiary.live2d.rememberCompanionAppearance
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -15,11 +22,16 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.mydiary.live2d.Live2DComposable
 import com.example.mydiary.live2d.Live2DConfig
+import com.example.mydiary.live2d.PetOverlayService
 import com.example.mydiary.ui.theme.*
 import kotlinx.coroutines.delay
 
@@ -32,8 +44,10 @@ import kotlinx.coroutines.delay
 fun Live2DScreen(
     onNavigateBack: () -> Unit = {}
 ) {
-    var currentModelPath by remember { mutableStateOf(Live2DConfig.defaultModel.path) }
-    var currentModelName by remember { mutableStateOf(Live2DConfig.defaultModel.displayName) }
+    val context = LocalContext.current
+    val appearance = rememberCompanionAppearance()
+    val currentModelPath = appearance.path
+    val currentModelName = appearance.displayName
     
     // 退出动画状态
     var isExiting by remember { mutableStateOf(false) }
@@ -107,9 +121,9 @@ fun Live2DScreen(
                     modifier = Modifier.fillMaxSize(),
                     alpha = exitAlpha,
                     onModelChanged = { newPath ->
-                        currentModelPath = newPath
-                        currentModelName = Live2DConfig.availableModels
-                            .find { it.path == newPath }?.displayName ?: "小嘉然"
+                        Live2DConfig.getModelByPath(newPath)?.let {
+                            CompanionAppearance.select(context, it.id)
+                        }
                     }
                 )
             }
@@ -133,12 +147,28 @@ fun Live2DScreen(
                         .padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(
-                        text = currentModelName,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
+                    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                        if (maxWidth >= 280.dp) {
+                            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = currentModelName,
+                                    modifier = Modifier.padding(horizontal = 108.dp),
+                                    fontSize = 22.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                FloatingCompanionSwitch(Modifier.align(Alignment.CenterEnd))
+                            }
+                        } else {
+                            // Keep the title centered and the control readable on narrow screens.
+                            Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(currentModelName, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                FloatingCompanionSwitch(Modifier.align(Alignment.End))
+                            }
+                        }
+                    }
                     
                     Spacer(modifier = Modifier.height(8.dp))
                     
@@ -150,6 +180,38 @@ fun Live2DScreen(
                     
                     Spacer(modifier = Modifier.height(16.dp))
                     
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Live2DConfig.availableModels.forEach { model ->
+                            val selected = appearance.id == model.id
+                            Surface(
+                                modifier = Modifier.weight(1f).selectable(
+                                    selected = selected,
+                                    role = Role.RadioButton,
+                                    onClick = { CompanionAppearance.select(context, model.id) }
+                                ),
+                                shape = RoundedCornerShape(16.dp),
+                                color = if (selected) PrimaryLight else SoftWhite,
+                                border = androidx.compose.foundation.BorderStroke(1.dp,
+                                    if (selected) PrimaryVariant else SurfaceVariant)
+                            ) {
+                                Column(Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Box {
+                                        AsyncImage(model = "file:///android_asset/${model.avatarPath}",
+                                            contentDescription = model.styleName,
+                                            modifier = Modifier.size(40.dp).clip(CircleShape),
+                                            contentScale = ContentScale.Crop)
+                                        if (selected) Icon(Icons.Default.CheckCircle, contentDescription = "已选中",
+                                            tint = PrimaryDark, modifier = Modifier.size(16.dp).align(Alignment.BottomEnd))
+                                    }
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(model.styleName, fontSize = 13.sp, color = PrimaryDark,
+                                        fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal)
+                                }
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
                     // 交互提示
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -161,7 +223,7 @@ fun Live2DScreen(
                         )
                         InteractionTip(
                             title = "双击",
-                            description = "切换角色"
+                            description = "切换形象"
                         )
                         InteractionTip(
                             title = "触摸",
@@ -171,6 +233,29 @@ fun Live2DScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun FloatingCompanionSwitch(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val enabled by PetOverlayService.enabled.collectAsState()
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("悬浮陪伴", fontSize = 12.sp, color = PrimaryDark)
+        Switch(
+            modifier = Modifier.semantics { contentDescription = "悬浮陪伴" },
+            checked = enabled,
+            onCheckedChange = { PetOverlayService.setEnabled(context, it) },
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Surface,
+                checkedTrackColor = MintGreen,
+                checkedBorderColor = MintGreen,
+                uncheckedThumbColor = TextTertiary,
+                uncheckedTrackColor = SurfaceVariant,
+                uncheckedBorderColor = SurfaceVariant
+            )
+        )
     }
 }
 

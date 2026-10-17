@@ -33,6 +33,17 @@ from app.utils.error_handler import (
 router = APIRouter(prefix="/voice", tags=["voice"])
 
 
+@router.post('/companion-transcribe')
+async def transcribe_companion(current_user_id: AuthenticatedUserId, audio: UploadFile = File(...)):
+    from app.services.companion_voice import transcribe_companion_audio
+    if os.path.splitext(audio.filename or '')[1].lower() != '.m4a':
+        raise HTTPException(400, '请上传 m4a 录音')
+    data = await audio.read(2 * 1024 * 1024 + 1)
+    if not data or len(data) > 2 * 1024 * 1024:
+        raise HTTPException(400, '录音为空或超过大小限制')
+    return {'text': await transcribe_companion_audio(data)}
+
+
 async def _verify_diary_owner(db: AsyncSession, diary_id: int, user_id: int):
     from sqlalchemy import select
     from app.models.database import Diary

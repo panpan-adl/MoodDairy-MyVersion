@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.ColorDrawable
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -21,7 +22,9 @@ import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.PopupWindow
 import android.widget.TextView
 import com.example.mydiary.data.local.SessionManager
 import com.example.mydiary.data.models.ChatConfirmation
@@ -34,6 +37,8 @@ import com.google.gson.Gson
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.collectLatest
 import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
@@ -64,6 +69,8 @@ class PetOverlayService : Service() {
         private val _running = kotlinx.coroutines.flow.MutableStateFlow(false)
         val running: kotlinx.coroutines.flow.StateFlow<Boolean> = _running
         private var host = java.lang.ref.WeakReference<android.app.Activity>(null)
+        // A fresh app process starts with companionship enabled. Activity/service
+        // recreation and returning from the background keep this session's choice.
         private val _enabled = kotlinx.coroutines.flow.MutableStateFlow(true)
         val enabled: kotlinx.coroutines.flow.StateFlow<Boolean> = _enabled
         var requestMicrophone: (() -> Unit)? = null
@@ -80,9 +87,8 @@ class PetOverlayService : Service() {
 
 
         fun attach(activity: android.app.Activity) {
+            CompanionAppearance.initialize(activity)
             host = java.lang.ref.WeakReference(activity)
-            _enabled.value = activity.getSharedPreferences("companion", Context.MODE_PRIVATE)
-                .getBoolean("enabled", true)
             activity.window.decorView.post {
                 if (host.get() === activity && _enabled.value && !activity.isFinishing &&
                     activity.window.decorView.isAttachedToWindow &&
@@ -103,9 +109,10 @@ class PetOverlayService : Service() {
 
         fun setEnabled(context: Context, enabled: Boolean) {
             _enabled.value = enabled
-            if (!enabled) voiceSessionActivated = false
-            context.getSharedPreferences("companion", Context.MODE_PRIVATE).edit()
-                .putBoolean("enabled", enabled).apply()
+            if (!enabled) {
+                voiceSessionActivated = false
+                pendingVoiceStart = false
+            }
             if (!enabled) {
                 instance?.pauseCharacter()
                 context.stopService(startIntent(context))
@@ -114,6 +121,7 @@ class PetOverlayService : Service() {
         }
 
         fun onMicrophoneResult(granted: Boolean) {
+            if (!_enabled.value) return
             pendingVoiceStart = granted && instance == null
             instance?.let {
                 if (granted) it.onTapCat()
@@ -192,9 +200,11 @@ class PetOverlayService : Service() {
     @Inject lateinit var gson: Gson
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val appearanceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     @Volatile private var destroyed = false
 
     private var characterView: Live2DView? = null
+    private var closePopup: PopupWindow? = null
     private var rootView: LinearLayout? = null
     private var bubbleText: TextView? = null
     private var petPosition: android.graphics.Point? = null
@@ -208,9 +218,28 @@ class PetOverlayService : Service() {
 
     private var tts: TextToSpeech? = null
     private var ttsReady = false
+    private val localSpeechCallbacks = mutableMapOf<String, () -> Unit>()
 
     /** 当前正在播放 TTS 的 MediaPlayer，打断时需要停止 */
     private var currentTtsPlayer: android.media.MediaPlayer? = null
+    @Volatile private var dialogueGeneration = 0L
+    @Volatile private var activeChatCall: okhttp3.Call? = null
+    private val sentencePlayer by lazy {
+        CompanionSpeechPlayer(onBusy = { busy ->
+            ttsSpeaking = busy
+            if (!busy && !destroyed && !isChatting && !isListening) {
+                scheduleRetreat()
+                maybeStartWakeListening()
+            }
+        }, fallback = { text, done ->
+            if (ttsReady && tts?.voice?.isNetworkConnectionRequired == false) {
+                val id = "fallback-${UUID.randomUUID()}"
+                localSpeechCallbacks[id] = done
+                val status = tts?.speak(text, TextToSpeech.QUEUE_ADD, null, id)
+                if (status == TextToSpeech.ERROR) localSpeechCallbacks.remove(id)?.invoke()
+            } else done()
+        })
+    }
 
     private var recognizer: SpeechRecognizer? = null
     private var isListening = false
@@ -222,12 +251,20 @@ class PetOverlayService : Service() {
 
     /** 然然正在念话：必须让麦克风闭嘴，否则会把自己的声音当成唤醒词（自触发） */
     @Volatile private var ttsSpeaking = false
+    @Volatile private var ttsGeneration = 0L
 
     /** 唤醒后等待指令的截止时间（SystemClock.uptimeMillis），0 = 不在指令窗口 */
     private var awaitCommandUntil = 0L
 
-    // ===== 高精度离线语音识别（Sherpa-ONNX + SenseVoice） =====
+    // System speech recognition; availability and network/model support depend on the device.
     private var sherpaEngine: SherpaAsrEngine? = null
+    private var manualVoiceInput: CompanionVoiceInput? = null
+    private var manualListenTimeout: Runnable? = null
+
+    private fun clearManualListenTimeout() {
+        manualListenTimeout?.let(mainHandler::removeCallbacks)
+        manualListenTimeout = null
+    }
 
 
     private val greetings = listOf(
@@ -265,43 +302,55 @@ class PetOverlayService : Service() {
         }
     }
 
-    /** 初始化高精度离线语音识别引擎（Sherpa-ONNX + SenseVoice） */
+    /** Initialize the system recognizer used by manual input and wake listening. */
     private fun initSherpaEngine() {
-        sherpaEngine = SherpaAsrEngine(this).apply {
-            setCallback(object : SherpaAsrEngine.Callback {
+            val callback = object : SherpaAsrEngine.Callback {
                 override fun onReady() {
                     mainHandler.post {
-                        showBubble("我是然然，点我说话，或点下方打字聊～")
+                        showBubble("我是然然，点我就可以说话～")
                         maybeStartWakeListening()
                     }
                 }
 
                 override fun onSegment(text: String) {
-                    mainHandler.post {
+                        clearManualListenTimeout()
                         wakeListening = false
                         onSherpaHeard(text)
                         mainHandler.postDelayed({ maybeStartWakeListening() }, 500)
-                    }
                 }
 
                 override fun onError(message: String) {
                     Log.e(TAG, "Sherpa 引擎出错: $message")
-                    mainHandler.post {
+                        clearManualListenTimeout()
                         wakeListening = false
                         val manual = isListening
                         isListening = false
-                        if (manual) showBubble("这次没有听清，可以再试一次或打字聊。")
-                        mainHandler.postDelayed({ maybeStartWakeListening() }, 3000)
-                    }
+                        if (manual) showBubble(message)
+                        if (!manual && (message.startsWith("没有识别到") || message.startsWith("没有听到"))) {
+                            mainHandler.postDelayed({ maybeStartWakeListening() }, 3000)
+                        } else {
+                            // A failed provider must not restart itself in an endless wake loop.
+                            voiceActivated = false
+                            voiceSessionActivated = false
+                        }
                 }
-            })
+
+                override fun onProcessing() {
+                        clearManualListenTimeout()
+                        if (isListening) showBubble("正在识别，稍等一下……")
+                }
+            }
+        manualVoiceInput = CompanionVoiceInput(this, okHttpClient, callback)
+        sherpaEngine = SherpaAsrEngine(this).apply {
+            setCallback(callback)
             prepare()
         }
     }
 
     /** Sherpa 听到一段语音：手动模式直接当聊天，常听模式检查唤醒词 */
     private fun onSherpaHeard(text: String) {
-        Log.i(TAG, "Sherpa 听到: $text")
+        if (text.isBlank()) return
+        Log.i(TAG, "Speech recognition completed")
         // 打断：然然在念话或聊天时，听到「停下」「然然」立即停止
         if (ttsSpeaking || isChatting) {
             if (isInterruptWord(text)) {
@@ -327,6 +376,11 @@ class PetOverlayService : Service() {
 
     /** 打断当前说话/聊天：立即停止 TTS 和请求，恢复常听 */
     private fun interruptCurrent() {
+        localSpeechCallbacks.clear()
+        runCatching { tts?.stop() }
+        dialogueGeneration++
+        activeChatCall?.cancel()
+        sentencePlayer.clear()
         Log.i(TAG, "用户打断当前操作")
         // 停止 TTS 播放
         ttsSpeaking = false
@@ -379,6 +433,10 @@ class PetOverlayService : Service() {
                     }
 
                     override fun onDone(utteranceId: String?) {
+                        if (utteranceId?.startsWith("fallback-") == true) {
+                            mainHandler.post { localSpeechCallbacks.remove(utteranceId)?.invoke() }
+                            return
+                        }
                         ttsSpeaking = false
                         mainHandler.post { scheduleRetreat() }
                         // 留 0.5 秒等喇叭里的尾音散干净，免得然然听见自己最后半句
@@ -387,6 +445,10 @@ class PetOverlayService : Service() {
 
                     @Deprecated("系统回调必实现")
                     override fun onError(utteranceId: String?) {
+                        if (utteranceId?.startsWith("fallback-") == true) {
+                            mainHandler.post { localSpeechCallbacks.remove(utteranceId)?.invoke() }
+                            return
+                        }
                         ttsSpeaking = false
                         mainHandler.post { scheduleRetreat() }
                         mainHandler.postDelayed({ maybeStartWakeListening() }, 500)
@@ -478,22 +540,71 @@ class PetOverlayService : Service() {
         }
         inputRow = inputRowView
 
-        val typeEntry = TextView(this).apply {
-            text = "然然 · 打字聊"
-            textSize = 11f
-            setTextColor(Color.argb(200, 95, 115, 105))
-            setPadding(0, (2 * density).toInt(), 0, (5 * density).toInt())
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { toggleTextInput(!inputVisible) }
-        }
-
         // Native cat keeps the companion available even without the Tororo asset.
         val cat = Live2DView(this).apply {
             contentDescription = "然然"
-            layoutParams = LinearLayout.LayoutParams(catSize, (190 * density).toInt())
+            layoutParams = FrameLayout.LayoutParams(catSize, (190 * density).toInt())
         }
         characterView = cat
+
+        val closeButton = TextView(this).apply {
+            text = "×"
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setTextColor(Color.rgb(127, 140, 141))
+            contentDescription = "关闭悬浮陪伴"
+            isClickable = true
+            isFocusable = true
+            includeFontPadding = false
+            setOnClickListener { setEnabled(this@PetOverlayService, false) }
+        }
+        // A tiny separate app window can sit beside the ear, above Live2D's
+        // on-top SurfaceView, without a large circle or an empty header row.
+        val closeSize = (24 * density).toInt()
+        val popup = PopupWindow(closeButton, closeSize, closeSize, false).apply {
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            inputMethodMode = PopupWindow.INPUT_METHOD_NOT_NEEDED
+            elevation = 0f
+        }
+        closePopup = popup
+        fun updateClosePopup() {
+            if (destroyed || !_enabled.value || !cat.isShown || !cat.isAttachedToWindow) {
+                popup.dismiss()
+                return
+            }
+            val xOffset = cat.width - closeSize - (14 * density).toInt()
+            val yOffset = -cat.height + (42 * density).toInt()
+            if (popup.isShowing) popup.update(cat, xOffset, yOffset, closeSize, closeSize)
+            else popup.showAsDropDown(cat, xOffset, yOffset, Gravity.START)
+        }
+        val hideCloseButton = Runnable { popup.dismiss() }
+        closeButton.setOnHoverListener { _, event ->
+            mainHandler.removeCallbacks(hideCloseButton)
+            if (event.actionMasked == MotionEvent.ACTION_HOVER_EXIT) {
+                mainHandler.postDelayed(hideCloseButton, 150)
+            }
+            false
+        }
+        val characterContainer = object : FrameLayout(this) {
+            override fun dispatchHoverEvent(event: MotionEvent): Boolean {
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_HOVER_ENTER, MotionEvent.ACTION_HOVER_MOVE -> {
+                        mainHandler.removeCallbacks(hideCloseButton)
+                        updateClosePopup()
+                    }
+                    MotionEvent.ACTION_HOVER_EXIT -> {
+                        mainHandler.removeCallbacks(hideCloseButton)
+                        mainHandler.postDelayed(hideCloseButton, 150)
+                    }
+                }
+                super.dispatchHoverEvent(event)
+                // Remain a hover target so Android sends EXIT even over the
+                // non-clickable GL surface. Touch/drag dispatch is unchanged.
+                return true
+            }
+        }.apply {
+            addView(cat)
+        }
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -506,8 +617,10 @@ class PetOverlayService : Service() {
                 (BUBBLE_WIDTH_DP * density).toInt(),
                 LinearLayout.LayoutParams.WRAP_CONTENT,
             ).apply { bottomMargin = (4 * density).toInt() })
-            addView(typeEntry)
-            addView(cat)
+            addView(characterContainer, LinearLayout.LayoutParams(catSize, (190 * density).toInt()))
+        }
+        root.viewTreeObserver.addOnGlobalLayoutListener {
+            if (popup.isShowing) updateClosePopup()
         }
         rootView = root
         bubbleText = bubble
@@ -578,15 +691,20 @@ class PetOverlayService : Service() {
             (BUBBLE_WIDTH_DP * density).toInt(), android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
         ).apply { gravity = Gravity.TOP or Gravity.START })
         positionCat()
-        mainHandler.postDelayed({
-            if (!destroyed && characterView === cat && cat.isAttachedToWindow) {
-                cat.loadModel(Live2DConfig.dianaModelPath)
+        CompanionAppearance.initialize(this)
+        appearanceScope.launch {
+            CompanionAppearance.current.collectLatest { model ->
+                delay(400)
+                if (!destroyed && characterView === cat && cat.isAttachedToWindow) {
+                    cat.loadModel(model.path)
+                }
             }
-        }, 400)
+        }
 
     }
 
     private fun pauseCharacter() {
+        closePopup?.dismiss()
         rootView?.visibility = View.GONE
         releaseCharacter()
     }
@@ -610,33 +728,40 @@ class PetOverlayService : Service() {
 
     /** 点小猫：开始听你说话 */
     private fun onTapCat() {
-        if (isChatting) return
+        localSpeechCallbacks.clear()
+        dialogueGeneration++
+        activeChatCall?.cancel()
+        isChatting = false
         if (inputVisible) toggleTextInput(false)
         if (isListening) {
             stopListening()
             return
         }
+        // Stop the character's own voice before opening the microphone.
+        ttsGeneration++
+        sentencePlayer.clear()
+        ttsSpeaking = false
+        runCatching { currentTtsPlayer?.stop() }
+        runCatching { currentTtsPlayer?.release() }
+        currentTtsPlayer = null
+        runCatching { tts?.stop() }
         val micGranted = androidx.core.content.ContextCompat.checkSelfPermission(
             this, android.Manifest.permission.RECORD_AUDIO
         ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            showBubble("这台设备暂不支持语音，先打字跟然然聊吧～")
-            toggleTextInput(true)
-            return
-        }
         if (!micGranted) {
             requestMicrophone?.invoke()
             return
         }
-        voiceActivated = true
-        voiceSessionActivated = true
+        // A tap starts one utterance, not an implicit continuous Google recognition loop.
+        voiceActivated = false
+        voiceSessionActivated = false
         startListening()
     }
 
     private fun startListening() {
         if (isListening) return
         stopWakeListening() // 手动听时先让出麦克风
-        if (sherpaEngine == null) {
+        if (manualVoiceInput == null) {
             speak("然然还在叫醒耳朵，等我几秒再点一下哦")
             return
         }
@@ -660,19 +785,18 @@ class PetOverlayService : Service() {
     /** Sherpa 手动聆听：点一下猫，下一段语音直接当聊天内容 */
     private fun startSherpaListening() {
         if (isListening) return
-        val engine = sherpaEngine ?: return
+        val engine = manualVoiceInput ?: return
         stopWakeListening()
         isListening = true
-        showBubble("我在听……")
-        engine.start()
+        showBubble("我在听，说完可以再点我一下。")
+        if (!engine.start()) return
         // 15 秒没识别到内容自动结束
-        mainHandler.postDelayed({
+        clearManualListenTimeout()
+        manualListenTimeout = Runnable {
             if (isListening) {
-                isListening = false
-                engine.stop()
-                onListenMissed()
+                engine.finish()
             }
-        }, 15000)
+        }.also { mainHandler.postDelayed(it, 15000) }
     }
 
     // ===== 常听模式：一直听，只有喊「然然」才应答 =====
@@ -692,8 +816,8 @@ class PetOverlayService : Service() {
     private fun startWakeListening() {
         if (wakeListening || !canListenNow()) return
         val engine = sherpaEngine ?: return
-        engine.start()
         wakeListening = true
+        if (!engine.start()) wakeListening = false
         Log.i(TAG, "常听模式已开启")
     }
 
@@ -754,18 +878,18 @@ class PetOverlayService : Service() {
     }
 
     private fun stopListening() {
-        isListening = false
-        sherpaEngine?.stop()
-        runCatching { recognizer?.stopListening() }
-        if (bubbleText?.visibility == View.VISIBLE && bubbleText?.text == "我在听……") {
-            hideBubble()
-        }
-        scheduleRetreat()
-        maybeStartWakeListening() // 手动听结束后恢复常听
+        clearManualListenTimeout()
+        // Final recognition arrives asynchronously; stay in manual mode until it does.
+        manualVoiceInput?.finish()
     }
 
     /** Focus the native input inside the activity; never replace the app's window flags. */
     private fun toggleTextInput(show: Boolean) {
+        if (show) {
+            clearManualListenTimeout()
+            manualVoiceInput?.stop()
+            isListening = false
+        }
         val root = rootView ?: return
         val params = petPosition ?: return
         if (inputVisible == show) return
@@ -935,6 +1059,9 @@ class PetOverlayService : Service() {
         // 关闭深度思考时模型经常偷懒不调搜索工具（项目已知问题）；对明确的搜索意图
         // 单独打开深度思考换工具触发率，普通闲聊仍保持快速通道
         val wantsSearch = Regex("(搜索|搜一下|搜一搜|帮我找|找一下|找找|查一下|查查)").containsMatchIn(cleanText)
+        val turn = ++dialogueGeneration
+        val replyStarted = android.os.SystemClock.elapsedRealtime()
+        sentencePlayer.clear()
         Log.i(TAG, "准备发网络请求: cleanText='$cleanText' deepThinking=$wantsSearch api=${ApiEndpoints.apiBaseUrl}")
         Thread {
             Log.i(TAG, "Thread 开始执行网络请求")
@@ -955,10 +1082,36 @@ class PetOverlayService : Service() {
                 var searchLocked = false
                 var pendingPlanId: String? = null
                 var pendingPlanTitle: String? = null
+                val sentences = SpeechSentences()
+                var spokeStreaming = false
+                var sawDelta = false
+                val streamSpeech = !wantsSearch
+
+                fun speakPieces(pieces: List<String>) {
+                    if (pieces.isEmpty()) return
+                    spokeStreaming = true
+                    mainHandler.post {
+                        if (turn == dialogueGeneration && !destroyed) {
+                            stopWakeListening()
+                            pieces.forEach(sentencePlayer::enqueue)
+                        }
+                    }
+                }
 
                 fun handleEvent(event: ChatStreamEvent) {
+                    if (turn != dialogueGeneration || destroyed) throw java.util.concurrent.CancellationException()
                     when (event.type) {
-                        "delta" -> sb.append(event.delta.orEmpty())
+                        "delta" -> {
+                            if (!sawDelta) Log.i("CompanionLatency", "reply_first_delta_ms=${android.os.SystemClock.elapsedRealtime()-replyStarted}")
+                            sawDelta = true
+                            val delta = event.delta.orEmpty()
+                            sb.append(delta)
+                            if (streamSpeech && actionConfirm == null && pendingPlanId == null && searchItems == null) {
+                                speakPieces(sentences.append(delta))
+                                val display = sb.toString()
+                                mainHandler.post { if (turn == dialogueGeneration && !destroyed) showBubble(display) }
+                            }
+                        }
                         "reply" -> {
                             // 完整回复事件：以它为准（后端会在结尾发）
                             event.reply?.takeIf { it.isNotBlank() }?.let { sb.clear(); sb.append(it) }
@@ -1016,7 +1169,12 @@ class PetOverlayService : Service() {
                     sb.append("这项操作需要你确认。请在助手对话中重新提出请求，查看费用后再决定是否继续。")
                 }
                 val reply = sb.toString().trim()
+                if (streamSpeech && actionConfirm == null && pendingPlanId == null && searchItems == null) {
+                    if (sawDelta) speakPieces(sentences.finish())
+                    else if (reply.isNotBlank()) speakPieces(SpeechSentences().let { it.append(reply) + it.finish() })
+                }
                 mainHandler.post {
+                    if (turn != dialogueGeneration || destroyed) return@post
                     isChatting = false
                     val confirm = actionConfirm
                     val items = searchItems
@@ -1051,7 +1209,7 @@ class PetOverlayService : Service() {
                         reply.isBlank() -> speak("这条我没想好怎么回答，换个说法试试")
                         else -> {
                             showBubble(reply)
-                            speak(reply)
+                            if (!spokeStreaming || pendingPlanId != null) speak(reply)
                         }
                     }
                     maybeStartWakeListening()
@@ -1059,6 +1217,7 @@ class PetOverlayService : Service() {
             } catch (e: Exception) {
                 Log.e(TAG, "桌宠对话失败", e)
                 mainHandler.post {
+                    if (turn != dialogueGeneration || destroyed) return@post
                     isChatting = false
                     speak("网络开小差了，稍后再试试")
                     maybeStartWakeListening()
@@ -1082,7 +1241,9 @@ class PetOverlayService : Service() {
             .post(body)
             .header("Accept", "text/event-stream")
             .build()
-        client.newCall(httpRequest).execute().use { response ->
+        val call = client.newCall(httpRequest)
+        activeChatCall = call
+        call.execute().use { response ->
             if (!response.isSuccessful) {
                 throw IllegalStateException("HTTP ${response.code}")
             }
@@ -1172,51 +1333,30 @@ class PetOverlayService : Service() {
 
     /** 从后端 /tts 拉取 edge-tts 真人语音并流式播放 */
     private fun playServerTts(text: String) {
-        Thread {
-            var mp: android.media.MediaPlayer? = null
-            try {
-                val base = com.example.mydiary.data.network.ApiEndpoints.apiBaseUrl // http://10.0.2.2:8000/
-                val url = base + "tts?text=" + java.net.URLEncoder.encode(text, "UTF-8")
-
-                mp = android.media.MediaPlayer()
-                currentTtsPlayer = mp  // 保存引用，打断时能停止
-                mp.setDataSource(url)
-                mp.setOnPreparedListener { if (!destroyed) it.start() else it.release() }
-                mp.setOnCompletionListener {
-                    ttsSpeaking = false
-                    mainHandler.post { scheduleRetreat() }
-                    currentTtsPlayer = null
-                    it.release()
-                    maybeStartWakeListening()   // 念完再开唤醒
-                }
-                mp.setOnErrorListener { _, _, _ ->
-                    ttsSpeaking = false
-                    mainHandler.post { scheduleRetreat() }
-                    currentTtsPlayer = null
-                    mp?.release()
-                    maybeStartWakeListening()   // 失败也让出麦克风
-                    true
-                }
-                mp.prepareAsync()
-            } catch (e: Exception) {
-                ttsSpeaking = false
-                mainHandler.post { scheduleRetreat() }
-                currentTtsPlayer = null
-                mp?.release()
-                maybeStartWakeListening()
-            }
-        }.start()
+        localSpeechCallbacks.clear()
+        runCatching { tts?.stop() }
+        sentencePlayer.clear(notify = false)
+        val sentences = SpeechSentences()
+        (sentences.append(text) + sentences.finish()).forEach(sentencePlayer::enqueue)
     }
 
     private val autoHideRunnable = Runnable { if (!isListening && !isChatting) hideBubble() }
 
     override fun onDestroy() {
+        localSpeechCallbacks.clear()
         destroyed = true
+        dialogueGeneration++
+        activeChatCall?.cancel()
+        sentencePlayer.clear()
+        appearanceScope.cancel()
+        clearManualListenTimeout()
         super.onDestroy()
         instance = null
         _running.value = false
         stopWakeListening()
         mainHandler.removeCallbacksAndMessages(null)
+        closePopup?.dismiss()
+        closePopup = null
         runCatching { currentTtsPlayer?.release() }
         currentTtsPlayer = null
         releaseCharacter()
@@ -1227,6 +1367,8 @@ class PetOverlayService : Service() {
         recognizer = null
         sherpaEngine?.release()
         sherpaEngine = null
+        manualVoiceInput?.stop()
+        manualVoiceInput = null
         runCatching { tts?.stop(); tts?.shutdown() }
         tts = null
         Log.d(TAG, "桌宠服务退出")

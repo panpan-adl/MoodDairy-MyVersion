@@ -13,8 +13,14 @@ from app.models.schemas import DiaryMultimodalInsightResponse, ErrorResponse, Gr
 from app.security.deps import AuthenticatedUserId
 from app.services.multimodal_insight_service import MultimodalInsightService
 from app.utils.error_handler import ValidationError as AppValidationError
+from app.services.diary_title_service import TitleRecommendationRequest, TitleRecommendationResponse, recommend_title
 
 router = APIRouter(prefix="/insights", tags=["insights"])
+
+
+@router.post('/title-recommendation', response_model=TitleRecommendationResponse)
+async def recommend_diary_title(request: TitleRecommendationRequest, current_user_id: AuthenticatedUserId):
+    return await recommend_title(request.text)
 
 
 @router.get(

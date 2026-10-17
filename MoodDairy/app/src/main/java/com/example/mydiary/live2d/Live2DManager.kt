@@ -35,6 +35,7 @@ class Live2DManager(private val context: Context) {
     
     companion object {
         private const val TAG = "Live2DManager"
+        private val sdkLock = Any()
     }
     
     var currentModel: String? = null
@@ -89,13 +90,14 @@ class Live2DManager(private val context: Context) {
     fun initializeSDK() {
         
         try {
-            if (CubismFramework.isStarted()) {
-                try {
-                    CubismFramework.dispose()
-                } catch (_: Exception) {}
+            // The framework/id registry belongs to the process, not a view.
+            // Releasing one surface must not invalidate another surface's model.
+            synchronized(sdkLock) {
+                if (!CubismFramework.isStarted()) {
+                    CubismFramework.startUp(CubismFramework.Option())
+                }
+                if (!CubismFramework.isInitialized()) CubismFramework.initialize()
             }
-            CubismFramework.startUp(CubismFramework.Option())
-            CubismFramework.initialize()
             isSDKInitialized = true
             
             if (textureManager == null) {
@@ -115,7 +117,10 @@ class Live2DManager(private val context: Context) {
     }
     fun onGLContextLost() {
         isGLContextReady = false
+        // These IDs belong to the destroyed context. Do not reuse or delete them
+        // against the replacement context, where the same numbers may be reused.
         cubismRenderer = null
+        textureManager = null
     }
     fun loadModel(modelPath: String): Boolean {
         if (modelPath.isBlank()) {
@@ -579,11 +584,8 @@ class Live2DManager(private val context: Context) {
         modelData = null
         currentModel = null
         isGLContextReady = false
-        // 清理 SDK 以便下次完全重新初始化
-        if (isSDKInitialized) {
-            try { CubismFramework.dispose() } catch (_: Exception) {}
-            isSDKInitialized = false
-        }
+        // Other Live2D surfaces can still be alive during navigation transitions.
+        isSDKInitialized = false
     }
     
     fun destroy() {

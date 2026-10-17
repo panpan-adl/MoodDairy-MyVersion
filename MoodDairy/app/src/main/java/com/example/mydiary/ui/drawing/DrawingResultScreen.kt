@@ -7,8 +7,6 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
-import android.view.ViewGroup
-import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -53,14 +51,12 @@ import android.webkit.MimeTypeMap
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -72,14 +68,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.media3.common.MediaItem
-import androidx.media3.common.Player
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.PlayerView
-import com.example.mydiary.data.network.ApiEndpoints
+import com.example.mydiary.ui.components.EmbeddedVideoPlayer
+import com.example.mydiary.util.resolveVideoUrl
 import coil.compose.AsyncImage
 import com.example.mydiary.ui.theme.MintGreen
 import com.example.mydiary.ui.theme.PaleYellow
@@ -102,6 +94,7 @@ private const val SAVE_RELATIVE_DIR = "MoodDiary"
 @Composable
 fun DrawingResultScreen(
     imageUrl: String,
+    fromDiaryPhoto: Boolean = false,
     sharedViewModel: SharedDrawingViewModel? = null,
     onNavigateBack: () -> Unit,
     onNavigateToCalendar: () -> Unit = onNavigateBack,
@@ -131,9 +124,9 @@ fun DrawingResultScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("创作完成", fontWeight = FontWeight.Bold) },
+                title = { Text(if (fromDiaryPhoto) "日记视频" else "创作完成", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateToCalendar) {
+                    IconButton(onClick = if (fromDiaryPhoto) onNavigateBack else onNavigateToCalendar) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                     }
                 },
@@ -191,7 +184,7 @@ fun DrawingResultScreen(
                 ) {
                     AsyncImage(
                         model = resolvedImageUrl,
-                        contentDescription = "生成的画作",
+                        contentDescription = if (fromDiaryPhoto) "日记照片" else "生成的画作",
                         modifier = Modifier
                             .fillMaxWidth()
                             .aspectRatio(1f)
@@ -219,14 +212,14 @@ fun DrawingResultScreen(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "让画作动起来",
+                            text = if (fromDiaryPhoto) "让日记照片动起来" else "让画作动起来",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             color = TextPrimary,
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "将静态画作转换为动态视频",
+                            text = if (fromDiaryPhoto) "生成的视频会保存到这篇日记" else "将静态画作转换为动态视频",
                             fontSize = 14.sp,
                             color = TextSecondary,
                             textAlign = TextAlign.Center,
@@ -566,113 +559,4 @@ private data class DownloadedMedia(
     val mimeType: String,
 )
 
-private fun resolveRemoteUrl(url: String): String {
-    if (url.startsWith("http://") || url.startsWith("https://")) {
-        return url
-    }
-
-    val normalizedPath = when {
-        url.startsWith("/uploads/") -> "/media/${url.removePrefix("/uploads/")}"
-        url.startsWith("uploads/") -> "/media/${url.removePrefix("uploads/")}"
-        url.startsWith("/") -> url
-        else -> "/$url"
-    }
-    val base = ApiEndpoints.apiBaseUrl.trimEnd('/')
-    return "$base$normalizedPath"
-}
-
-@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-@Composable
-private fun EmbeddedVideoPlayer(
-    videoUrl: String,
-    modifier: Modifier = Modifier
-) {
-    val context = LocalContext.current
-    var playerError by rememberSaveable { mutableStateOf<String?>(null) }
-
-    val exoPlayer = remember {
-        ExoPlayer.Builder(context).build().apply {
-            val mediaItem = MediaItem.fromUri(Uri.parse(videoUrl))
-            setMediaItem(mediaItem)
-            prepare()
-            playWhenReady = false
-            addListener(object : Player.Listener {
-                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                    playerError = "播放失败: ${error.message ?: "未知错误"}"
-                }
-                override fun onIsPlayingChanged(playing: Boolean) {
-                    if (playing) playerError = null
-                }
-            })
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            exoPlayer.release()
-        }
-    }
-
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            AndroidView(
-                factory = { ctx ->
-                    PlayerView(ctx).apply {
-                        player = exoPlayer
-                        layoutParams = FrameLayout.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT
-                        )
-                        useController = true
-                        setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
-                    }
-                },
-                modifier = Modifier.fillMaxSize()
-            )
-
-            // Error overlay with retry button
-            playerError?.let { errorMsg ->
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.6f))
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Icon(
-                        Icons.Default.Movie,
-                        contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.7f),
-                        modifier = Modifier.size(40.dp)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = errorMsg,
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedButton(
-                        onClick = {
-                            exoPlayer.stop()
-                            exoPlayer.clearMediaItems()
-                            val mediaItem = MediaItem.fromUri(Uri.parse(videoUrl))
-                            exoPlayer.setMediaItem(mediaItem)
-                            exoPlayer.prepare()
-                            playerError = null
-                        },
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
-                    ) {
-                        Text("重试", fontSize = 13.sp)
-                    }
-                }
-            }
-        }
-    }
-}
+private fun resolveRemoteUrl(url: String): String = resolveVideoUrl(url)

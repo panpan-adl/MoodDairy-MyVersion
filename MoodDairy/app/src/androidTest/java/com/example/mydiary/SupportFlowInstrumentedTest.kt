@@ -42,7 +42,7 @@ class SupportFlowInstrumentedTest {
             MyDiaryTheme { RelaxContent(RelaxMusicState(tracks = listOf(RelaxTrack("test", "测试歌曲", "虚构作者", "https://music.163.com/song?id=1"))), {}, {}) }
         } }
         compose.onNodeWithText("放松一下").assertExists()
-        compose.onNodeWithText("去网易云播放").assertExists()
+        compose.onNodeWithText("播放").assertExists()
         compose.onNodeWithText("白噪音").performClick()
         compose.onNodeWithText("自然声音").assertExists()
         compose.onNodeWithText("音乐").performClick()

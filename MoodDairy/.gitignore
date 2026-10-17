@@ -6101,6 +6101,7 @@ CubismSdkForJava-5-r.4.1/**/.transforms/
 !gradle/wrapper/gradle-wrapper.jar
 !backend/requirements.txt
 !backend/requirements-local.txt
+!app/src/main/assets/licenses/NotoSerifSC-OFL.txt
 
 # Personal agent local runtime data
 /backend/data/

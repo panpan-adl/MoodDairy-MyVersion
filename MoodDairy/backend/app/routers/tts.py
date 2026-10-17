@@ -59,7 +59,7 @@ async def _doubao_tts(text: str, speaker: str) -> Optional[bytes]:
                         "audio_params": {"format": "mp3", "sample_rate": 24000},
                     }
                 },
-                timeout=60,
+                timeout=10,
             ) as resp:
                 if resp.status_code != 200:
                     body = await resp.aread()
@@ -128,7 +128,8 @@ async def text_to_speech(
 
     enriched_text = text.replace("，", "， ").replace("。", "。 ").replace("？", "？ ").replace("！", "！ ")
     communicate = edge_tts.Communicate(
-        text=enriched_text, voice=voice or DEFAULT_VOICE, rate=rate, pitch=pitch
+        text=enriched_text, voice=voice or DEFAULT_VOICE, rate=rate, pitch=pitch,
+        connect_timeout=5, receive_timeout=10
     )
 
     async def audio_stream():

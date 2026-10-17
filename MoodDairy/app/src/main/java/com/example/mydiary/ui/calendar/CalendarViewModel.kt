@@ -43,6 +43,11 @@ class CalendarViewModel @Inject constructor(
         return true
     }
 
+    fun showSavedDiary(date: LocalDate) {
+        _uiState.update { it.copy(currentMonth = YearMonth.from(date), selectedDate = date) }
+        refreshRecords()
+    }
+
     fun previousMonth() {
         _uiState.update {
             it.copy(
@@ -176,6 +181,11 @@ class CalendarViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    fun refreshRecords() {
+        loadDatesWithDiary()
+        reloadSelectedDateData()
     }
 
     fun reloadSelectedDateData() {

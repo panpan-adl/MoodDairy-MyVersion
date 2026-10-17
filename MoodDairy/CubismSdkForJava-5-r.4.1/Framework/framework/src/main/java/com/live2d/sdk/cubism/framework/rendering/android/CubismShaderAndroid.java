@@ -22,7 +22,7 @@ import static com.live2d.sdk.cubism.framework.rendering.android.CubismShaderProg
 import static com.live2d.sdk.cubism.framework.utils.CubismDebug.cubismLogError;
 
 /**
- * This class manage a shader program for Android(OpenGL ES 2.0). This is singleton.
+ * Shader programs belong to the EGL context of each GLSurfaceView render thread.
  */
 class CubismShaderAndroid {
     /**
@@ -42,18 +42,20 @@ class CubismShaderAndroid {
      * @return singleton instance
      */
     public static CubismShaderAndroid getInstance() {
-        if (s_instance == null) {
-            s_instance = new CubismShaderAndroid();
+        CubismShaderAndroid instance = s_instance.get();
+        if (instance == null) {
+            instance = new CubismShaderAndroid();
+            s_instance.set(instance);
         }
 
-        return s_instance;
+        return instance;
     }
 
     /**
      * Delete this singleton instance.
      */
     public static void deleteInstance() {
-        s_instance = null;
+        s_instance.remove();
     }
 
     /**
@@ -350,7 +352,7 @@ class CubismShaderAndroid {
     /**
      * Singleton instance.
      */
-    private static CubismShaderAndroid s_instance;
+    private static final ThreadLocal<CubismShaderAndroid> s_instance = new ThreadLocal<>();
 
     /**
      * Tegra support. Drawing with Extended Method.

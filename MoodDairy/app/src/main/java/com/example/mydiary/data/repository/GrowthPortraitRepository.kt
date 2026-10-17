@@ -2,6 +2,8 @@ package com.example.mydiary.data.repository
 
 import com.example.mydiary.data.models.DiaryReviewResponse
 import com.example.mydiary.data.models.DiaryReviewRequest
+import com.example.mydiary.data.models.TitleRecommendationRequest
+import com.example.mydiary.data.models.TitleRecommendationResponse
 import com.example.mydiary.data.models.GrowthPortraitResponse
 import com.example.mydiary.data.models.DiaryMultimodalInsightResponse
 import com.example.mydiary.data.network.ApiResult
@@ -18,6 +20,9 @@ class GrowthPortraitRepository @Inject constructor(
     private val apiService: DiaryApiService,
     @Named("diaryReview") private val reviewApiService: DiaryApiService,
 ) {
+    suspend fun recommendDiaryTitle(text: String): ApiResult<TitleRecommendationResponse> =
+        SafeApiCall.execute { reviewApiService.recommendDiaryTitle(TitleRecommendationRequest(text)) }
+
     suspend fun getDiaryReview(diaryId: Long): ApiResult<DiaryReviewResponse> =
         SafeApiCall.execute { apiService.getDiaryReview(diaryId) }
 

@@ -34,6 +34,7 @@ def integer_type(type_, compiler, **kw):
 
 @pytest_asyncio.fixture
 async def env(tmp_path, monkeypatch):
+    monkeypatch.setenv("DIARY_KEYWORD_ENGINE", "textrank")
     engine = create_async_engine('sqlite+aiosqlite:///' + str(tmp_path / 'review.db'))
     tables = [m.__table__ for m in (User, Diary, DiaryMedia, VoiceTranscription, DiarySummary, DiaryMultimodalInsight, MediaFile)]
     async with engine.begin() as conn:
@@ -43,8 +44,13 @@ async def env(tmp_path, monkeypatch):
         db.add_all([User(id=1, username='review-owner', password='x'), User(id=2, username='other', password='x'),
                     Diary(id=10, user_id=1, title=encrypt_field('实验报告'), content=encrypt_field('今天完成了机器学习实验报告，累但松了一口气。'), diary_date=date.today())])
         await db.commit()
-    model = AsyncMock(return_value=service.ReviewText(body='你写下完成机器学习实验报告的这一天，累和松了一口气同时出现。这份记录把忙完后的感受留了下来，你不必急着给它一个单一的名字。此刻可以只是回看自己经历的这一段，让疲惫和轻松都在这里有一点位置。', question='写完报告后，哪一刻让你松了口气？'))
-    monkeypatch.setattr(service, 'generate_json', model)
+    answer = {'body': '原文中的“累”和“松了一口气”留下了不同的感受。',
+              'primary_emotion': '疲惫、安宁', 'keywords': [
+                  {'text': '累', 'weight': .8, 'category': 'fatigue', 'kind': 'emotion'},
+                  {'text': '松了一口气', 'weight': .7, 'category': 'calm', 'kind': 'emotion'}],
+              'extraction_method': 'textrank+lexicon'}
+    model = AsyncMock(return_value=answer)
+    monkeypatch.setattr(service, 'run_in_threadpool', model)
     app = FastAPI()
     from fastapi.responses import JSONResponse
     @app.exception_handler(AppError)
@@ -78,12 +84,17 @@ async def test_explicit_generation_encrypted_cache_and_refresh_preservation(env)
     result = await c.post(URL, json={'content_version': initial['content_version']})
     assert result.status_code == 200, result.text
     value = result.json()
-    assert value['body'] and value['question'] and value['generated_at'] and not value['stale']
+    assert value['body'] and value['primary_emotion'] == '疲惫、安宁'
+    assert value['question'] is None and value['generated_at'] and not value['stale']
     async with maker() as db:
         from sqlalchemy import select
         row = (await db.execute(select(DiaryMultimodalInsight))).scalar_one()
         cache = row.fusion_analysis[service.CACHE_KEY]
         assert cache['body'].startswith('enc:v1:') and value['body'] not in str(row.fusion_analysis)
+        assert cache['primary_emotion'].startswith('enc:v1:')
+        assert cache['analysis_version'] == service.ANALYSIS_VERSION
+        assert cache['keywords'].startswith('enc:v1:')
+        assert '松了一口气' not in str(row.fusion_analysis)
     assert (await c.get(URL)).json() == value
     await c.post(URL, json={})
     assert model.await_count == 1
@@ -206,14 +217,6 @@ def test_legacy_fallback_scores_and_unproven_emotions_are_hidden():
     assert any('32/100' in clue and '来源' in clue for clue in service.review_view(diary).clues)
 
 
-def test_model_response_requires_length_and_at_most_one_optional_question():
-    from pydantic import ValidationError
-    with pytest.raises(ValidationError):
-        service.ReviewText(body='太短')
-    with pytest.raises(ValidationError):
-        service.ReviewText(body='回顾' * 45, question='为什么？然后呢？')
-
-
 def test_insight_service_is_safe_on_first_request_after_cold_start():
     import subprocess
     import sys
@@ -225,22 +228,28 @@ def test_insight_service_is_safe_on_first_request_after_cold_start():
     assert result.returncode == 0, result.stderr
 
 
+def test_old_reflection_is_hidden_and_requires_emotion_analysis():
+    from types import SimpleNamespace as Obj
+    source = {'title': '', 'body': '今天很开心。', 'text_blocks': [], 'transcripts': []}
+    diary = Obj(id=10, title='', content=source['body'], media_items=[], voice_transcriptions=[],
+                summary=None, multimodal_insight=Obj(fusion_analysis={service.CACHE_KEY: {
+                    'body': encrypt_field('旧的行程复述'), 'content_version': service.content_version(source)}}))
+    view = service.review_view(diary)
+    assert view.stale and view.body is None and view.primary_emotion is None
+
+
 @pytest.mark.asyncio
-async def test_schema_repair_is_bounded_and_not_used_for_network_failures(env):
-    from fastapi import HTTPException
-    from pydantic import ValidationError
-    c, maker, _, model = env
-    answer = model.return_value
-    try:
-        service.ReviewText(body='短')
-    except ValidationError as cause:
-        invalid = HTTPException(503, 'invalid schema')
-        invalid.__cause__ = cause
-    model.side_effect = [invalid, answer]
-    assert (await c.post(URL, json={})).status_code == 200
-    assert model.await_count == 2
-    model.reset_mock()
-    model.side_effect = HTTPException(503, 'network error')
-    assert (await c.post(URL, json={'refresh': True})).status_code == 503
-    assert model.await_count == 1
-    assert (await c.get(URL)).json()['body'] == answer.body
+async def test_real_offline_extraction_http_round_trip(env, monkeypatch):
+    import socket
+    c, _, _, model = env
+    def reject_network(*args, **kwargs):
+        raise AssertionError('Offline extraction must never open a network connection')
+    monkeypatch.setattr(socket, 'create_connection', reject_network)
+    model.side_effect = lambda func, source: func(source)
+    response = await c.post(URL, json={})
+    assert response.status_code == 200, response.text
+    value = response.json()
+    assert value['keywords'] and value['extraction_method'] == 'textrank+lexicon'
+    original = '实验报告今天完成了机器学习实验报告，累但松了一口气。'
+    assert all(word['text'] in original for word in value['keywords'])
+    assert (await c.get(URL)).json() == value

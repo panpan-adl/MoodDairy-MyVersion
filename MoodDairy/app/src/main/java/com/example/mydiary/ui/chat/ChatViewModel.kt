@@ -58,6 +58,7 @@ import javax.inject.Named
 class ChatViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val apiService: DiaryApiService,
+    @Named("diarySummary") private val summaryApiService: DiaryApiService,
     private val chatHistoryStorage: ChatHistoryStorage,
     private val drawingRepository: DrawingRepository,
     private val voiceRepository: VoiceRepository,
@@ -72,6 +73,7 @@ class ChatViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val tag = "ChatViewModel"
+    private val summariesLoader = RecentSummariesLoader { id -> summaryApiService.getRecentSummaries(id, 10) }
 
     /** 超过该时长无新消息，当前对话自动归档并开启新对话（类似豆包的会话切分） */
     private val CONVERSATION_IDLE_ROLL_MS = 10 * 60 * 1000L
@@ -89,8 +91,33 @@ class ChatViewModel @Inject constructor(
     val serviceBundles: StateFlow<List<EmotionServiceBundleUi>> = _serviceBundles.asStateFlow()
     private val _faceEmotionPrompt = MutableStateFlow<EmotionServiceBundleUi?>(null)
     val faceEmotionPrompt = _faceEmotionPrompt.asStateFlow()
-    private val _faceEmotionStatus = MutableStateFlow("等待摄像头识别")
+    private val _faceEmotionStatus = MutableStateFlow(FaceEmotionStatusUi.Recognizing)
     val faceEmotionStatus = _faceEmotionStatus.asStateFlow()
+    private val moodChangeTracker = MoodChangeTracker()
+    private val _selectedMood = MutableStateFlow<String?>(null)
+    val selectedMood = _selectedMood.asStateFlow()
+    private val _moodChangeSuggestion = MutableStateFlow<String?>(null)
+    val moodChangeSuggestion = _moodChangeSuggestion.asStateFlow()
+
+    fun selectMood(label: String?) {
+        val mood = MoodChangeTracker.normalize(label)
+        _selectedMood.value = mood
+        _moodChangeSuggestion.value = null
+        moodChangeTracker.restart()
+        _faceEmotionPrompt.value = null
+        settingsPrefs.edit().apply {
+            if (mood == null) remove("selected_mood_$userId")
+            else putString("selected_mood_$userId", mood)
+        }.apply()
+    }
+
+    fun respondToMoodChange(accept: Boolean) {
+        val suggestion = _moodChangeSuggestion.value ?: return
+        if (accept) selectMood(suggestion)
+        _moodChangeSuggestion.value = null
+        moodChangeTracker.snooze(android.os.SystemClock.elapsedRealtime())
+    }
+
 
     private val _clientActions = MutableSharedFlow<ChatClientAction>(extraBufferCapacity = 8)
     val clientActions: SharedFlow<ChatClientAction> = _clientActions.asSharedFlow()
@@ -217,6 +244,11 @@ class ChatViewModel @Inject constructor(
     private var conversationId: String = ""
 
     fun initializeChat(userId: Long) {
+        if (this.userId != userId) {
+            _selectedMood.value = MoodChangeTracker.normalize(settingsPrefs.getString("selected_mood_$userId", null))
+            _moodChangeSuggestion.value = null
+            moodChangeTracker.restart()
+        }
         this.userId = userId
         // 2026-10-13 修复跨账号串历史：会话 ID 必须属于当前用户，切换账号时丢弃旧账号的会话
         if (conversationId.isBlank() || !conversationId.startsWith("conv_${userId}_")) {
@@ -259,16 +291,11 @@ class ChatViewModel @Inject constructor(
             _isLoading.value = true
             _errorMessage.value = null
 
-            when (val result = SafeApiCall.execute { apiService.getRecentSummaries(userId, 10) }) {
-                is ApiResult.Success -> {
-                    _diarySummaries.value = result.data
-                    Log.d(tag, "summaries loaded: ${result.data.size}")
-                }
-                is ApiResult.Error -> {
-                    _errorMessage.value = "获取日记摘要失败: ${result.message}"
-                }
-                is ApiResult.Loading -> Unit
-            }
+            val requestedUserId = userId
+            val result = summariesLoader.load(requestedUserId)
+            if (userId != requestedUserId) return@launch
+            _diarySummaries.value = result.summaries
+            _errorMessage.value = result.warning
 
             _isLoading.value = false
         }
@@ -825,29 +852,35 @@ class ChatViewModel @Inject constructor(
             return
         }
         val generation = ++emotionCaptureGeneration
-        _faceEmotionStatus.value = "等待摄像头识别"
+        _faceEmotionStatus.value = FaceEmotionStatusUi.Recognizing
         val started = emotionCaptureController.start(
             lifecycleOwner,
             onResult = { label, confidence, duration, expression ->
                 viewModelScope.launch {
                     if (generation != emotionCaptureGeneration) return@launch
-                    val response = emotionSignalRepository.report(label, confidence, duration, expression)
-                    if (_isEmotionCapturing.value && generation == emotionCaptureGeneration) response?.serviceBundle?.let { event ->
+                    val response = emotionSignalRepository.report(label, confidence, if (_selectedMood.value == null) duration else 0L, expression)
+                    if (_selectedMood.value == null && _isEmotionCapturing.value && generation == emotionCaptureGeneration) response?.serviceBundle?.let { event ->
                         handleServiceBundleEvent(event)
                         _faceEmotionPrompt.value = _serviceBundles.value.lastOrNull { it.bundleId == event.bundleId }
                     }
                 }
             },
             onObservation = { label, confidence ->
-                val name = mapOf("sad" to "难过", "angry" to "生气", "fear" to "害怕", "disgust" to "厌恶",
-                    "happy" to "开心", "surprise" to "惊讶", "neutral" to "中性",
-                    "smile" to "微笑", "broad_smile" to "明显笑容", "delighted_surprise" to "惊喜表情")[label]
-                _faceEmotionStatus.value = com.example.mydiary.ml.FaceObservationStatus.message(label)
-                    ?: if (name == null) "正在识别表情"
-                    else "识别：$name · ${(confidence * 100).toInt()}%" + if (confidence < 0.40f) "（置信度不足）" else ""
+                viewModelScope.launch {
+                    if (generation != emotionCaptureGeneration) return@launch
+                    _faceEmotionStatus.value = FaceEmotionStatusUi.fromObservation(label, confidence)
+                    if (_moodChangeSuggestion.value == null) {
+                        _moodChangeSuggestion.value = moodChangeTracker.observe(
+                            _selectedMood.value, label, confidence, android.os.SystemClock.elapsedRealtime())
+                    } else if (MoodChangeTracker.normalize(label) != _moodChangeSuggestion.value ||
+                        !confidence.isFinite() || confidence < .65f) {
+                        _moodChangeSuggestion.value = null
+                        moodChangeTracker.reset()
+                    }
+                }
             },
         )
-        if (!started) _faceEmotionStatus.value = "摄像头或表情模型不可用"
+        if (!started) _faceEmotionStatus.value = FaceEmotionStatusUi.Unavailable
         _isEmotionCapturing.value = started
     }
 
@@ -858,6 +891,8 @@ class ChatViewModel @Inject constructor(
         if (!_isEmotionCapturing.value) {
             return
         }
+        moodChangeTracker.reset()
+        _moodChangeSuggestion.value = null
         emotionCaptureController.stop()
         emotionCaptureGeneration++
         _isEmotionCapturing.value = false

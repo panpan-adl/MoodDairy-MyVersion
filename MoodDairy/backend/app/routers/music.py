@@ -33,6 +33,21 @@ class MusicRecommendationResponse(BaseModel):
     tracks: list[MusicTrackResponse]
     source: str = "netease"
 
+
+class MusicPlaybackResponse(BaseModel):
+    url: str
+
+
+@router.get("/tracks/{song_id}/playback", response_model=MusicPlaybackResponse)
+async def get_music_playback(song_id: str) -> MusicPlaybackResponse:
+    if not song_id.isascii() or not song_id.isdigit() or len(song_id) > 20 or int(song_id) <= 0:
+        raise HTTPException(status_code=422, detail="歌曲编号无效")
+    try:
+        return MusicPlaybackResponse(url=await netease_music.resolve_song_audio(song_id))
+    except (httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
+        logger.warning("Music playback unavailable: %s", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="这首歌暂时无法在应用内播放，请换一首或稍后重试") from exc
+
 @router.get("/netease/recommendations", response_model=MusicRecommendationResponse)
 @router.get("/recommendations", response_model=MusicRecommendationResponse)
 async def get_music_recommendations(

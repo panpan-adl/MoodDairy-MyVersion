@@ -101,13 +101,11 @@ fun Live2DComposable(
                 return@LaunchedEffect
             }
             
-            val currentModel = view.manager.currentModel
-            if (currentModel != modelPath) {
-                Log.d("Live2DComposable", "模型路径变化: $currentModel -> $modelPath")
-                // 添加小延迟避免频繁切换
-                delay(100)
-                loadModelAsync(view, modelPath)
-            }
+            // The GL queue may still contain the previous selection. Compare the
+            // submitted path, not the currently rendered model, so a quick A/B/A
+            // sequence ends on A even while B is still loading.
+            delay(100)
+            loadModelAsync(view, modelPath)
         }
     }
 

@@ -13,7 +13,9 @@ object Live2DConfig {
         val id: String,
         val path: String,
         val displayName: String,
-        val description: String? = null
+        val description: String? = null,
+        val styleName: String = "",
+        val avatarPath: String = ""
     )
 
     /**
@@ -24,13 +26,17 @@ object Live2DConfig {
             id = "diana",
             path = "live2d/Diana/Diana.model3.json",
             displayName = "然然",
-            description = "优雅的公主模型"
+            description = "温柔相伴，记录日常",
+            styleName = "暖心陪伴",
+            avatarPath = "live2d/Diana/raw.preview.png"
         ),
         ModelInfo(
             id = "ava",
             path = "live2d/Ava/Ava.model3.json",
-            displayName = "Ava",
-            description = "可爱的魔法少女"
+            displayName = "然然",
+            description = "灵动相随，分享心情",
+            styleName = "灵动乐伴",
+            avatarPath = "live2d/Ava/raw.preview.png"
         )
     )
 

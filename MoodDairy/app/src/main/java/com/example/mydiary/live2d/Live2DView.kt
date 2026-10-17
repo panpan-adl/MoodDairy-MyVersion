@@ -338,6 +338,7 @@ class Live2DRenderer(
         isContextReady = true
 
         if (isRecreate) {
+            live2DManager.onGLContextLost()
             onSurfaceRecreated?.invoke()
         }
 
@@ -361,6 +362,9 @@ class Live2DRenderer(
         
         // 初始化 Live2D SDK
         live2DManager.initializeSDK()
+        // Shader program IDs cannot cross EGL contexts, including a recreated
+        // context on the same GL thread.
+        com.live2d.sdk.cubism.framework.rendering.android.CubismRendererAndroid.reloadShader()
         
         // 标记 OpenGL 上下文已就绪（必须在 initializeSDK 之后）
         live2DManager.onGLContextReady()

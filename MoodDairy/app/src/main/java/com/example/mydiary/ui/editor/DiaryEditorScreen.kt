@@ -18,6 +18,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Lightbulb
@@ -33,11 +35,16 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -52,6 +59,7 @@ import com.example.mydiary.data.models.ModalityInsightResponse
 import com.example.mydiary.data.models.VoiceTranscription
 import com.example.mydiary.data.network.ApiResult
 import com.example.mydiary.ui.theme.*
+import com.example.mydiary.ui.components.EmbeddedVideoPlayer
 import com.example.mydiary.util.ErrorHandler
 import kotlinx.coroutines.launch
 import java.io.File
@@ -72,7 +80,9 @@ fun DiaryEditorScreen(
     date: LocalDate,
     diaryId: Long? = null,
     onNavigateBack: () -> Unit,
+    onSavedToCalendar: (LocalDate) -> Unit = { onNavigateBack() },
     onNavigateToDrawing: (Long?) -> Unit = {},
+    onNavigateToVideo: (Long, String) -> Unit = { _, _ -> },
     onDrawingMediaSaved: () -> Unit = {},
     backStackEntry: androidx.navigation.NavBackStackEntry? = null,
     viewModel: DiaryEditorViewModel = hiltViewModel()
@@ -80,6 +90,8 @@ fun DiaryEditorScreen(
     val context = LocalContext.current
     val editorDebugLog = remember { java.io.File(context.filesDir, "debug_editor.log") }
     val uiState by viewModel.uiState.collectAsState()
+    // Keep each card's state while it leaves the lazy viewport, but reset on entry.
+    val expandedTextCards = remember(date, diaryId) { mutableStateMapOf<String, Boolean>() }
 
     // #region agent debug log - 21cff5 (H2: diaryId null crash)
     val TAG_EDITOR = "DiaryEditor"
@@ -363,10 +375,6 @@ fun DiaryEditorScreen(
     // 语音处理（带选项）状态
     val voiceProcessingWithOptionsState by viewModel.voiceProcessingWithOptionsState.collectAsState()
     
-    // 画画引导对话框状态 - 需求：在记完日记之后，必定给出选项，是否要画画
-    var showDrawingPromptDialog by remember { mutableStateOf(false) }
-    var savedDiaryId by remember { mutableStateOf<Long?>(null) }
-
     // AI 绘图功能启用状态（控制是否显示绘画引导对话框）
     val drawingEnabled by viewModel.drawingEnabled.collectAsState()
 
@@ -375,26 +383,47 @@ fun DiaryEditorScreen(
         viewModel.fetchDrawingEnabled()
     }
 
-    // 显示保存成功提示并弹出画画引导
-    LaunchedEffect(uiState.saveSuccess, uiState.diaryId, drawingEnabled) {
-        if (uiState.saveSuccess && drawingEnabled) {
+    if (uiState.showTitleSuggestion) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissTitleSuggestion,
+            title = { Text("为日记推荐一个标题") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (uiState.isRecommendingTitle) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        Text("正在根据日记内容推荐标题…")
+                    } else {
+                        Text(uiState.titleSuggestionError ?: "这是 AI 推荐的标题，你可以修改后再保存。")
+                        OutlinedTextField(value = uiState.suggestedTitle,
+                            onValueChange = viewModel::editSuggestedTitle,
+                            label = { Text("标题") }, singleLine = true,
+                            modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.saveWithSuggestedTitle(true) },
+                    enabled = !uiState.isRecommendingTitle && uiState.suggestedTitle.isNotBlank()) {
+                    Text("使用并保存")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.saveWithSuggestedTitle(false) }) { Text("暂不添加，直接保存") }
+            },
+        )
+    }
+
+    // Consume the save intent before navigating, so recomposition cannot repeat it.
+    LaunchedEffect(uiState.saveCompletion, drawingEnabled) {
+        val completion = viewModel.consumeSaveCompletion(drawingEnabled) ?: return@LaunchedEffect
+        if (completion.action == DiarySaveAction.ReturnToCalendar) {
+            onSavedToCalendar(completion.date)
+        } else {
             ErrorHandler.showSuccess(
                 message = "保存成功",
                 snackbarHostState = snackbarHostState,
                 scope = scope
             )
-            // 保存日记ID并显示画画引导对话框
-            savedDiaryId = uiState.diaryId ?: diaryId
-            showDrawingPromptDialog = true
-            viewModel.resetSaveSuccess()
-        } else if (uiState.saveSuccess && !drawingEnabled) {
-            // AI 绘图功能已禁用，仅显示保存成功提示
-            ErrorHandler.showSuccess(
-                message = "保存成功",
-                snackbarHostState = snackbarHostState,
-                scope = scope
-            )
-            viewModel.resetSaveSuccess()
         }
     }
     
@@ -487,7 +516,7 @@ fun DiaryEditorScreen(
                     // 保存按钮
                     IconButton(
                         onClick = { viewModel.saveDiary() },
-                        enabled = !uiState.isSaving
+                        enabled = !uiState.isSaving && !uiState.isRecommendingTitle
                     ) {
                         if (uiState.isSaving) {
                             CircularProgressIndicator(
@@ -589,27 +618,36 @@ fun DiaryEditorScreen(
                         modifier = Modifier.fillMaxWidth().weight(1f).padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        item(key = "diary_review") {
-                            DiaryReviewCard(
-                                review = uiState.diaryReview,
-                                dirty = uiState.hasUnsavedChanges || uiState.diaryId == null,
-                                generating = uiState.reviewGenerating,
-                                error = uiState.reviewError,
-                                onGenerate = viewModel::generateDiaryReview
-                            )
-                        }
                         items(uiState.mediaItems.sortedBy { it.order }, key = { it.id }) { mediaItem ->
                             when (mediaItem) {
                                 is MediaItem.Text -> TextMediaItem(
                                     mediaItem = mediaItem,
+                                    expanded = expandedTextCards[mediaItem.id] == true,
+                                    onExpandedChange = { expandedTextCards[mediaItem.id] = it },
                                     onContentChange = { newContent ->
                                         viewModel.updateTextContent(mediaItem.id, newContent)
                                     },
-                                    onDelete = { viewModel.removeMediaItem(mediaItem.id) }
+                                    confirmEnabled = uiState.canConfirmText(mediaItem.id),
+                                    onConfirm = { viewModel.confirmText(mediaItem.id) },
+                                    onDelete = {
+                                        expandedTextCards.remove(mediaItem.id)
+                                        viewModel.removeMediaItem(mediaItem.id)
+                                    }
                                 )
                                 is MediaItem.Image -> ImageMediaItem(
                                     mediaItem = mediaItem,
-                                    onDelete = { viewModel.removeMediaItem(mediaItem.id) }
+                                    onDelete = { viewModel.removeMediaItem(mediaItem.id) },
+                                    videoGenerationEnabled = !uiState.isSaving,
+                                    onGenerateVideo = {
+                                        val diaryId = uiState.diaryId
+                                        if (diaryId != null && !uiState.hasUnsavedChanges) {
+                                            onNavigateToVideo(diaryId, mediaItem.url)
+                                        } else {
+                                            scope.launch {
+                                                snackbarHostState.showSnackbar("请先保存日记，再生成视频。")
+                                            }
+                                        }
+                                    }
                                 )
                                 is MediaItem.Audio -> AudioMediaItem(
                                     mediaItem = mediaItem,
@@ -620,6 +658,15 @@ fun DiaryEditorScreen(
                                     onDelete = { viewModel.removeMediaItem(mediaItem.id) }
                                 )
                             }
+                        }
+                        item(key = "diary_review") {
+                            DiaryReviewCard(
+                                review = uiState.diaryReview,
+                                dirty = uiState.hasUnsavedChanges || uiState.diaryId == null,
+                                generating = uiState.reviewGenerating,
+                                error = uiState.reviewError,
+                                onGenerate = viewModel::generateDiaryReview
+                            )
                         }
                         if (uiState.mediaItems.isEmpty()) {
                             item { Text("点击右下角按钮添加内容",
@@ -955,14 +1002,14 @@ fun DiaryEditorScreen(
         }
     }
     
-    // 画画引导对话框 - 需求：在记完日记之后，必定给出选项，是否要画画
-    if (showDrawingPromptDialog) {
+    // Only a successful text-card confirmation opens the drawing invitation.
+    uiState.drawingPromptDiaryId?.let { savedDiaryId ->
         DrawingPromptDialog(
             onDismiss = {
-                showDrawingPromptDialog = false
+                viewModel.dismissDrawingPrompt()
             },
             onGoToDrawing = {
-                showDrawingPromptDialog = false
+                viewModel.dismissDrawingPrompt()
                 onNavigateToDrawing(savedDiaryId)
             }
         )
@@ -1368,21 +1415,46 @@ private fun formatDate(date: LocalDate): String {
 @Composable
 fun TextMediaItem(
     mediaItem: MediaItem.Text,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
     onContentChange: (String) -> Unit = {},
+    confirmEnabled: Boolean = false,
+    onConfirm: () -> Unit = {},
     onDelete: () -> Unit = {}
 ) {
-    var isEditing by remember { mutableStateOf(mediaItem.content.isEmpty()) }
     var editText by remember(mediaItem.content) { mutableStateOf(mediaItem.content) }
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val textStyle = LocalTextStyle.current.copy(
+        fontSize = 15.sp,
+        lineHeight = 28.sp,
+        color = Color(0xFF354D44)
+    )
+    val ruledModifier = Modifier
+        .fillMaxWidth()
+        .heightIn(min = 100.dp)
+        .drawBehind {
+            // Both preview and editor use the same 16 dp inset and 28 sp lines.
+            val spacing = 28.sp.toPx()
+            var y = 16.dp.toPx() + spacing
+            while (y < size.height - 8.dp.toPx()) {
+                drawLine(Color(0xFFD0E4D8), Offset(12.dp.toPx(), y),
+                    Offset(size.width - 12.dp.toPx(), y), 1.dp.toPx())
+                y += spacing
+            }
+            drawLine(Color(0xFFAFD9C5), Offset(7.dp.toPx(), 8.dp.toPx()),
+                Offset(7.dp.toPx(), size.height - 8.dp.toPx()), 1.dp.toPx())
+        }
     
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
+            containerColor = Color(0xFFF1FAF4)
         )
     ) {
         Column(
-            modifier = Modifier.padding(12.dp)
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 16.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1407,51 +1479,89 @@ fun TextMediaItem(
                     )
                 }
                 
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier.size(24.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "删除",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp)
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = {
+                        if (expanded) {
+                            focusManager.clearFocus(force = true)
+                            keyboardController?.hide()
+                        }
+                        onExpandedChange(!expanded)
+                    }) {
+                        Text(if (expanded) "收起" else "展开", fontSize = 13.sp)
+                        Icon(
+                            imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    IconButton(
+                        enabled = confirmEnabled,
+                        onClick = {
+                            focusManager.clearFocus(force = true)
+                            keyboardController?.hide()
+                            onConfirm()
+                        },
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = "确认文字并询问作画",
+                            modifier = Modifier.size(20.dp))
+                    }
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "删除",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
             }
             
             Spacer(modifier = Modifier.height(8.dp))
             
-            // 可编辑的文本输入框
-            TextField(
-                value = editText,
-                onValueChange = { newText ->
-                    editText = newText
-                    onContentChange(newText)
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 100.dp),
-                placeholder = {
-                    Text(
-                        text = "在这里输入文字...",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                    )
-                },
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    disabledContainerColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    disabledIndicatorColor = Color.Transparent
-                ),
-                textStyle = LocalTextStyle.current.copy(
-                    fontSize = 15.sp,
-                    lineHeight = 22.sp,
-                    color = MaterialTheme.colorScheme.onSurface
+            if (!expanded) {
+                Text(
+                    text = editText.ifEmpty { "点击展开，输入文字…" },
+                    modifier = ruledModifier
+                        .clickable(onClickLabel = "展开文字") { onExpandedChange(true) }
+                        .padding(16.dp),
+                    style = textStyle,
+                    color = if (editText.isEmpty())
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    else textStyle.color,
+                    minLines = 4,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis
                 )
-            )
+            } else {
+                // Keep edits flowing through the existing update/save path.
+                TextField(
+                    value = editText,
+                    onValueChange = { newText ->
+                        editText = newText
+                        onContentChange(newText)
+                    },
+                    modifier = ruledModifier,
+                    placeholder = {
+                        Text(
+                            text = "在这里输入文字...",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                    },
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        disabledContainerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        disabledIndicatorColor = Color.Transparent
+                    ),
+                    textStyle = textStyle
+                )
+            }
         }
     }
 }
@@ -1463,7 +1573,9 @@ fun TextMediaItem(
 @Composable
 fun ImageMediaItem(
     mediaItem: MediaItem.Image,
-    onDelete: () -> Unit = {}
+    onDelete: () -> Unit = {},
+    videoGenerationEnabled: Boolean = true,
+    onGenerateVideo: () -> Unit = {}
 ) {
     var showFullScreen by remember { mutableStateOf(false) }
     var loadError by remember { mutableStateOf<String?>(null) }
@@ -1485,6 +1597,7 @@ fun ImageMediaItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
+                    modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
@@ -1500,6 +1613,14 @@ fun ImageMediaItem(
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    OutlinedButton(
+                        onClick = onGenerateVideo,
+                        enabled = videoGenerationEnabled,
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Text("生成视频", fontSize = 12.sp, maxLines = 1)
+                    }
                 }
                 
                 IconButton(
@@ -1991,7 +2112,6 @@ fun VideoMediaItem(
     mediaItem: MediaItem.Video,
     onDelete: () -> Unit = {}
 ) {
-    var isPlaying by remember { mutableStateOf(false) }
     
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -2041,66 +2161,16 @@ fun VideoMediaItem(
             
             Spacer(modifier = Modifier.height(8.dp))
             
-            // 视频缩略图和播放控件
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp),
-                shape = RoundedCornerShape(8.dp),
-                color = Color.Black,
-                onClick = {
-                    isPlaying = !isPlaying
-                    // 播放逻辑将在后续实现
-                }
-            ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    // 视频缩略图
-                    // AsyncImage(
-                    //     model = mediaItem.thumbnailUrl,
-                    //     contentDescription = "视频缩略图",
-                    //     modifier = Modifier.fillMaxSize(),
-                    //     contentScale = ContentScale.Crop
-                    // )
-                    
-                    // 临时占位符
-                    Icon(
-                        imageVector = Icons.Default.Videocam,
-                        contentDescription = "视频缩略图",
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    
-                    // 播放按钮覆盖层
-                    if (!isPlaying) {
-                        Surface(
-                            modifier = Modifier.size(64.dp),
-                            shape = androidx.compose.foundation.shape.CircleShape,
-                            color = Color.Black.copy(alpha = 0.6f)
-                        ) {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.PlayArrow,
-                                    contentDescription = "播放",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(40.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-            
+            EmbeddedVideoPlayer(
+                videoUrl = mediaItem.url,
+                modifier = Modifier.fillMaxWidth().height(200.dp)
+            )
+
             Spacer(modifier = Modifier.height(8.dp))
             
             // 视频时长
             Text(
-                text = "时长: ${formatDuration(mediaItem.duration)}",
+                text = if (mediaItem.duration > 0) "时长: ${formatDuration(mediaItem.duration)}" else "点击播放按钮观看视频",
                 fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

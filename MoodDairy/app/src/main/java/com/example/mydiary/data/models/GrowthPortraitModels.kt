@@ -117,16 +117,26 @@ data class DiaryMultimodalInsightResponse(
 )
 
 
+data class DiaryReviewKeyword(
+    val text: String,
+    val weight: Float,
+    val category: String = "neutral",
+    val kind: String = "keyword",
+)
+
 data class DiaryReviewResponse(
     @SerializedName("diary_id") val diaryId: Long,
     @SerializedName("content_version") val contentVersion: String,
     val body: String? = null,
+    @SerializedName("primary_emotion") val primaryEmotion: String? = null,
     val question: String? = null,
     @SerializedName("generated_at") val generatedAt: String? = null,
     val stale: Boolean = false,
     @SerializedName("has_text") val hasText: Boolean = true,
     @SerializedName("attachment_note") val attachmentNote: String? = null,
     val clues: List<String> = emptyList(),
+    val keywords: List<DiaryReviewKeyword> = emptyList(),
+    @SerializedName("extraction_method") val extractionMethod: String? = null,
 )
 
 data class DiaryReviewRequest(

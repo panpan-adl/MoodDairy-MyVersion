@@ -76,9 +76,10 @@ class MusicButtonInstrumentedTest {
         }
     }
 
-    @Test fun selectedRelaxTrackOpensItsExactSongOnlyAfterClick() {
+    @Test fun selectedRelaxTrackPlaysInAppWithoutExternalNavigation() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val opened = CopyOnWriteArrayList<Intent>()
+        val selectedTracks = CopyOnWriteArrayList<String>()
         val monitor = object : Instrumentation.ActivityMonitor() {
             override fun onStartActivity(intent: Intent): Instrumentation.ActivityResult? {
                 if (intent.action != Intent.ACTION_VIEW) return null
@@ -91,14 +92,14 @@ class MusicButtonInstrumentedTest {
             compose.activityRule.scenario.onActivity { activity -> activity.setContent {
                 MyDiaryTheme { RelaxContent(
                     RelaxMusicState(tracks = listOf(RelaxTrack("qa", "虚构测试曲目", "测试作者", "https://music.163.com/song?id=123"))),
-                    onReload = {}, onNavigateBack = {},
+                    onReload = {}, onNavigateBack = {}, onPlay = { selectedTracks.add(it.id) },
                 ) }
             } }
             compose.waitForIdle()
             assertTrue(opened.isEmpty())
-            compose.onNodeWithText("去网易云播放").performClick()
-            assertEquals(1, opened.size)
-            assertEquals("https://music.163.com/song?id=123", opened.single().data.toString())
+            compose.onNodeWithText("播放").performClick()
+            assertEquals(listOf("qa"), selectedTracks.toList())
+            assertTrue("Playback must stay inside the app", opened.isEmpty())
         } finally { instrumentation.removeMonitor(monitor) }
     }
 }

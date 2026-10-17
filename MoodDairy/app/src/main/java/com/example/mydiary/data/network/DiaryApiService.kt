@@ -15,6 +15,8 @@ import retrofit2.http.*
 interface DiaryApiService {
     @GET("music/recommendations")
     suspend fun relaxRecommendations(): Response<RelaxRecommendations>
+    @GET("music/tracks/{songId}/playback")
+    suspend fun relaxPlayback(@Path("songId") songId: String): Response<RelaxPlayback>
     @GET("agent/tasks/history")
     suspend fun agentTaskHistory(): Response<List<AgentTask>>
     @POST("agent/record")
@@ -192,6 +194,9 @@ interface DiaryApiService {
         @Query("limit") limit: Int = 20,
         @Query("offset") offset: Int = 0
     ): Response<List<DiaryResponse>>
+
+    @POST("insights/title-recommendation")
+    suspend fun recommendDiaryTitle(@Body request: TitleRecommendationRequest): Response<TitleRecommendationResponse>
 
     @GET("insights/growth-portrait")
     suspend fun getGrowthPortrait(

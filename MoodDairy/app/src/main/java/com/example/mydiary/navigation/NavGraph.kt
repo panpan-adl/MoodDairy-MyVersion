@@ -67,7 +67,7 @@ object Routes {
     const val TEST_HUB = "test_hub"
     const val TEST = "test/{test_id}"
     const val TEST_RESULT = "test_result/{test_id}"
-    const val DRAWING = "drawing_flow?diary_id={diary_id}&prompt={prompt}"
+    const val DRAWING = "drawing_flow?diary_id={diary_id}&prompt={prompt}&source_image={source_image}"
     const val DRAWING_RESULT = "drawing_result/{image_url}?diary_id={diary_id}"
     const val RELAX = "relax"
     const val WHITE_NOISE = "white_noise"
@@ -231,6 +231,14 @@ fun NavGraph(
         }
         composable(Routes.CALENDAR) { backStackEntry ->
             val calendarViewModel: CalendarViewModel = hiltViewModel()
+            val savedDiaryDate by backStackEntry.savedStateHandle
+                .getStateFlow<String?>("calendar_saved_diary_date", null).collectAsStateWithLifecycle()
+            LaunchedEffect(savedDiaryDate) {
+                savedDiaryDate?.let { value ->
+                    calendarViewModel.showSavedDiary(LocalDate.parse(value))
+                    backStackEntry.savedStateHandle["calendar_saved_diary_date"] = null
+                }
+            }
             val shouldRefresh = backStackEntry.savedStateHandle.get<Boolean>("calendar_refresh") == true
             if (shouldRefresh) {
                 backStackEntry.savedStateHandle.remove<Boolean>("calendar_refresh")
@@ -378,8 +386,24 @@ fun NavGraph(
                 onNavigateBack = {
                     navController.popBackStack()
                 },
+                onSavedToCalendar = { savedDate ->
+                    val calendarEntry = runCatching { navController.getBackStackEntry(Routes.CALENDAR) }.getOrNull()
+                    if (calendarEntry != null) {
+                        calendarEntry.savedStateHandle["calendar_saved_diary_date"] = savedDate.toString()
+                        navController.popBackStack(Routes.CALENDAR, inclusive = false)
+                    } else {
+                        navController.navigate(Routes.CALENDAR) {
+                            popUpTo(Routes.DIARY_EDITOR) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                        navController.getBackStackEntry(Routes.CALENDAR).savedStateHandle["calendar_saved_diary_date"] = savedDate.toString()
+                    }
+                },
                 onNavigateToDrawing = { savedDiaryId ->
                     navController.navigate("drawing_flow?diary_id=${savedDiaryId ?: "null"}")
+                },
+                onNavigateToVideo = { savedDiaryId, imageUrl ->
+                    navController.navigate("drawing_flow?diary_id=$savedDiaryId&source_image=${URLEncoder.encode(imageUrl, "UTF-8")}")
                 },
                 backStackEntry = backStackEntry
             )
@@ -496,6 +520,11 @@ fun NavGraph(
                     nullable = true
                     defaultValue = null
                 },
+                navArgument("source_image") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
                 navArgument("prompt") {
                     type = NavType.StringType
                     nullable = true
@@ -515,7 +544,17 @@ fun NavGraph(
                     ?.let { URLDecoder.decode(it, "UTF-8") }
                 val sharedViewModel: SharedDrawingViewModel = hiltViewModel(parentEntry)
 
-                DrawingScreen(
+                val sourceImage = parentEntry.arguments?.getString("source_image")
+                    ?.takeIf { it.isNotBlank() }?.let { URLDecoder.decode(it, "UTF-8") }
+                if (sourceImage != null) {
+                    LaunchedEffect(sourceImage, diaryId) {
+                        sharedViewModel.setDiaryId(diaryId)
+                        navController.navigate("drawing_result/${URLEncoder.encode(sourceImage, "UTF-8")}?diary_id=${diaryId ?: "null"}") {
+                            popUpTo("drawing_start") { inclusive = true }
+                        }
+                    }
+                } else {
+                    DrawingScreen(
                     diaryId = diaryId,
                     initialPrompt = initialPrompt,
                     onNavigateBack = {
@@ -535,6 +574,7 @@ fun NavGraph(
                     sharedViewModel = sharedViewModel,
                     viewModel = hiltViewModel(parentEntry),
                 )
+                }
             }
 
             composable(
@@ -559,6 +599,7 @@ fun NavGraph(
 
                 DrawingResultScreen(
                     imageUrl = imageUrl,
+                    fromDiaryPhoto = drawingParentEntry.arguments?.getString("source_image") != null,
                     sharedViewModel = resultViewModel,
                     viewModel = hiltViewModel(drawingParentEntry),
                     onNavigateBack = {
@@ -590,7 +631,12 @@ fun NavGraph(
                         }
                     },
                     onNavigateToDrawingList = {
-                        navController.popBackStack()
+                        if (drawingParentEntry.arguments?.getString("source_image") != null) {
+                            val savedDiaryId = drawingParentEntry.arguments?.getString("diary_id")
+                            navController.navigate("drawing_flow?diary_id=${savedDiaryId ?: "null"}") {
+                                popUpTo(drawingFlowRoute) { inclusive = true }
+                            }
+                        } else navController.popBackStack()
                     }
                 )
             }
