@@ -50,6 +50,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.NoPhotography
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Psychology
@@ -69,6 +70,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -139,6 +141,7 @@ fun ChatScreen(
     onNavigateToLive2D: () -> Unit = {},
     onNavigateToRecharge: () -> Unit = {},
     onClientAction: (ChatClientAction) -> Unit = {},
+    suspendEmotionCapture: Boolean = false,
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -152,12 +155,14 @@ fun ChatScreen(
     val faceEmotionPrompt by viewModel.faceEmotionPrompt.collectAsState()
     val faceEmotionStatus by viewModel.faceEmotionStatus.collectAsState()
     val selectedMood by viewModel.selectedMood.collectAsState()
+    val manualMoodCare by viewModel.manualMoodCare.collectAsState()
     val moodChangeSuggestion by viewModel.moodChangeSuggestion.collectAsState()
     var showMoodPicker by remember { mutableStateOf(false) }
     val isLoading by viewModel.isLoading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
     val emotionConsent by viewModel.emotionConsentGranted.collectAsState()
     val emotionEnabled by viewModel.emotionCaptureEnabled.collectAsState()
+    var showEmotionConsent by remember { mutableStateOf(false) }
     val shouldAskEmotionConsent by viewModel.shouldAskEmotionConsent.collectAsState()
     val isEmotionCapturing by viewModel.isEmotionCapturing.collectAsState()
     val deepThinkingEnabled by viewModel.deepThinkingEnabled.collectAsState()
@@ -204,6 +209,14 @@ fun ChatScreen(
         contract = ActivityResultContracts.RequestPermission(),
     ) { granted ->
         hasCameraPermission = granted
+        viewModel.setEmotionCaptureEnabled(granted)
+        if (!granted) Toast.makeText(context, "未获得相机权限，表情识别保持关闭", Toast.LENGTH_SHORT).show()
+    }
+
+    fun enableEmotionCapture() {
+        hasCameraPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        if (hasCameraPermission) viewModel.setEmotionCaptureEnabled(true)
+        else cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
     }
 
     // 改用 Vosk 离线中文识别（模拟器无 Google 语音服务也能收音）。进入聊天页即在后台预热模型。
@@ -268,21 +281,24 @@ fun ChatScreen(
     }
 
     // 表情采集生命周期：前台且已授权+开关开启+有相机权限时启动，后台即停止
-    DisposableEffect(lifecycleOwner, emotionConsent, emotionEnabled, hasCameraPermission) {
+    DisposableEffect(lifecycleOwner, emotionConsent, emotionEnabled, hasCameraPermission, suspendEmotionCapture) {
+        fun syncCapture() {
+            val permissionGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+            hasCameraPermission = permissionGranted
+            if (!suspendEmotionCapture && emotionConsent == true && emotionEnabled && permissionGranted &&
+                lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                viewModel.startEmotionCapture(lifecycleOwner)
+            } else viewModel.stopEmotionCapture()
+        }
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_RESUME -> {
-                    if (emotionConsent == true && emotionEnabled && hasCameraPermission) {
-                        viewModel.startEmotionCapture(lifecycleOwner)
-                    }
-                }
-                Lifecycle.Event.ON_PAUSE -> {
-                    viewModel.stopEmotionCapture()
-                }
+                Lifecycle.Event.ON_RESUME -> syncCapture()
+                Lifecycle.Event.ON_PAUSE -> viewModel.stopEmotionCapture()
                 else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
+        syncCapture()
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
             viewModel.stopEmotionCapture()
@@ -335,6 +351,12 @@ fun ChatScreen(
                     onNavigateToLive2D = onNavigateToLive2D,
                     onOpenRelax = { onClientAction(ChatClientAction("open_relax", emptyMap())) },
                     isEmotionCapturing = isEmotionCapturing,
+                    emotionRecognitionEnabled = emotionConsent == true && emotionEnabled && hasCameraPermission,
+                    onToggleEmotionRecognition = { enabled ->
+                        if (!enabled) viewModel.setEmotionCaptureEnabled(false)
+                        else if (emotionConsent != true) showEmotionConsent = true
+                        else enableEmotionCapture()
+                    },
                     faceEmotionStatus = faceEmotionStatus,
                     selectedMood = selectedMood,
                     onSelectMood = { showMoodPicker = true },
@@ -486,7 +508,20 @@ fun ChatScreen(
         )
     }
 
-    if (moodChangeSuggestion != null && !showMoodPicker && !shouldAskEmotionConsent && editingPlan == null) {
+    if (manualMoodCare != null && !showMoodPicker && !shouldAskEmotionConsent && editingPlan == null) {
+        ManualMoodCareDialog(
+            care = manualMoodCare!!,
+            onDismiss = viewModel::dismissManualMoodCare,
+            onRelax = {
+                viewModel.dismissManualMoodCare()
+                viewModel.performServiceAction(EmotionServiceActionUi(
+                    id = "manual_mood_relax", title = "放松一下", description = "", action = "open_relax",
+                ))
+            },
+        )
+    }
+
+    if (moodChangeSuggestion != null && manualMoodCare == null && !showMoodPicker && !shouldAskEmotionConsent && editingPlan == null) {
         MoodChangeDialog(
             current = FaceEmotionStatusUi.fromObservation(selectedMood, 1f),
             suggested = FaceEmotionStatusUi.fromObservation(moodChangeSuggestion, 1f),
@@ -494,7 +529,7 @@ fun ChatScreen(
         )
     }
 
-    if (faceEmotionPrompt != null && !showMoodPicker && moodChangeSuggestion == null && !shouldAskEmotionConsent && editingPlan == null) {
+    if (faceEmotionPrompt != null && manualMoodCare == null && !showMoodPicker && moodChangeSuggestion == null && !shouldAskEmotionConsent && editingPlan == null) {
         MoodCareDialog(onRespond = viewModel::dismissFaceEmotionPrompt)
     }
 
@@ -517,9 +552,9 @@ fun ChatScreen(
     }
 
     // 表情识别授权弹窗：首次进入聊天页（尚无授权记录）时强制用户做出选择
-    if (shouldAskEmotionConsent) {
+    if (shouldAskEmotionConsent || showEmotionConsent) {
         AlertDialog(
-            onDismissRequest = { },
+            onDismissRequest = { showEmotionConsent = false },
             title = { Text(text = "表情识别授权") },
             text = {
                 Text(
@@ -532,17 +567,20 @@ fun ChatScreen(
             confirmButton = {
                 Button(
                     onClick = {
+                        showEmotionConsent = false
                         viewModel.setEmotionCaptureConsent(true)
-                        if (!hasCameraPermission) {
-                            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                        }
+                        enableEmotionCapture()
                     },
                 ) {
                     Text("同意")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { viewModel.setEmotionCaptureConsent(false) }) {
+                TextButton(onClick = {
+                    showEmotionConsent = false
+                    viewModel.setEmotionCaptureEnabled(false)
+                    viewModel.setEmotionCaptureConsent(false)
+                }) {
                     Text("拒绝")
                 }
             },
@@ -650,6 +688,8 @@ internal fun ChatTopBar(
     onNavigateToLive2D: () -> Unit = {},
     onOpenRelax: () -> Unit = {},
     isEmotionCapturing: Boolean = false,
+    emotionRecognitionEnabled: Boolean = false,
+    onToggleEmotionRecognition: (Boolean) -> Unit = {},
     faceEmotionStatus: FaceEmotionStatusUi = FaceEmotionStatusUi.Recognizing,
     selectedMood: String? = null,
     onSelectMood: () -> Unit = {},
@@ -726,15 +766,18 @@ internal fun ChatTopBar(
 
             Spacer(modifier = Modifier.width(4.dp))
 
-            // 表情采集指示点：采集期间显示小相机图标
-            if (isEmotionCapturing) {
+            // Always available, including when capture is off, so users can restart it here.
+            IconToggleButton(
+                checked = emotionRecognitionEnabled,
+                onCheckedChange = onToggleEmotionRecognition,
+                modifier = Modifier.size(40.dp),
+            ) {
                 Icon(
-                    imageVector = Icons.Default.PhotoCamera,
-                    contentDescription = "emotion_capture_active",
-                    tint = Primary,
-                    modifier = Modifier.size(16.dp),
+                    imageVector = if (emotionRecognitionEnabled) Icons.Default.PhotoCamera else Icons.Default.NoPhotography,
+                    contentDescription = if (emotionRecognitionEnabled) "表情识别已开启，点击关闭" else "表情识别已关闭，点击开启",
+                    tint = if (emotionRecognitionEnabled) Color(0xFF215B49) else TextSecondary,
+                    modifier = Modifier.size(21.dp),
                 )
-                Spacer(modifier = Modifier.width(8.dp))
             }
 
             // 历史对话入口
@@ -769,12 +812,12 @@ internal fun ChatTopBar(
                 DropdownMenu(
                     expanded = menuExpanded,
                     onDismissRequest = { menuExpanded = false },
+                    shape = RoundedCornerShape(18.dp),
+                    containerColor = Color(0xFFE5F4EC),
+                    tonalElevation = 0.dp,
+                    shadowElevation = 3.dp,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFC5E3D4)),
                 ) {
-                    DropdownMenuItem(
-                        text = { Text("放松一下", color = TextPrimary) },
-                        leadingIcon = { Icon(Icons.Default.MusicNote, null, tint = PrimaryDark) },
-                        onClick = { menuExpanded = false; onOpenRelax() },
-                    )
                     DropdownMenuItem(
                         text = {
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -786,7 +829,7 @@ internal fun ChatTopBar(
                             Icon(
                                 imageVector = Icons.Default.Psychology,
                                 contentDescription = null,
-                                tint = if (deepThinkingEnabled) Primary else TextSecondary,
+                                tint = if (deepThinkingEnabled) PrimaryDark else TextSecondary,
                             )
                         },
                         trailingIcon = {
@@ -794,6 +837,14 @@ internal fun ChatTopBar(
                             androidx.compose.material3.Switch(
                                 checked = deepThinkingEnabled,
                                 onCheckedChange = null,
+                                colors = androidx.compose.material3.SwitchDefaults.colors(
+                                    checkedThumbColor = Color.White,
+                                    checkedTrackColor = PrimaryDark,
+                                    checkedBorderColor = Color.Transparent,
+                                    uncheckedThumbColor = Color(0xFF829C90),
+                                    uncheckedTrackColor = Color(0xFFD6E5DC),
+                                    uncheckedBorderColor = Color(0xFFADC8B9),
+                                ),
                             )
                         },
                         onClick = { onToggleDeepThinking(!deepThinkingEnabled) },
@@ -1213,88 +1264,3 @@ private fun mapSpeechRecognizerError(errorCode: Int): String {
     }
 }
 
-/** 历史对话弹窗：查看/继续/导出/删除过去的对话 */
-@Composable
-private fun ConversationHistoryDialog(
-    conversations: List<StoredConversation>,
-    onDismiss: () -> Unit,
-    onOpen: (StoredConversation) -> Unit,
-    onExport: (StoredConversation) -> Unit,
-    onDelete: (StoredConversation) -> Unit,
-) {
-    val fmt = remember { SimpleDateFormat("MM-dd HH:mm", Locale.CHINA) }
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-    ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .heightIn(max = 560.dp),
-            shape = RoundedCornerShape(20.dp),
-            color = AppSurface,
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "历史对话",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary,
-                    )
-                    Spacer(modifier = Modifier.weight(1f))
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = "关闭", tint = TextSecondary)
-                    }
-                }
-
-                if (conversations.isEmpty()) {
-                    Text(
-                        text = "还没有历史对话\n\n每轮对话结束后稍作休息（约 10 分钟），\n就会自动归档到这里，方便以后查找。",
-                        fontSize = 14.sp,
-                        color = TextSecondary,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 40.dp),
-                    )
-                } else {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    PageLazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(conversations, key = { it.conversationId }) { conv ->
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = SoftWhite,
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                                    Text(
-                                        text = conv.title,
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = TextPrimary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                    Text(
-                                        text = fmt.format(Date(conv.updatedAt)),
-                                        fontSize = 12.sp,
-                                        color = TextTertiary,
-                                    )
-                                    Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                                        TextButton(onClick = { onOpen(conv) }) { Text("打开", fontSize = 13.sp) }
-                                        TextButton(onClick = { onExport(conv) }) { Text("导出", fontSize = 13.sp) }
-                                        TextButton(onClick = { onDelete(conv) }) {
-                                            Text("删除", fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}

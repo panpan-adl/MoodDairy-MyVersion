@@ -3,6 +3,8 @@ import androidx.compose.material3.TextButton
 import com.example.mydiary.ui.theme.TextPrimary
 
 import android.os.Bundle
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -90,9 +92,13 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var relaxController: com.example.mydiary.ui.relax.RelaxPlaybackController
 
+    @Inject
+    lateinit var relaxRecommendations: com.example.mydiary.ui.relax.RelaxRecommendationsRepository
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        if (sessionManager.isLoggedIn()) lifecycleScope.launch { relaxRecommendations.refresh() }
         setContent {
             MyDiaryTheme {
                 MainScreen(
@@ -121,6 +127,11 @@ fun MainScreen(
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    val destinationLifecycle = navBackStackEntry?.lifecycle?.currentStateFlow?.collectAsState()?.value
+    // The destination changes before NavHost has drawn the incoming page. RESUMED
+    // is reached after its enter transition, so the window overlay cannot precede it.
+    val assistantPageVisible = currentRoute == Routes.CHAT &&
+        destinationLifecycle == androidx.lifecycle.Lifecycle.State.RESUMED
     val relaxState by relaxController.state.collectAsState()
     androidx.compose.runtime.LaunchedEffect(relaxState.assistantRequest) {
         relaxState.assistantRequest?.let { token ->
@@ -142,7 +153,7 @@ fun MainScreen(
     }
     com.example.mydiary.live2d.CompanionHost(
         active = currentRoute != null && currentRoute != Routes.LOGIN && currentRoute != Routes.REGISTER,
-        assistant = currentRoute == Routes.CHAT,
+        assistant = assistantPageVisible,
         showcase = currentRoute == Routes.LIVE2D,
     )
     androidx.compose.runtime.LaunchedEffect(navController) {

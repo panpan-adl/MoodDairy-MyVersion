@@ -9,6 +9,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -28,6 +32,10 @@ import com.example.mydiary.ui.theme.PrimaryDark
 import com.example.mydiary.ui.theme.PrimaryLight
 import com.example.mydiary.ui.theme.SoftWhite
 import com.example.mydiary.ui.theme.TextPrimary
+import com.example.mydiary.ui.theme.PageTopBackground
+import com.example.mydiary.ui.theme.PageMiddleBackground
+import com.example.mydiary.ui.theme.PaleYellow
+import com.example.mydiary.ui.theme.PrimaryVariant
 
 private val MoodBodyColor = Color(0xFF526963)
 
@@ -40,6 +48,7 @@ private fun MoodDialog(
     dismissLabel: String,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
+    showConfirm: Boolean = true,
     content: @Composable ColumnScope.() -> Unit = {},
 ) {
     val maxHeight = (LocalConfiguration.current.screenHeightDp.dp - 48.dp).coerceAtLeast(160.dp)
@@ -47,22 +56,27 @@ private fun MoodDialog(
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(
             modifier = Modifier.padding(horizontal = 16.dp).widthIn(max = 420.dp).fillMaxWidth().heightIn(max = maxHeight),
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(28.dp),
             color = SoftWhite,
             shadowElevation = 8.dp,
         ) {
             BoxWithConstraints(
-                Modifier.background(Brush.verticalGradient(listOf(PrimaryLight.copy(alpha = .55f), SoftWhite), endY = 260f)),
+                Modifier.background(Brush.verticalGradient(listOf(PageTopBackground, PageMiddleBackground, SoftWhite))),
             ) {
                 val stackActions = maxWidth < 320.dp || fontScale > 1.2f
                 Column(
                     Modifier.pageVerticalScroll(rememberScrollState()).padding(24.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    Text(title, color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-                    Text(description, color = MoodBodyColor, fontSize = 13.sp, lineHeight = 20.sp)
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(title, color = TextPrimary, fontSize = 21.sp, fontWeight = FontWeight.SemiBold)
+                        Text(description, color = MoodBodyColor, fontSize = 12.sp, lineHeight = 19.sp)
+                    }
                     content()
-                    if (stackActions) {
+                    if (!showConfirm) {
+                        MoodDismissButton(dismissLabel, onDismiss, Modifier.fillMaxWidth()
+                            .background(Color.White.copy(alpha = .55f), RoundedCornerShape(16.dp)))
+                    } else if (stackActions) {
                         MoodConfirmButton(confirmLabel, onConfirm, Modifier.fillMaxWidth())
                         MoodDismissButton(dismissLabel, onDismiss, Modifier.fillMaxWidth())
                     } else {
@@ -100,29 +114,41 @@ private fun MoodDismissButton(label: String, onClick: () -> Unit, modifier: Modi
 internal fun MoodPickerDialog(selectedMood: String?, onSelect: (String?) -> Unit, onDismiss: () -> Unit) {
     MoodDialog(
         title = "此刻的心情",
-        description = "以你的感受为准。表情有变化时，会先问你是否更新。",
+        description = "选一个贴近此刻的心情\n以你的感受为准，变化时会先询问你。",
         confirmLabel = "跟随表情识别", dismissLabel = "取消",
         onConfirm = { onSelect(null) }, onDismiss = onDismiss,
+        showConfirm = false,
     ) {
         Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            MoodChangeTracker.choices.chunked(2).forEach { choices ->
+            (MoodChangeTracker.choices.map { it as String? } + listOf<String?>(null)).chunked(2).forEach { choices ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     choices.forEach { mood ->
-                        val display = FaceEmotionStatusUi.fromObservation(mood, 1f)
+                        val display = mood?.let { FaceEmotionStatusUi.fromObservation(it, 1f) }
                         val selected = selectedMood == mood
                         Surface(
-                            modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp),
-                            color = if (selected) PrimaryLight else Color.White.copy(alpha = .9f),
-                            border = BorderStroke(if (selected) 1.5.dp else 1.dp, if (selected) PrimaryDark else Color(0xFFDDEAE4)),
+                            modifier = Modifier.weight(1f), shape = RoundedCornerShape(18.dp),
+                            color = if (selected) MintGreen else Color.White.copy(alpha = .65f),
+                            border = BorderStroke(1.dp, if (selected) PrimaryVariant else Color.White.copy(alpha = .8f)),
                         ) {
                             Row(
                                 Modifier.selectable(selected, role = Role.RadioButton, onClick = { onSelect(mood) })
-                                    .heightIn(min = 64.dp).padding(horizontal = 12.dp, vertical = 12.dp),
+                                    .heightIn(min = 68.dp).padding(horizontal = 10.dp, vertical = 12.dp),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Text(display.icon, fontSize = 24.sp)
-                                Text(display.label, modifier = Modifier.weight(1f), fontSize = 14.sp, color = TextPrimary)
-                                if (selected) Text("✓", color = PrimaryDark, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                Box(Modifier.size(34.dp).background(
+                                    if (selected) Color.White.copy(alpha = .65f) else PaleYellow.copy(alpha = .6f), CircleShape),
+                                    contentAlignment = Alignment.Center) {
+                                    if (display != null) Text(display.icon, fontSize = 22.sp)
+                                    else Icon(Icons.Outlined.AutoAwesome, contentDescription = null,
+                                        tint = PrimaryDark, modifier = Modifier.size(20.dp))
+                                }
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    Text(display?.label ?: "自动", fontSize = 14.sp, lineHeight = 20.sp, color = TextPrimary,
+                                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+                                    if (display == null) Text("跟随表情", fontSize = 10.sp, lineHeight = 14.sp, color = MoodBodyColor)
+                                }
+                                if (selected) Icon(Icons.Filled.Check, contentDescription = null,
+                                    tint = PrimaryDark, modifier = Modifier.size(16.dp))
                             }
                         }
                     }
@@ -151,4 +177,24 @@ internal fun MoodCareDialog(onRespond: (Boolean) -> Unit) {
         confirmLabel = "看看建议", dismissLabel = "暂时不用",
         onConfirm = { onRespond(true) }, onDismiss = { onRespond(false) },
     )
+}
+
+@Composable
+internal fun ManualMoodCareDialog(care: ManualMoodCare, onRelax: () -> Unit, onDismiss: () -> Unit) {
+    val mood = FaceEmotionStatusUi.fromObservation(care.mood, 1f)
+    MoodDialog(
+        title = "${mood.icon} 给此刻的你一点照顾",
+        description = care.introduction,
+        confirmLabel = "听点音乐，放松一下", dismissLabel = "先放一放",
+        onConfirm = onRelax, onDismiss = onDismiss,
+    ) {
+        care.tips.forEachIndexed { index, tip ->
+            Surface(color = Color.White.copy(alpha = .85f), shape = RoundedCornerShape(16.dp)) {
+                Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("${index + 1}", color = PrimaryDark, fontWeight = FontWeight.SemiBold)
+                    Text(tip, modifier = Modifier.weight(1f), color = TextPrimary, fontSize = 14.sp, lineHeight = 22.sp)
+                }
+            }
+        }
+    }
 }

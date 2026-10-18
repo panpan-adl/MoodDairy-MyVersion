@@ -116,7 +116,7 @@ internal fun TodayDashboard(state: TodayState, actions: TodayActions, showTitle:
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = if (showTitle) 12.dp else 0.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                if (showTitle) Text("今天", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                if (showTitle) Text("当下", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                 val dateLabel = runCatching { LocalDate.parse(state.date).format(DateTimeFormatter.ofPattern("M月d日  EEEE", Locale.CHINA)) }.getOrDefault(state.date)
                 Text(dateLabel, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = PrimaryDark)
             }
@@ -126,22 +126,22 @@ internal fun TodayDashboard(state: TodayState, actions: TodayActions, showTitle:
             filter = domain
             selected = TodaySection.TASKS
         }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).clip(RoundedCornerShape(14.dp))
-            .background(Color.White.copy(alpha = 0.8f)).selectableGroup().padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp).clip(RoundedCornerShape(14.dp))
+            .background(LifeStyle.field).selectableGroup().padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             TodaySection.entries.forEach { section ->
                 val active = selected == section
-                Row(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(if (active) PrimaryDark else Color.Transparent)
+                Row(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(if (active) LifeStyle.selected else Color.Transparent)
                     .selectable(selected = active, role = Role.Tab, onClick = { selected = section }).padding(vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                    Icon(section.icon, null, tint = if (active) Color.White else TextSecondary, modifier = Modifier.size(17.dp)); Spacer(Modifier.width(4.dp))
-                    Text(section.title, fontSize = 12.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal, color = if (active) Color.White else TextSecondary, maxLines = 1)
+                    Icon(section.icon, null, tint = if (active) LifeStyle.ink else LifeStyle.mutedInk, modifier = Modifier.size(17.dp)); Spacer(Modifier.width(4.dp))
+                    Text(section.title, fontSize = 12.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal, color = if (active) LifeStyle.ink else LifeStyle.mutedInk, maxLines = 1)
                 }
             }
         }
         PageLazyColumn(modifier = Modifier.weight(1f).fillMaxWidth(),
             state = when (selected) { TodaySection.RECORD -> recordScroll; TodaySection.TASKS -> tasksScroll; TodaySection.REVIEW -> reviewScroll },
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            if (state.busy) item(key = "loading") { LinearProgressIndicator(Modifier.fillMaxWidth(), color = PrimaryVariant, trackColor = MintGreen.copy(alpha = 0.2f)) }
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (state.busy) item(key = "loading") { LinearProgressIndicator(Modifier.fillMaxWidth(), color = PrimaryVariant, trackColor = LifeStyle.border, gapSize = 0.dp) }
             if (notice != null) item(key = "notice") {
                 Surface(shape = RoundedCornerShape(12.dp), color = if (state.error != null) Error.copy(alpha = 0.12f) else MintGreen.copy(alpha = 0.25f)) {
                     Row(Modifier.fillMaxWidth().padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -155,13 +155,14 @@ internal fun TodayDashboard(state: TodayState, actions: TodayActions, showTitle:
                     item(key = "record") {
                         AgentPanel("随手记录", "把脑海里的待办，轻轻放在这里", Icons.Outlined.EditNote) {
                             AgentTextField(state.record, actions.record, "今天，我想……", enabled = !state.busy,
-                                placeholder = "例如：完成工作方案、复习英语，晚饭后散步。", minLines = 2)
+                                placeholder = "例如：完成工作方案、复习英语，晚饭后散步。", minLines = 2, paperStyle = true)
                         }
                     }
                     item(key = "planning") {
                         AgentPanel("安排今天", "按你的精力和时间，给出可以执行的下一步", Icons.Outlined.AutoAwesome) {
                             Text("现在的精力", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
-                            Row(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(LifeStyle.paperInset)
+                                .selectableGroup().padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 listOf("low" to "有些疲惫", "normal" to "还不错", "high" to "精力充足").forEachIndexed { index, (value, label) ->
                                     EnergyOption(label, index + 1, state.energy == value, Modifier.weight(1f), !state.busy) { actions.energy(value) }
                                 }
@@ -186,11 +187,11 @@ internal fun TodayDashboard(state: TodayState, actions: TodayActions, showTitle:
                     state.plan?.let { plan ->
                         item(key = "plan") {
                             AgentPanel("计划预览", "可以调整任务；确认后才会加入今日任务", Icons.Outlined.FactCheck) {
-                                Surface(shape = RoundedCornerShape(12.dp), color = PaleYellow.copy(alpha = 0.45f)) {
+                                Surface(shape = RoundedCornerShape(12.dp), color = LifeStyle.cream) {
                                     Text(plan.suggestion, Modifier.fillMaxWidth().padding(12.dp), fontSize = 13.sp, lineHeight = 20.sp, color = TextPrimary)
                                 }
                                 plan.tasks.forEachIndexed { index, draft ->
-                                    Surface(shape = RoundedCornerShape(12.dp), color = SoftWhite, border = BorderStroke(1.dp, DividerColor)) {
+                                    Surface(shape = RoundedCornerShape(12.dp), color = LifeStyle.field, border = BorderStroke(1.dp, LifeStyle.border)) {
                                         Row(Modifier.fillMaxWidth().padding(start = 12.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.Top) {
                                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                                 Text(draft.title.ifBlank { "填写任务名称" }, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
@@ -231,7 +232,7 @@ internal fun TodayDashboard(state: TodayState, actions: TodayActions, showTitle:
                     val visible = state.tasks.filter { filter == "all" || it.domain == filter }.sortedBy { it.isDone }
                     val priorities = state.tasks.filterNot { it.isDone }.take(3).map { it.id }
                     if (visible.isEmpty()) item(key = "emptyTasks") {
-                        AgentPanel {
+                        AgentPanel(paper = LifeStyle.leaf) {
                             Column(Modifier.fillMaxWidth().padding(vertical = 16.dp), horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Icon(Icons.Outlined.TaskAlt, null, tint = PrimaryVariant, modifier = Modifier.size(42.dp))
@@ -245,7 +246,7 @@ internal fun TodayDashboard(state: TodayState, actions: TodayActions, showTitle:
                         }
                     }
                     items(visible, key = { "task_${it.id}" }) { task ->
-                        AgentPanel {
+                        AgentPanel(paper = LifeStyle.leaf) {
                             Row(verticalAlignment = Alignment.Top) {
                                 Checkbox(task.isDone, { actions.toggle(task) }, enabled = !state.busy,
                                     colors = CheckboxDefaults.colors(checkedColor = PrimaryVariant), modifier = Modifier.size(44.dp))
@@ -255,7 +256,7 @@ internal fun TodayDashboard(state: TodayState, actions: TodayActions, showTitle:
                                             color = if (task.isDone) TextSecondary else TextPrimary,
                                             textDecoration = if (task.isDone) TextDecoration.LineThrough else TextDecoration.None)
                                         if (task.id in priorities) Text("重点", Modifier.clip(RoundedCornerShape(6.dp))
-                                            .background(PaleYellow.copy(alpha = 0.75f)).padding(horizontal = 6.dp, vertical = 3.dp), fontSize = 10.sp, color = PrimaryDark)
+                                            .background(LifeStyle.cream).padding(horizontal = 6.dp, vertical = 3.dp), fontSize = 10.sp, color = PrimaryDark)
                                     }
                                     DomainBadge(task.domain, task.minutes)
                                     if (task.nextStep.isNotBlank()) Text("下一步：${task.nextStep}", fontSize = 13.sp, lineHeight = 20.sp, color = TextSecondary)
@@ -264,7 +265,7 @@ internal fun TodayDashboard(state: TodayState, actions: TodayActions, showTitle:
                                     enabled = !state.busy, modifier = Modifier.size(40.dp)) { Icon(Icons.Outlined.Edit, "编辑任务", tint = PrimaryDark, modifier = Modifier.size(18.dp)) }
                             }
                             if (!task.isDone) {
-                                HorizontalDivider(color = DividerColor)
+                                HorizontalDivider(color = LifeStyle.border.copy(alpha = 0.65f))
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                     TextButton(onClick = { actions.postpone(task) }, enabled = !state.busy, colors = ButtonDefaults.textButtonColors(contentColor = TextSecondary)) { Text("延期到明天", fontSize = 13.sp) }
                                 }
@@ -274,8 +275,8 @@ internal fun TodayDashboard(state: TodayState, actions: TodayActions, showTitle:
                 }
                 TodaySection.REVIEW -> {
                     item(key = "reflection") {
-                        AgentPanel("回顾今天", "结合日记与完成情况，整理收获和明天的一小步", Icons.Outlined.NightsStay) {
-                            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(PaleYellow.copy(alpha = 0.4f)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        AgentPanel("回顾今天", "结合日记与完成情况，整理收获和明天的一小步", Icons.Outlined.NightsStay, paper = LifeStyle.cream) {
+                            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(LifeStyle.field).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Outlined.CheckCircle, null, tint = PrimaryDark, modifier = Modifier.size(20.dp)); Spacer(Modifier.width(8.dp))
                                 Text("今天完成 $completed 项，还有 ${state.tasks.size - completed} 项待办。", fontSize = 13.sp, color = TextPrimary)
                             }
@@ -287,7 +288,7 @@ internal fun TodayDashboard(state: TodayState, actions: TodayActions, showTitle:
                     }
                     if (state.review.isNotBlank()) item(key = "reviewDraft") {
                         AgentPanel(if (state.savedReviewId == null) "复盘草稿" else "复盘已保存",
-                            if (state.savedReviewId == null) "检查内容，留下属于自己的表达" else "已保存为私密日记，随时可以回看", Icons.Outlined.MenuBook) {
+                            if (state.savedReviewId == null) "检查内容，留下属于自己的表达" else "已保存为私密日记，随时可以回看", Icons.Outlined.MenuBook, paper = LifeStyle.cream) {
                             AgentTextField(state.review, actions.review, "复盘内容", enabled = !state.busy && state.savedReviewId == null, minLines = 5, maxLines = 14)
                             if (state.savedReviewId == null) PrimaryAction("保存为私密日记", Icons.Outlined.Lock, !state.busy && state.review.isNotBlank(), actions.saveReview)
                             else PrimaryAction("查看这篇日记", Icons.Outlined.MenuBook, true) { actions.openDiary(state.savedReviewId) }
@@ -309,9 +310,9 @@ internal fun TodayDashboard(state: TodayState, actions: TodayActions, showTitle:
 private fun TodayOverview(state: TodayState, completed: Int, remaining: Int, onDomain: (String) -> Unit) {
     val progress by animateFloatAsState(
         if (state.tasks.isEmpty()) 0f else completed.toFloat() / state.tasks.size, label = "todayProgress")
-    Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp), shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFDDEDE4))) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Card(Modifier.fillMaxWidth().padding(horizontal = 20.dp), shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent), border = BorderStroke(1.dp, LifeStyle.border)) {
+        Column(Modifier.background(LifeStyle.overview).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 Box(Modifier.size(88.dp).semantics(mergeDescendants = true) {
                     contentDescription = "今日完成进度，已完成 $completed 项，共 ${state.tasks.size} 项"
@@ -343,7 +344,7 @@ private fun TodayOverview(state: TodayState, completed: Int, remaining: Int, onD
                 domainNames.forEach { (domain, label) ->
                     val count = state.tasks.count { it.domain == domain && !it.isDone }
                     val total = state.tasks.count { !it.isDone }.coerceAtLeast(1)
-                    Column(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(domainColor(domain).copy(alpha = 0.09f))
+                    Column(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(LifeStyle.field)
                         .clickable { onDomain(domain) }.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Icon(domainIcon(domain), null, tint = domainColor(domain), modifier = Modifier.size(14.dp))
@@ -377,15 +378,14 @@ private fun SummaryStat(label: String, value: String, unit: String) {
 
 @Composable
 private fun EnergyOption(label: String, level: Int, selected: Boolean, modifier: Modifier, enabled: Boolean, onClick: () -> Unit) {
-    val accent = when (level) { 1 -> Color(0xFF819BB5); 2 -> Color(0xFFB2955D); else -> PrimaryDark }
+    val accent = if (selected) LifeStyle.ink else LifeStyle.mutedInk
     Surface(modifier.selectable(selected, enabled = enabled, role = Role.RadioButton, onClick = onClick),
-        shape = RoundedCornerShape(14.dp), color = if (selected) accent.copy(alpha = 0.09f) else SoftWhite,
-        border = BorderStroke(1.dp, if (selected) accent.copy(alpha = 0.55f) else Color(0xFFE8EEEA))) {
-        Column(Modifier.padding(vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        shape = RoundedCornerShape(12.dp), color = if (selected) Color(0xFFD3E7D9) else Color.Transparent) {
+        Column(Modifier.padding(vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.Bottom) {
                 repeat(3) { index ->
-                    Box(Modifier.width(8.dp).height((9 + index * 5).dp).clip(RoundedCornerShape(2.dp))
+                    Box(Modifier.width(6.dp).height((7 + index * 4).dp).clip(RoundedCornerShape(2.dp))
                         .background(if (index < level) accent.copy(alpha = if (enabled) 0.85f else 0.3f) else accent.copy(alpha = 0.12f)))
                 }
             }
@@ -399,7 +399,7 @@ private fun EnergyOption(label: String, level: Int, selected: Boolean, modifier:
 private fun TimeBudget(remaining: Int, budget: Int) {
     val overBudget = remaining > budget
     val accent = if (overBudget) Color(0xFFB17A48) else PrimaryVariant
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFFF3F8F5)).padding(12.dp),
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(LifeStyle.field).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Outlined.Schedule, null, tint = accent, modifier = Modifier.size(15.dp))
@@ -414,14 +414,14 @@ private fun TimeBudget(remaining: Int, budget: Int) {
 }
 
 @Composable
-private fun AgentPanel(title: String? = null, subtitle: String? = null, icon: ImageVector? = null, content: @Composable ColumnScope.() -> Unit) {
-    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White),
-        border = BorderStroke(1.dp, Color(0xFFE4EEE8)), elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)) {
+private fun AgentPanel(title: String? = null, subtitle: String? = null, icon: ImageVector? = null, paper: Color = LifeStyle.paper, content: @Composable ColumnScope.() -> Unit) {
+    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = paper),
+        border = BorderStroke(1.dp, if (paper == LifeStyle.cream) LifeStyle.creamBorder else if (paper == LifeStyle.paper) LifeStyle.paperBorder else LifeStyle.border), elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (title != null) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (icon != null) {
-                        Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(MintGreen.copy(alpha = 0.28f)), contentAlignment = Alignment.Center) {
+                        Box(Modifier.size(34.dp).clip(RoundedCornerShape(11.dp)).background(if (paper == LifeStyle.paper) LifeStyle.paperInset else LifeStyle.field), contentAlignment = Alignment.Center) {
                             Icon(icon, null, tint = PrimaryDark, modifier = Modifier.size(22.dp))
                         }
                         Spacer(Modifier.width(10.dp))
@@ -439,15 +439,16 @@ private fun AgentPanel(title: String? = null, subtitle: String? = null, icon: Im
 @Composable
 private fun PrimaryAction(label: String, icon: ImageVector, enabled: Boolean, onClick: () -> Unit) {
     Button(onClick, enabled = enabled, modifier = Modifier.fillMaxWidth().heightIn(min = 46.dp), shape = RoundedCornerShape(12.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = PrimaryDark, contentColor = Color.White)) {
+        colors = ButtonDefaults.buttonColors(containerColor = LifeStyle.selected, contentColor = LifeStyle.ink,
+            disabledContainerColor = LifeStyle.disabled, disabledContentColor = LifeStyle.disabledInk)) {
         Icon(icon, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(label, fontSize = 14.sp, fontWeight = FontWeight.Medium)
     }
 }
 @Composable
 private fun SelectionPill(label: String, selected: Boolean, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
     Surface(modifier.clip(RoundedCornerShape(10.dp)).selectable(selected, enabled = enabled, role = Role.RadioButton, onClick = onClick),
-        shape = RoundedCornerShape(10.dp), color = if (selected) MintGreen.copy(alpha = 0.4f) else SoftWhite,
-        border = BorderStroke(1.dp, if (selected) MintGreen else DividerColor)) {
+        shape = RoundedCornerShape(10.dp), color = if (selected) LifeStyle.selected else LifeStyle.field,
+        border = BorderStroke(1.dp, if (selected) PrimaryVariant else LifeStyle.border)) {
         Text(label, Modifier.padding(vertical = 11.dp), fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
             color = if (!enabled) TextDisabled else if (selected) PrimaryDark else TextSecondary,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center)
@@ -455,14 +456,16 @@ private fun SelectionPill(label: String, selected: Boolean, modifier: Modifier =
 }
 @Composable
 private fun AgentTextField(value: String, onValueChange: (String) -> Unit, label: String, enabled: Boolean = true,
-                           placeholder: String = "", minLines: Int = 2, maxLines: Int = 6) {
+                           placeholder: String = "", minLines: Int = 2, maxLines: Int = 6, paperStyle: Boolean = false) {
     OutlinedTextField(value, onValueChange, Modifier.fillMaxWidth(), enabled = enabled, minLines = minLines, maxLines = maxLines,
         shape = RoundedCornerShape(12.dp), label = { Text(label, fontSize = 13.sp) },
         placeholder = { Text(placeholder, fontSize = 13.sp, color = TextTertiary) },
         textStyle = MaterialTheme.typography.bodyMedium.copy(color = TextPrimary),
-        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = PrimaryVariant, unfocusedBorderColor = DividerColor,
+        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = PrimaryVariant, unfocusedBorderColor = if (paperStyle) Color.Transparent else LifeStyle.border,
             focusedLabelColor = PrimaryDark, unfocusedLabelColor = TextSecondary, cursorColor = PrimaryDark,
-            focusedContainerColor = SoftWhite, unfocusedContainerColor = SoftWhite))
+            focusedContainerColor = Color.White.copy(alpha = 0.75f), unfocusedContainerColor = if (paperStyle) LifeStyle.paperInset else LifeStyle.field,
+            disabledContainerColor = LifeStyle.field, disabledBorderColor = LifeStyle.border,
+            disabledTextColor = LifeStyle.mutedInk, disabledLabelColor = LifeStyle.mutedInk))
 }
 private fun domainColor(domain: String): Color = when (domain) {
     "work" -> Color(0xFF64A5CD)
@@ -492,7 +495,7 @@ private fun TaskEditor(draft: AgentTaskDraft, onDismiss: () -> Unit, onSave: (Ag
     var minutes by remember(draft) { mutableStateOf(draft.minutes.toString()) }
     var next by remember(draft) { mutableStateOf(draft.nextStep) }
     val valid = title.isNotBlank() && (minutes.toIntOrNull() ?: 0) in 5..240
-    AlertDialog(onDismissRequest = onDismiss, containerColor = SoftWhite, shape = RoundedCornerShape(20.dp),
+    AlertDialog(onDismissRequest = onDismiss, containerColor = LifeStyle.mint, shape = RoundedCornerShape(24.dp),
         title = { Text("安排任务", fontWeight = FontWeight.Bold, color = TextPrimary) }, text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 AgentTextField(title, { title = it.take(180) }, "任务名称", minLines = 1, maxLines = 2)

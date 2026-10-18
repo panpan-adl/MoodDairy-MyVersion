@@ -45,7 +45,7 @@ import kotlin.math.abs
 
 private val MoodInk = Color(0xFF329A80)
 private val StressInk = Color(0xFFC58D47)
-private val PortraitBorder = Color(0xFFE6EFEB)
+private val PortraitBorder = LifeStyle.paperBorder
 private val ShortDate = DateTimeFormatter.ofPattern("M/d")
 
 @Composable
@@ -54,8 +54,7 @@ fun GrowthPortraitScreen(
     viewModel: GrowthPortraitViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
-        listOf(Color(0xFFE0F6ED), Color(0xFFF5F9EE), SoftWhite)))) {
+    Box(Modifier.fillMaxSize().background(LifeStyle.background)) {
         Scaffold(containerColor = Color.Transparent, topBar = {
             TopAppBar(title = { Text("成长画像", fontWeight = FontWeight.Bold, color = TextPrimary) },
                 navigationIcon = { IconButton(onClick = onNavigateBack) {
@@ -65,8 +64,8 @@ fun GrowthPortraitScreen(
             Box(Modifier.fillMaxSize().padding(padding)) {
                 when {
                     state.portrait != null -> Column(Modifier.fillMaxSize()) {
-                        if (state.isLoading) LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = MoodInk)
-                        if (state.error != null) Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp),
+                        if (state.isLoading) LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = MoodInk, gapSize = 0.dp)
+                        if (state.error != null) Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                             verticalAlignment = Alignment.CenterVertically) {
                             Text("更新失败，显示上次结果", Modifier.weight(1f), color = TextSecondary, fontSize = 12.sp)
                             TextButton(onClick = { viewModel.loadPortrait(state.selectedDays) }) { Text("重试") }
@@ -97,18 +96,18 @@ fun GrowthPortraitScreen(
 internal fun GrowthPortraitContent(portrait: GrowthPortraitResponse, selectedDays: Int, onSelectDays: (Int) -> Unit) {
     val emotion = remember(portrait.emotionCurve) { portraitDays(portrait.emotionCurve) }
     val stress = remember(portrait.stressCurve) { portraitDays(portrait.stressCurve) }
-    PageLazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 4.dp, bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)) {
+    PageLazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item(key = "period") {
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.White.copy(alpha = .7f))
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(LifeStyle.field)
                 .selectableGroup().padding(5.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 listOf(7, 30, 90).forEach { days ->
                     val selected = days == selectedDays
                     Box(Modifier.weight(1f).clip(RoundedCornerShape(12.dp))
-                        .background(if (selected) MoodInk else Color.Transparent)
+                        .background(if (selected) LifeStyle.selected else Color.Transparent)
                         .selectable(selected, role = Role.Tab, onClick = { onSelectDays(days) })
                         .padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
-                        Text("最近${days}天", color = if (selected) Color.White else TextSecondary,
+                        Text("最近${days}天", color = if (selected) LifeStyle.ink else LifeStyle.mutedInk,
                             fontSize = 13.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
                     }
                 }
@@ -159,8 +158,9 @@ internal fun GrowthPortraitContent(portrait: GrowthPortraitResponse, selectedDay
 @Composable
 private fun PortraitOverview(portrait: GrowthPortraitResponse, dayCount: Int) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
-        .background(Brush.linearGradient(listOf(Color(0xFFCAEDDF), Color(0xFFEAF6DF))))
-        .padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        .background(LifeStyle.overview)
+        .border(1.dp, LifeStyle.border, RoundedCornerShape(24.dp))
+        .padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("与自己同行", color = PrimaryDark, fontSize = 12.sp, letterSpacing = 2.sp)
@@ -189,10 +189,10 @@ private fun PortraitStat(label: String, value: String, ink: Color, modifier: Mod
 }
 
 @Composable
-private fun PortraitCard(tint: Color = Color.White, content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(tint)
-        .border(1.dp, PortraitBorder, RoundedCornerShape(22.dp)).padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp), content = content)
+private fun PortraitCard(tint: Color = LifeStyle.paper, content: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(tint)
+        .border(1.dp, PortraitBorder, RoundedCornerShape(24.dp)).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
 }
 
 @Composable
@@ -294,7 +294,7 @@ private fun PortraitTrendChart(emotion: List<PortraitDay>, stress: List<Portrait
             Text(it.format(ShortDate), fontSize = 10.sp, color = TextSecondary)
         }
     }
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFFF3F8F5)).padding(12.dp),
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(LifeStyle.paperInset).padding(12.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(Modifier.weight(1f)) {
             Text(selected?.format(ShortDate).orEmpty(), fontSize = 13.sp, color = TextPrimary, fontWeight = FontWeight.SemiBold)
@@ -317,7 +317,7 @@ private fun ChartLegend(label: String, color: Color) {
 @Composable
 private fun PositiveMoment(event: PositiveEventPointResponse) {
     var expanded by remember(event.diaryId) { mutableStateOf(false) }
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color.White)
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(LifeStyle.cream)
         .border(1.dp, PortraitBorder, RoundedCornerShape(18.dp)).padding(16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         Column(Modifier.width(42.dp).padding(top = 2.dp), horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)) {

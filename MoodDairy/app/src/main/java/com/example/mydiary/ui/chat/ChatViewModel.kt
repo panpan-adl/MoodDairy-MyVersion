@@ -98,6 +98,10 @@ class ChatViewModel @Inject constructor(
     val selectedMood = _selectedMood.asStateFlow()
     private val _moodChangeSuggestion = MutableStateFlow<String?>(null)
     val moodChangeSuggestion = _moodChangeSuggestion.asStateFlow()
+    private val _manualMoodCare = MutableStateFlow<ManualMoodCare?>(null)
+    internal val manualMoodCare = _manualMoodCare.asStateFlow()
+
+    fun dismissManualMoodCare() { _manualMoodCare.value = null }
 
     fun selectMood(label: String?) {
         val mood = MoodChangeTracker.normalize(label)
@@ -105,6 +109,7 @@ class ChatViewModel @Inject constructor(
         _moodChangeSuggestion.value = null
         moodChangeTracker.restart()
         _faceEmotionPrompt.value = null
+        _manualMoodCare.value = ManualMoodCare.forMood(mood)
         settingsPrefs.edit().apply {
             if (mood == null) remove("selected_mood_$userId")
             else putString("selected_mood_$userId", mood)
@@ -252,6 +257,7 @@ class ChatViewModel @Inject constructor(
     fun initializeChat(userId: Long) {
         initializedChatUser.value = null
         if (this.userId != userId) {
+            _manualMoodCare.value = null
             _selectedMood.value = MoodChangeTracker.normalize(settingsPrefs.getString("selected_mood_$userId", null))
             _moodChangeSuggestion.value = null
             moodChangeTracker.restart()
@@ -855,6 +861,11 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             emotionCapturePrefs.setConsentGranted(granted)
         }
+    }
+
+    fun setEmotionCaptureEnabled(enabled: Boolean) {
+        if (!enabled) stopEmotionCapture()
+        viewModelScope.launch { emotionCapturePrefs.setEnabled(enabled) }
     }
 
     /**

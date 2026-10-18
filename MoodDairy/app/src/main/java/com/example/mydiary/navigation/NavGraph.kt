@@ -117,6 +117,12 @@ fun NavGraph(
     val navDebugLog = remember { java.io.File(context.filesDir, "debug_nav.log") }
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    val relaxState by relaxController.state.collectAsStateWithLifecycle()
+    val emulatorListening = (android.os.Build.HARDWARE == "ranchu" ||
+        android.os.Build.HARDWARE == "goldfish") && relaxState.trackId != null
+    LaunchedEffect(emulatorListening) {
+        com.example.mydiary.live2d.PetOverlayService.setRelaxSessionActive(emulatorListening)
+    }
     LaunchedEffect(Unit) {
         val activity = context as? android.app.Activity
         val id = activity?.intent?.getLongExtra("memory_diary_id", -1) ?: -1
@@ -294,6 +300,10 @@ fun NavGraph(
             if (userId != null) {
                 ChatScreen(
                     userId = userId,
+                    // The Windows emulator's forwarded webcam can stall its audio device
+                    // when reopened after choosing a track. Keep capture suspended for
+                    // the listening session, including pauses and track changes.
+                    suspendEmotionCapture = emulatorListening,
                     onNavigateToLive2D = {
                         navController.navigate(Routes.LIVE2D)
                     },

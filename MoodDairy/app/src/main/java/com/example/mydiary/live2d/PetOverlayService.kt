@@ -74,6 +74,20 @@ class PetOverlayService : Service() {
         private var pendingVoiceStart = false
         @Volatile private var assistantPage = false
         @Volatile private var showcasePage = false
+        @Volatile private var relaxSessionActive = false
+        fun setRelaxSessionActive(active: Boolean) {
+            if (relaxSessionActive == active) return
+            relaxSessionActive = active
+            instance?.let { service -> service.mainHandler.post {
+                if (active) {
+                    service.clearManualListenTimeout()
+                    service.stopWakeListening()
+                    service.isListening = false
+                    service.continuousConversation = false
+                    VoiceWakeSettings.updateStatus("听音乐时暂停唤醒")
+                } else service.scheduleVoiceResume()
+            } }
+        }
         private val composerBoundary = CompanionBoundary()
         fun setComposerBoundary(owner: Any, topInWindow: Float?) {
             composerBoundary.update(owner, topInWindow)
@@ -395,6 +409,7 @@ class PetOverlayService : Service() {
     }
 
     private fun voiceHostAvailable(): Boolean {
+        if (relaxSessionActive) return false
         val activity = host.get() ?: return false
         return AssistantVoicePolicy.available(
             assistant = assistantPage, showcase = showcasePage, enabled = !destroyed && _enabled.value,

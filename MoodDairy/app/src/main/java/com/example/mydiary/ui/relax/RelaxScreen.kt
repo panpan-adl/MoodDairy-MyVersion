@@ -2,6 +2,7 @@ package com.example.mydiary.ui.relax
 
 import com.example.mydiary.ui.components.PageLazyColumn
 
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -47,22 +48,10 @@ import kotlinx.coroutines.launch
 data class RelaxMusicState(val loading: Boolean = false, val tracks: List<RelaxTrack> = emptyList(), val error: String? = null)
 
 @HiltViewModel
-class RelaxViewModel @Inject constructor(private val api: DiaryApiService) : ViewModel() {
-    private val _state = MutableStateFlow(RelaxMusicState())
-    val state = _state.asStateFlow()
-    fun load() {
-        if (_state.value.loading) return
-        viewModelScope.launch {
-            _state.value = RelaxMusicState(loading = true)
-            try {
-                val response = api.relaxRecommendations()
-                val tracks = response.body()?.tracks.orEmpty()
-                _state.value = if (response.isSuccessful && tracks.isNotEmpty()) RelaxMusicState(tracks = tracks)
-                    else RelaxMusicState(error = "暂未获取到音乐，请重试或选择白噪音。")
-            } catch (exc: CancellationException) { throw exc }
-            catch (_: Exception) { _state.value = RelaxMusicState(error = "音乐服务暂时无法连接，请重试或选择白噪音。") }
-        }
-    }
+class RelaxViewModel @Inject constructor(private val recommendations: RelaxRecommendationsRepository) : ViewModel() {
+    val state = recommendations.state
+    init { viewModelScope.launch { recommendations.refresh() } }
+    fun load() { viewModelScope.launch { recommendations.refresh(force = true) } }
 }
 
 @Composable
@@ -89,22 +78,23 @@ internal fun RelaxContent(state: RelaxMusicState, onReload: () -> Unit, onNaviga
     val categories = remember { linkedMapOf("全部" to "全部", "RAIN" to "雨声", "NATURE" to "自然",
         "ANIMALS" to "动物", "PLACES" to "场所", "THINGS" to "物品", "TRANSPORT" to "交通",
         "URBAN" to "城市", "NOISE" to "噪音") }
-    LaunchedEffect(tab) { if (tab == 0 && state.tracks.isEmpty()) onReload() }
     Scaffold(containerColor = Color.Transparent, topBar = {
-        TopAppBar(title = { Text("放松一下", color = TextPrimary, fontWeight = FontWeight.Bold) },
+        TopAppBar(title = { Text("放松一下", color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold) },
             navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, "返回", tint = PrimaryDark) } },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent))
-    }, modifier = Modifier.background(Brush.verticalGradient(listOf(PrimaryLight, SoftWhite, SoftWhite)))) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
-            Text("留一点时间，听听喜欢的声音", color = TextSecondary, fontSize = 13.sp,
-                modifier = Modifier.padding(bottom = 16.dp))
-            Surface(shape = RoundedCornerShape(18.dp), color = Color.White) {
-                Row(Modifier.fillMaxWidth().padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent,
+                scrolledContainerColor = Color.Transparent))
+    }, modifier = Modifier.background(LifeStyle.background)) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp)) {
+            Text("留一点时间，听听喜欢的声音", color = LifeStyle.mutedInk, fontSize = 13.sp,
+                modifier = Modifier.padding(top = 4.dp, bottom = 12.dp))
+            Surface(shape = RoundedCornerShape(18.dp), color = LifeStyle.field,
+                border = androidx.compose.foundation.BorderStroke(1.dp, LifeStyle.border)) {
+                Row(Modifier.fillMaxWidth().selectableGroup().padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     listOf("音乐" to Icons.Default.MusicNote, "白噪音" to Icons.Default.Spa).forEachIndexed { index, (label, icon) ->
                         Surface(Modifier.weight(1f), shape = RoundedCornerShape(14.dp),
-                            color = if (tab == index) PrimaryLight else Color.Transparent) {
+                            color = if (tab == index) LifeStyle.selected else Color.Transparent) {
                             Tab(selected = tab == index, onClick = { tab = index },
-                                selectedContentColor = TextPrimary, unselectedContentColor = TextSecondary) {
+                                selectedContentColor = LifeStyle.ink, unselectedContentColor = LifeStyle.mutedInk) {
                                 Row(Modifier.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Icon(icon, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
                                     Text(label, fontSize = 15.sp, fontWeight = if (tab == index) FontWeight.Bold else FontWeight.Normal)
@@ -114,8 +104,8 @@ internal fun RelaxContent(state: RelaxMusicState, onReload: () -> Unit, onNaviga
                     }
                 }
             }
-            Text("开始播放后会回到助手，小播放器陪你继续记录。", fontSize = 12.sp, color = PrimaryDark,
-                modifier = Modifier.padding(vertical = 14.dp))
+            Text("开始播放后会回到助手，小播放器陪你继续记录。", fontSize = 12.sp, color = LifeStyle.mutedInk,
+                modifier = Modifier.padding(vertical = 12.dp))
             if (tab == 1) {
                 OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true,
                     placeholder = { Text("搜索雨声、鸟鸣、海浪…") }, leadingIcon = { Icon(Icons.Default.Search, null) },
@@ -135,7 +125,21 @@ internal fun RelaxContent(state: RelaxMusicState, onReload: () -> Unit, onNaviga
                     }
                 }
             } else PageLazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 160.dp)) {
-                if (state.loading) item { LinearProgressIndicator(Modifier.fillMaxWidth(), color = PrimaryVariant) }
+                if (state.loading && state.tracks.isEmpty()) {
+                    item { Text("正在准备音乐，也可以先听白噪音", fontSize = 12.sp, color = TextSecondary) }
+                    items(4) {
+                        Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), color = Color.White.copy(alpha = .7f)) {
+                            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.size(58.dp).clip(RoundedCornerShape(14.dp)).background(PrimaryLight))
+                                Spacer(Modifier.width(12.dp))
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Box(Modifier.width(150.dp).height(14.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xFFE0EDE6)))
+                                    Box(Modifier.width(90.dp).height(10.dp).clip(RoundedCornerShape(5.dp)).background(Color(0xFFEBF2ED)))
+                                }
+                            }
+                        }
+                    }
+                }
                 state.error?.let { error -> item { Text(error, color = TextSecondary); TextButton(onClick = onReload) { Text("重新加载", color = PrimaryDark) } } }
                 items(state.tracks, key = { it.id }) { track ->
                     SoundRow(track.title, track.artist, !playback.whiteNoise && playback.trackId == track.id, playback,

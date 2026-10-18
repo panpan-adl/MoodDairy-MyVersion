@@ -29,14 +29,14 @@ class LifeScreenInstrumentedTest {
         }
         compose.onNodeWithText("生活").assertDoesNotExist()
         compose.onNodeWithText("今日内容").assertExists()
-        compose.onNodeWithText("回顾").performClick()
+        compose.onNodeWithText("足迹").performClick()
         compose.onNodeWithText("回顾状态 0").performClick()
-        compose.onNodeWithText("今天").performClick()
-        compose.onNodeWithText("回顾").performClick()
+        compose.onNodeWithText("当下").performClick()
+        compose.onNodeWithText("足迹").performClick()
         compose.onNodeWithText("回顾状态 1").assertExists()
         compose.runOnIdle { request = "today" }
         compose.onNodeWithText("今日内容").assertExists()
-        compose.onNodeWithText("回顾").performClick()
+        compose.onNodeWithText("足迹").performClick()
         compose.onNodeWithText("回顾状态 1").assertExists()
     }
 }
