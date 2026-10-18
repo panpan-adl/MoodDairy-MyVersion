@@ -59,40 +59,22 @@ fun Live2DComposable(
 
     // 异步加载模型（带防重复加载保护）
     fun loadModelAsync(view: Live2DView, path: String, forceReload: Boolean = false) {
-        // 检查是否需要加载（isLoading 同时用于 UI 显示和防止重复加载）
-        if (!forceReload && (isLoading || lastLoadedPath == path)) {
-            Log.d("Live2DComposable", "跳过重复加载: $path (isLoading=$isLoading, lastLoaded=$lastLoadedPath)")
-            return
-        }
-        
-        scope.launch(Dispatchers.Main) {
-            try {
-                isLoading = true
-                loadError = null
-
-                Log.d("Live2DComposable", "开始加载模型: $path")
-                
-                // 在主线程直接调用，让 Live2DView 内部处理 OpenGL 线程调度
-                try {
-                    view.loadModel(path)
-                    lastLoadedPath = path
-                    Log.d("Live2DComposable", "模型加载请求已提交: $path")
-                    onModelLoaded?.invoke()
-                } catch (e: Exception) {
-                    Log.e("Live2DComposable", "加载模型失败: $path", e)
-                    val errorMessage = "加载模型失败: $path"
-                    loadError = errorMessage
-                    onError?.invoke(errorMessage)
-                }
-            } catch (e: Exception) {
-                val errorMessage = "加载失败: ${e.localizedMessage ?: "未知错误"}"
-                loadError = errorMessage
-                onError?.invoke(errorMessage)
-                Log.e("Live2DComposable", "异步加载模型异常", e)
-            } finally {
+        if (!forceReload && lastLoadedPath == path) return
+        isLoading = true
+        loadError = null
+        lastLoadedPath = path
+        view.loadModel(path,
+            onLoaded = {
                 isLoading = false
-            }
-        }
+                onModelLoaded?.invoke()
+            },
+            onError = { message ->
+                isLoading = false
+                lastLoadedPath = null
+                loadError = message
+                onError?.invoke(message)
+            },
+        )
     }
 
     // 模型路径变化时加载（带防抖，但跳过内部切换导致的变化）

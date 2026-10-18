@@ -21,6 +21,7 @@ class CalendarRefreshTest {
         try {
             val diaries = mockk<DiaryRepository>()
             val todos = mockk<TodoRepository>()
+            every { todos.getDatesWithTodos(any(), any(), any()) } returns flowOf(ApiResult.Success(emptyList()))
             val user = mockk<UserRepository>()
             val date = LocalDate.now().minusMonths(2).withDayOfMonth(5)
             every { user.getCurrentUserId() } returns 1L
@@ -41,6 +42,7 @@ class CalendarRefreshTest {
         try {
             val diaries = mockk<DiaryRepository>()
             val todos = mockk<TodoRepository>()
+            every { todos.getDatesWithTodos(any(), any(), any()) } returns flowOf(ApiResult.Success(emptyList()))
             val user = mockk<UserRepository>()
             every { user.getCurrentUserId() } returns 1L
             every { diaries.getDatesWithDiary(1, any(), any()) } returns flowOf(ApiResult.Success(emptyList()))

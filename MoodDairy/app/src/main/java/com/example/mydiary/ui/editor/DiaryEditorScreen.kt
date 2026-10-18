@@ -1,5 +1,7 @@
 package com.example.mydiary.ui.editor
 
+import com.example.mydiary.ui.components.PageLazyColumn
+
 import android.Manifest
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -9,7 +11,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -622,7 +623,7 @@ fun DiaryEditorScreen(
                         color = MaterialTheme.colorScheme.outline
                     )
                     // Reflection shares the document scroll area instead of constraining media.
-                    LazyColumn(
+                    PageLazyColumn(
                         state = editorListState,
                         modifier = Modifier.fillMaxWidth().weight(1f).padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1656,45 +1657,31 @@ fun ImageMediaItem(
             ) {
                 // 使用Coil加载图片
                 val imageUrl = mediaItem.thumbnailUrl ?: mediaItem.url
-                android.util.Log.d("ImageMediaItem", "=====================================")
-                android.util.Log.d("ImageMediaItem", "MediaItem.Image 详情:")
-                android.util.Log.d("ImageMediaItem", "  id: ${mediaItem.id}")
-                android.util.Log.d("ImageMediaItem", "  assetId: ${mediaItem.assetId}")
-                android.util.Log.d("ImageMediaItem", "  url: ${mediaItem.url}")
-                android.util.Log.d("ImageMediaItem", "  thumbnailUrl: ${mediaItem.thumbnailUrl}")
-                android.util.Log.d("ImageMediaItem", "  最终加载URL: $imageUrl")
-                android.util.Log.d("ImageMediaItem", "  URL是否为http(s): ${imageUrl.startsWith("http")}")
-                android.util.Log.d("ImageMediaItem", "=====================================")
-                
+                val imageRequest = remember(context, imageUrl) {
+                    ImageRequest.Builder(context)
+                        .data(imageUrl)
+                        .crossfade(true)
+                        .listener(
+                            onStart = { loadError = null },
+                            onError = { _, result ->
+                                val code = (result.throwable as? coil.network.HttpException)?.response?.code
+                                loadError = if (code == 403 || code == 404) {
+                                    "原图片链接已失效，请重新生成或添加图片"
+                                } else {
+                                    "图片加载失败，请稍后重新打开"
+                                }
+                            },
+                            onSuccess = { _, _ -> loadError = null }
+                        )
+                        .build()
+                }
+
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
                     AsyncImage(
-                        model = ImageRequest.Builder(context)
-                            .data(imageUrl)
-                            .crossfade(true)
-                            .listener(
-                                onStart = { request ->
-                                    loadError = null
-                                    android.util.Log.d("ImageMediaItem", "开始加载图片: ${request.data}")
-                                },
-                                onError = { request, result ->
-                                    loadError = result.throwable.message ?: "未知错误"
-                                    android.util.Log.e("ImageMediaItem", "=====================================")
-                                    android.util.Log.e("ImageMediaItem", "图片加载失败!")
-                                    android.util.Log.e("ImageMediaItem", "  URL: ${request.data}")
-                                    android.util.Log.e("ImageMediaItem", "  错误: ${result.throwable.message}")
-                                    android.util.Log.e("ImageMediaItem", "  错误类型: ${result.throwable.javaClass.simpleName}")
-                                    result.throwable.printStackTrace()
-                                    android.util.Log.e("ImageMediaItem", "=====================================")
-                                },
-                                onSuccess = { request, _ ->
-                                    loadError = null
-                                    android.util.Log.d("ImageMediaItem", "图片加载成功: ${request.data}")
-                                }
-                            )
-                            .build(),
+                        model = imageRequest,
                         contentDescription = "图片预览",
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
@@ -1723,12 +1710,6 @@ fun ImageMediaItem(
                                 color = Color.Gray,
                                 fontSize = 10.sp,
                                 maxLines = 2
-                            )
-                            Text(
-                                text = "URL: ${imageUrl.take(50)}...",
-                                color = Color.Gray,
-                                fontSize = 8.sp,
-                                maxLines = 1
                             )
                         }
                     }

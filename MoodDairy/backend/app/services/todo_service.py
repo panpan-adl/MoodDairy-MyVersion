@@ -18,6 +18,16 @@ class TodoService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    async def get_dates_with_todos(self, user_id: int, year: int, month: int) -> List[date]:
+        start = date(year, month, 1)
+        end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
+        result = await self.db.execute(
+            select(Todo.todo_date).where(Todo.user_id == user_id,
+                Todo.todo_date >= start, Todo.todo_date < end)
+            .distinct().order_by(Todo.todo_date)
+        )
+        return list(result.scalars().all())
+
     async def create_todo(self, data: CreateTodoRequest) -> Todo:
         """Create a todo item."""
 

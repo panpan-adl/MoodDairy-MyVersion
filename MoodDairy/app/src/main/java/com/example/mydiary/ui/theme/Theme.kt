@@ -132,12 +132,11 @@ fun MyDiaryTheme(
         SideEffect {
             val window = (view.context as Activity).window
             
-            // 设置状态栏颜色为主色 (薄荷绿)
-            // 如果希望状态栏是白色的（融合背景），这里可以改为 colorScheme.background
-            window.statusBarColor = colorScheme.primary.toArgb()
+            // 由页面根背景绘制状态栏，避免强调色在顶部形成独立色带。
+            window.statusBarColor = Color.Transparent.toArgb()
             
             // 状态栏图标颜色控制：
-            // 因为我们的 Primary (薄荷绿) 是浅色，所以 Light Mode 下状态栏图标必须是深色 (true)
+            // 浅色页面顶部使用深色图标，保持时间、电量等信息清晰。
             // Dark Mode 下状态栏图标是浅色 (false)
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }

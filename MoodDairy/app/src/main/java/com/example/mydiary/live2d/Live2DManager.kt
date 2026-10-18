@@ -134,7 +134,6 @@ class Live2DManager(private val context: Context) {
                 }
 
                 releaseCurrentModel()
-                forceCleanupResources()
                 if (!isSDKInitialized) initializeSDK()
 
                 val jsonContent = Live2DHelper.readAssetFile(context, modelPath)
@@ -153,7 +152,9 @@ class Live2DManager(private val context: Context) {
                     loadModelWithSDK(readAssetBytes(mocPath), config, modelDir)
                 } catch (e: Exception) {
                     Log.w(TAG, "SDK加载失败", e)
-                    modelData = modelData?.copy(isLoaded = true)
+                    releaseCurrentModel()
+                    currentModel = null
+                    throw e
                 }
                 true
             } catch (e: Exception) {
@@ -161,15 +162,6 @@ class Live2DManager(private val context: Context) {
                 throw e
             }
         }
-    }
-
-    private fun forceCleanupResources() {
-        try { cubismModel?.let { cubismMoc?.deleteModel(it); it.close() } } catch (_: Exception) {}
-        cubismModel = null
-        try { cubismMoc?.delete() } catch (_: Exception) {}
-        cubismMoc = null
-        try { cubismRenderer?.close() } catch (_: Exception) {}
-        cubismRenderer = null
     }
 
     private fun resetModelState() {
@@ -567,7 +559,12 @@ class Live2DManager(private val context: Context) {
         
         try { cubismRenderer?.close() } catch (_: Exception) {}
         cubismRenderer = null
-        try { cubismModel?.let { cubismMoc?.deleteModel(it); it.close() } } catch (_: Exception) {}
+        // deleteModel already closes the native model. Closing it a second time
+        // can access freed native memory when switching appearances.
+        try { cubismModel?.let { model ->
+            val moc = cubismMoc
+            if (moc != null) moc.deleteModel(model) else model.close()
+        } } catch (e: Exception) { Log.w(TAG, "释放模型失败", e) }
         cubismModel = null
         try { cubismMoc?.delete() } catch (_: Exception) {}
         cubismMoc = null

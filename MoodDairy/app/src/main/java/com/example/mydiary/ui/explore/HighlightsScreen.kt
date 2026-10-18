@@ -1,10 +1,11 @@
 package com.example.mydiary.ui.explore
 
+import com.example.mydiary.ui.components.PageLazyColumn
+
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -31,6 +32,8 @@ import com.example.mydiary.data.models.Diary
 import com.example.mydiary.data.models.MediaItem
 import com.example.mydiary.ui.theme.*
 import java.time.format.DateTimeFormatter
+import java.util.Locale
+import androidx.compose.foundation.BorderStroke
 
 /**
  * 高光时刻详情页面
@@ -45,95 +48,88 @@ fun HighlightsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     
-    // 治愈系金色渐变
+    // 沿用生活页的薄荷绿、淡黄绿与柔白背景
     val highlightGradient = Brush.verticalGradient(
         colors = listOf(
-            Color(0xFFFFF8E1).copy(alpha = 0.8f),  // 暖黄色
-            Color(0xFFFFECB3).copy(alpha = 0.5f),  // 淡金色
+            MintGreen.copy(alpha = 0.3f),
+            PaleYellow.copy(alpha = 0.3f),
             SoftWhite
         )
     )
     
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Lightbulb,
-                            contentDescription = null,
-                            tint = Color(0xFFFFD700),
-                            modifier = Modifier.size(28.dp)
-                        )
+    Box(Modifier.fillMaxSize().background(highlightGradient)) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                TopAppBar(
+                    title = {
                         Text(
                             text = "高光时刻",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 20.sp,
+                            color = TextPrimary
                         )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            imageVector = Icons.Outlined.ArrowBack,
-                            contentDescription = "返回"
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent
-                )
-            )
-        }
-    ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(highlightGradient)
-                .padding(paddingValues)
-        ) {
-            if (uiState.isLoading) {
-                // 加载状态
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(
-                        color = Color(0xFFFFD700),
-                        modifier = Modifier.size(48.dp)
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(
+                                imageVector = Icons.Outlined.ArrowBack,
+                                contentDescription = "返回"
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent
                     )
-                }
-            } else if (uiState.highlightDiaries.isEmpty()) {
-                // 空状态 - 治愈风格
-                EmptyHighlightsState()
-            } else {
-                // 日记列表
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    contentPadding = PaddingValues(vertical = 16.dp)
-                ) {
-                    // 顶部励志语
-                    item {
-                        HighlightQuoteCard()
-                    }
+                )
+            }
+        ) { paddingValues ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
                     
-                    // 日记列表
-                    items(uiState.highlightDiaries) { diary ->
-                        HighlightDiaryCard(
-                            diary = diary,
-                            onClick = { diary.id?.let { onNavigateToDiary(it) } }
+                    .padding(paddingValues)
+            ) {
+                if (uiState.isLoadingHighlights) {
+                    // 加载状态
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            color = PrimaryDark,
+                            modifier = Modifier.size(48.dp)
                         )
                     }
-                    
-                    // 底部间距
-                    item {
-                        Spacer(modifier = Modifier.height(32.dp))
+                } else if (uiState.highlightDiaries.isEmpty()) {
+                    // 空状态 - 治愈风格
+                    EmptyHighlightsState()
+                } else {
+                    // 日记列表
+                    PageLazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        contentPadding = PaddingValues(vertical = 16.dp)
+                    ) {
+                        // 顶部励志语
+                        item {
+                            HighlightQuoteCard(uiState.highlightDiaries.size)
+                        }
+                        
+                        // 日记列表
+                        items(uiState.highlightDiaries) { diary ->
+                            HighlightDiaryCard(
+                                diary = diary,
+                                onClick = { diary.id?.let { onNavigateToDiary(it) } }
+                            )
+                        }
+                        
+                        // 底部间距
+                        item {
+                            Spacer(modifier = Modifier.height(32.dp))
+                        }
                     }
                 }
             }
@@ -145,66 +141,41 @@ fun HighlightsScreen(
  * 高光时刻励志语卡片
  */
 @Composable
-private fun HighlightQuoteCard() {
-    Card(
+private fun HighlightQuoteCard(count: Int) {
+    Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color.White.copy(alpha = 0.9f)
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        color = Color.White.copy(alpha = 0.8f)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Icon(
-                imageVector = Icons.Filled.AutoAwesome,
-                contentDescription = null,
-                tint = Color(0xFFFFD700),
-                modifier = Modifier.size(32.dp)
-            )
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            Text(
-                text = "✨ 每一个闪光的瞬间",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary
-            )
-            
-            Text(
-                text = "都值得被珍藏",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary
-            )
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            Text(
-                text = "记录生活中那些让你骄傲的时刻",
-                fontSize = 14.sp,
-                color = TextSecondary,
-                textAlign = TextAlign.Center
-            )
+            Box(
+                Modifier.size(46.dp).clip(RoundedCornerShape(15.dp)).background(SecondaryLight),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Filled.AutoAwesome, null, tint = SecondaryDark, modifier = Modifier.size(24.dp))
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("把闪光的日子，慢慢收藏", fontSize = 17.sp, lineHeight = 24.sp,
+                    fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                Text("已珍藏 $count 篇高光日记", fontSize = 13.sp, color = PrimaryDark)
+            }
         }
     }
 }
-
 /**
- * 高光时刻日记卡片 - 详细展示内容和图片
+ * 高光时刻日记卡片：图片与摘要，点击后阅读全文
  */
 @Composable
 private fun HighlightDiaryCard(
     diary: Diary,
     onClick: () -> Unit
 ) {
-    val dateFormatter = remember { DateTimeFormatter.ofPattern("yyyy年MM月dd日") }
-    val weekFormatter = remember { DateTimeFormatter.ofPattern("EEEE") }
+    val dateFormatter = remember { DateTimeFormatter.ofPattern("yyyy年M月d日") }
+    val weekFormatter = remember { DateTimeFormatter.ofPattern("EEEE", Locale.SIMPLIFIED_CHINESE) }
     
     // 提取文字内容
     val textContents = diary.mediaItems.filterIsInstance<MediaItem.Text>()
@@ -218,11 +189,12 @@ private fun HighlightDiaryCard(
             .fillMaxWidth()
             .animateContentSize()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
             containerColor = Color.White
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        border = BorderStroke(1.dp, SurfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier
@@ -254,13 +226,13 @@ private fun HighlightDiaryCard(
                     modifier = Modifier
                         .size(36.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFFFFD700).copy(alpha = 0.2f)),
+                        .background(SecondaryLight),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Lightbulb,
                         contentDescription = "高光时刻",
-                        tint = Color(0xFFFFD700),
+                        tint = PrimaryDark,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -272,7 +244,7 @@ private fun HighlightDiaryCard(
             Text(
                 text = diary.title ?: "无标题",
                 fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.SemiBold,
                 color = TextPrimary,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
@@ -289,7 +261,7 @@ private fun HighlightDiaryCard(
                         contentDescription = "日记图片",
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(200.dp)
+                            .aspectRatio(1.65f)
                             .clip(RoundedCornerShape(12.dp)),
                         contentScale = ContentScale.Crop
                     )
@@ -315,14 +287,14 @@ private fun HighlightDiaryCard(
                                     modifier = Modifier
                                         .size(120.dp)
                                         .clip(RoundedCornerShape(12.dp))
-                                        .background(Color(0xFFFFD700).copy(alpha = 0.2f)),
+                                        .background(SecondaryLight),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
                                         text = "+${images.size - 5}",
                                         fontSize = 20.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFFFFD700)
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = PrimaryDark
                                     )
                                 }
                             }
@@ -335,17 +307,15 @@ private fun HighlightDiaryCard(
             if (textContents.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(12.dp))
                 
-                textContents.forEach { textItem ->
-                    Text(
-                        text = textItem.content,
-                        fontSize = 14.sp,
-                        color = TextSecondary,
-                        lineHeight = 22.sp,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                }
+                Text(
+                    text = textContents.map { it.content.trim() }.filter { it.isNotEmpty() }.joinToString("\n"),
+                    fontSize = 14.sp,
+                    color = TextSecondary,
+                    lineHeight = 23.sp,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
-            
             // 音频标记
             if (audios.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
@@ -357,7 +327,7 @@ private fun HighlightDiaryCard(
                     Icon(
                         imageVector = Icons.Filled.Mic,
                         contentDescription = "语音",
-                        tint = Color(0xFFFFD700),
+                        tint = PrimaryDark,
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
@@ -374,16 +344,25 @@ private fun HighlightDiaryCard(
                 
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFFFFD700).copy(alpha = 0.15f)
+                    color = PrimaryLight.copy(alpha = 0.5f)
                 ) {
                     Text(
-                        text = "💫 $mood",
+                        text = mood,
                         fontSize = 12.sp,
-                        color = Color(0xFFE6A700),
+                        color = PrimaryDark,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                     )
                 }
             }
+            Spacer(modifier = Modifier.height(14.dp))
+            HorizontalDivider(color = SurfaceVariant)
+            Text(
+                text = "重温这一天  →",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = PrimaryDark,
+                modifier = Modifier.align(Alignment.End).padding(top = 12.dp)
+            )
         }
     }
 }
@@ -404,16 +383,16 @@ private fun EmptyHighlightsState() {
             // 大灯泡图标
             Box(
                 modifier = Modifier
-                    .size(120.dp)
+                    .size(88.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFFFFD700).copy(alpha = 0.15f)),
+                    .background(PrimaryLight.copy(alpha = 0.5f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Filled.Lightbulb,
                     contentDescription = null,
-                    tint = Color(0xFFFFD700).copy(alpha = 0.6f),
-                    modifier = Modifier.size(64.dp)
+                    tint = PrimaryDark.copy(alpha = 0.6f),
+                    modifier = Modifier.size(40.dp)
                 )
             }
             
@@ -422,14 +401,14 @@ private fun EmptyHighlightsState() {
             Text(
                 text = "还没有高光时刻",
                 fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.SemiBold,
                 color = TextPrimary
             )
             
             Spacer(modifier = Modifier.height(12.dp))
             
             Text(
-                text = "在日记编辑页点亮灯泡💡\n记录你的精彩瞬间",
+                text = "在日记中点亮小灯泡\n让值得珍藏的一天，留在这里",
                 fontSize = 14.sp,
                 color = TextSecondary,
                 textAlign = TextAlign.Center,
@@ -438,3 +417,5 @@ private fun EmptyHighlightsState() {
         }
     }
 }
+
+

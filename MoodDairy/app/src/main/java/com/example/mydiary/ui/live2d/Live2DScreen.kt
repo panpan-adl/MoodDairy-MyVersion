@@ -249,15 +249,11 @@ private fun VoiceWakeSwitch() {
     val context = LocalContext.current
     remember { VoiceWakeSettings.initialize(context) }
     val enabled by VoiceWakeSettings.enabled.collectAsState()
-    val status by VoiceWakeSettings.status.collectAsState()
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         PetOverlayService.refreshVoiceWake()
     }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text("语音唤醒", fontSize = 14.sp, color = PrimaryDark)
-            Text(if (enabled) "$status · 仅在助手界面生效" else "已关闭，仍可点击然然说话", fontSize = 11.sp, color = TextSecondary)
-        }
+        Text("语音唤醒", modifier = Modifier.weight(1f), fontSize = 14.sp, color = PrimaryDark)
         Switch(checked = enabled, modifier = Modifier.semantics { contentDescription = "语音唤醒" },
             onCheckedChange = { value ->
                 VoiceWakeSettings.setEnabled(context, value)

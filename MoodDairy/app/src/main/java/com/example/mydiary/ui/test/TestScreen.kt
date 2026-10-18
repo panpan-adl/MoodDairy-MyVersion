@@ -1,5 +1,7 @@
 package com.example.mydiary.ui.test
 
+import com.example.mydiary.ui.components.PageLazyColumn
+
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -16,7 +18,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -262,7 +263,7 @@ private fun TestContent(
     onAnswer: (Int, String, Map<String, Int>) -> Unit,
     onTextAnswer: (Int, String) -> Unit,
 ) {
-    LazyColumn(
+    PageLazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp),

@@ -290,3 +290,39 @@ async def test_failed_adoption_rolls_back_receipt_and_tasks_and_can_retry(db, mo
     monkeypatch.setattr(db, 'commit', original_commit)
     assert len(await service.adopt(1, req)) == 1
     assert len(db.session.scalars(select(PersonalAgentOperation)).all()) == 1
+
+
+@pytest.mark.asyncio
+async def test_record_calendar_shares_tasks_and_scopes_month_markers(db):
+    from app.routers.todos import router as todos_router
+    app = FastAPI()
+    app.include_router(router)
+    app.include_router(todos_router)
+    async def current_user():
+        return 1
+    async def current_db():
+        yield db
+    app.dependency_overrides[get_current_user_id] = current_user
+    app.dependency_overrides[get_db] = current_db
+    day = date(2026, 10, 17)
+    db.add(Todo(user_id=2, todo_date=date(2026, 10, 16), title='其他用户', is_done=0))
+    db.add(Todo(user_id=1, todo_date=date(2026, 9, 30), title='其他月份', is_done=0))
+    service = agent.PersonalAgentService(db)
+    task = (await service.adopt(1, request(date=day)))[0]
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+        markers = await client.get('/todos/dates', params=dict(year=2026, month=10))
+        assert markers.status_code == 200
+        assert markers.json() == ['2026-10-17']
+        records = await client.get('/todos/', params=dict(date=str(day)))
+        assert records.status_code == 200
+        assert [item['id'] for item in records.json()] == [task.id]
+        updated = await client.put(f'/todos/{task.id}', json=dict(is_done=1))
+        assert updated.status_code == 200
+        today = await client.get('/agent/today', params=dict(date=str(day)))
+        assert today.json()['tasks'][0]['is_done'] is True
+        # Completed tasks remain discoverable and postponement moves the date marker.
+        assert (await client.get('/todos/dates', params=dict(year=2026, month=10))).json() == ['2026-10-17']
+        await client.patch(f'/agent/tasks/{task.id}', json=dict(date='2026-11-01'))
+        assert (await client.get('/todos/dates', params=dict(year=2026, month=10))).json() == []
+        assert (await client.get('/todos/dates', params=dict(year=2026, month=11))).json() == ['2026-11-01']
+        assert (await client.get('/todos/dates', params=dict(year=2026, month=13))).status_code == 422

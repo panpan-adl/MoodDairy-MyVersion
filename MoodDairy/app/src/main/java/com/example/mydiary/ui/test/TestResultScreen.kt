@@ -1,9 +1,10 @@
 package com.example.mydiary.ui.test
 
+import com.example.mydiary.ui.components.PageLazyColumn
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -108,7 +109,7 @@ private fun MbtiResultContent(
     result: TestResult.MbtiResult,
     onRetakeTest: () -> Unit
 ) {
-    LazyColumn(
+    PageLazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
@@ -245,7 +246,7 @@ private fun AnimalResultContent(
     result: TestResult.AnimalResult,
     onRetakeTest: () -> Unit
 ) {
-    LazyColumn(
+    PageLazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
@@ -380,7 +381,7 @@ private fun ScoreResultContent(
         Primary
     }
     
-    LazyColumn(
+    PageLazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
@@ -528,7 +529,7 @@ private fun HollandResultContent(
     result: TestResult.HollandResult,
     onRetakeTest: () -> Unit
 ) {
-    LazyColumn(
+    PageLazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),

@@ -18,6 +18,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
@@ -118,6 +120,7 @@ class CalendarViewModel @Inject constructor(
     }
 
     fun toggleTodoDone(todo: TodoItem) {
+        if (_uiState.value.isUpdatingTodo) return
         val userId = getCurrentUserId() ?: run {
             _uiState.update { it.copy(errorMessage = "未登录，无法更新待办") }
             return
@@ -135,6 +138,7 @@ class CalendarViewModel @Inject constructor(
                     is ApiResult.Success -> {
                         _uiState.update { it.copy(isUpdatingTodo = false) }
                         reloadSelectedDateData()
+                        loadDatesWithDiary()
                     }
                     is ApiResult.Error -> {
                         _uiState.update {
@@ -153,6 +157,7 @@ class CalendarViewModel @Inject constructor(
     }
 
     fun deleteTodo(todoId: Long) {
+        if (_uiState.value.isUpdatingTodo) return
         val userId = getCurrentUserId() ?: run {
             _uiState.update { it.copy(errorMessage = "未登录，无法删除待办") }
             return
@@ -171,6 +176,7 @@ class CalendarViewModel @Inject constructor(
                             )
                         }
                         reloadSelectedDateData()
+                        loadDatesWithDiary()
                     }
                     is ApiResult.Error -> {
                         _uiState.update {
@@ -191,6 +197,14 @@ class CalendarViewModel @Inject constructor(
     fun refreshRecords() {
         loadDatesWithDiary()
         reloadSelectedDateData()
+    }
+
+    /** Only replay failed reads; never refresh successful records or replay mutations. */
+    fun retryFailedReads() {
+        if (retryMonth && monthJob?.isActive != true) loadDatesWithDiary()
+        val date = _uiState.value.selectedDate ?: return
+        if (retryDiary && diaryJob?.isActive != true) loadDiariesForDate(date)
+        if (retryTodo && todoJob?.isActive != true) loadTodosForDate(date)
     }
 
     fun reloadSelectedDateData() {
@@ -220,6 +234,9 @@ class CalendarViewModel @Inject constructor(
     private var diaryRequest = 0
     private var todoRequest = 0
     private var displayedDiaryDate: LocalDate? = null
+    private var retryMonth = false
+    private var retryDiary = false
+    private var retryTodo = false
 
     init { loadDatesWithDiary() }
 
@@ -227,32 +244,44 @@ class CalendarViewModel @Inject constructor(
         ++diaryRequest; ++todoRequest
         diaryJob?.cancel(); todoJob?.cancel()
         displayedDiaryDate = null
-        _uiState.update { it.copy(isLoadingDiaries = false, isLoadingTodos = false, diaryLoadError = null) }
+        retryDiary = false
+        retryTodo = false
+        _uiState.update { it.copy(isLoadingDiaries = false, isLoadingTodos = false, diaryLoadError = null, todoLoadError = null) }
     }
 
     private fun loadDatesWithDiary() {
+        retryMonth = false
         val request = ++monthRequest
         monthJob?.cancel()
         val userId = getCurrentUserId()
         val month = _uiState.value.currentMonth
         if (userId == null) {
-            _uiState.update { it.copy(datesWithDiary = emptySet(), isLoading = false, calendarLoadError = null) }
+            _uiState.update { it.copy(datesWithDiary = emptySet(), datesWithTodos = emptySet(), isLoading = false, calendarLoadError = null) }
             return
         }
         _uiState.update { it.copy(isLoading = true, calendarLoadError = null) }
         monthJob = viewModelScope.launch {
-            val result = calendarRead { diaryRepository.getDatesWithDiary(userId, month.year, month.monthValue) }
+            val (result, todoResult) = coroutineScope {
+                val diaries = async { calendarRead { diaryRepository.getDatesWithDiary(userId, month.year, month.monthValue) } }
+                val todos = async { calendarRead { todoRepository.getDatesWithTodos(userId, month.year, month.monthValue) } }
+                diaries.await() to todos.await()
+            }
             if (request != monthRequest || _uiState.value.currentMonth != month) return@launch
+            retryMonth = result.isRetryableReadFailure() || todoResult.isRetryableReadFailure()
             _uiState.update { current ->
-                when (result) {
-                    is ApiResult.Success -> current.copy(datesWithDiary = result.data.toSet(), isLoading = false, calendarLoadError = null)
-                    else -> current.copy(isLoading = false, calendarLoadError = "日历暂时连接不上，点击重试。")
-                }
+                current.copy(
+                    datesWithDiary = (result as? ApiResult.Success)?.data?.toSet() ?: current.datesWithDiary,
+                    datesWithTodos = (todoResult as? ApiResult.Success)?.data?.toSet() ?: current.datesWithTodos,
+                    isLoading = false,
+                    calendarLoadError = if (result is ApiResult.Success && todoResult is ApiResult.Success) null
+                        else "日历标记暂时没有加载完整，点击重试。"
+                )
             }
         }
     }
 
     private fun loadDiariesForDate(date: LocalDate) {
+        retryDiary = false
         val request = ++diaryRequest
         diaryJob?.cancel()
         val userId = getCurrentUserId()
@@ -267,6 +296,7 @@ class CalendarViewModel @Inject constructor(
         diaryJob = viewModelScope.launch {
             val result = calendarRead { diaryRepository.getAllDiariesByDate(userId, date) }
             if (request != diaryRequest || _uiState.value.selectedDate != date) return@launch
+            retryDiary = result.isRetryableReadFailure()
             _uiState.update { current ->
                 when (result) {
                     is ApiResult.Success -> current.copy(selectedDateDiaries = result.data, isLoadingDiaries = false, diaryLoadError = null)
@@ -277,6 +307,7 @@ class CalendarViewModel @Inject constructor(
     }
 
     private fun loadTodosForDate(date: LocalDate) {
+        retryTodo = false
         val request = ++todoRequest
         todoJob?.cancel()
         val userId = getCurrentUserId()
@@ -284,12 +315,15 @@ class CalendarViewModel @Inject constructor(
             _uiState.update { it.copy(selectedDateTodos = emptyList(), isLoadingTodos = false) }
             return
         }
-        _uiState.update { it.copy(isLoadingTodos = true) }
+        _uiState.update { it.copy(isLoadingTodos = true, todoLoadError = null,
+            selectedDateTodos = it.selectedDateTodos.filter { todo -> todo.date == date }) }
         todoJob = viewModelScope.launch {
             val result = calendarRead { todoRepository.getTodosByDate(userId, date) }
             if (request != todoRequest || _uiState.value.selectedDate != date) return@launch
+            retryTodo = result.isRetryableReadFailure()
             _uiState.update { it.copy(isLoadingTodos = false,
-                selectedDateTodos = (result as? ApiResult.Success)?.data ?: emptyList()) }
+                selectedDateTodos = (result as? ApiResult.Success)?.data ?: it.selectedDateTodos,
+                todoLoadError = if (result is ApiResult.Success) null else "待办暂时没有加载出来，点击重试。") }
         }
     }
 
@@ -300,9 +334,11 @@ data class CalendarUiState(
     val monthAnimationDirection: Int = 1,
     val selectedDate: LocalDate? = null,
     val datesWithDiary: Set<LocalDate> = emptySet(),
+    val datesWithTodos: Set<LocalDate> = emptySet(),
     val isLoading: Boolean = false,
     val calendarLoadError: String? = null,
     val diaryLoadError: String? = null,
+    val todoLoadError: String? = null,
     val selectedDateDiaries: List<Diary> = emptyList(),
     val isLoadingDiaries: Boolean = false,
     val selectedDateTodos: List<TodoItem> = emptyList(),
@@ -316,13 +352,16 @@ data class CalendarUiState(
 
 internal const val FUTURE_DATE_MESSAGE = "这一天还没到，暂时不能记录。先记下今天的心情吧。"
 
+private fun ApiResult<*>.isRetryableReadFailure(): Boolean =
+    this is ApiResult.Error && (code == -1 || code in 500..599)
+
 /** Read-only requests can retry once; a backend outage must never leave the page spinning forever. */
 internal suspend fun <T> calendarRead(request: () -> Flow<ApiResult<T>>): ApiResult<T> {
-    return withTimeoutOrNull(12_000) {
+    return withTimeoutOrNull(32_000) {
         var result: ApiResult<T> = ApiResult.Error(-1, "连接暂时不可用")
         repeat(2) { attempt ->
             result = try {
-                withTimeoutOrNull(5_000) { request().first { it !is ApiResult.Loading } }
+                withTimeoutOrNull(15_000) { request().first { it !is ApiResult.Loading } }
                     ?: ApiResult.Error(-1, "加载超时")
             } catch (cancelled: CancellationException) {
                 throw cancelled

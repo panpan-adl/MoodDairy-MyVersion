@@ -37,6 +37,8 @@ class EditProfileViewModel @Inject constructor(
     // 表单字段
     private val _nickname = MutableStateFlow("")
     val nickname: StateFlow<String> = _nickname.asStateFlow()
+    private val _signature = MutableStateFlow("")
+    val signature: StateFlow<String> = _signature.asStateFlow()
     
     private val _phone = MutableStateFlow("")
     val phone: StateFlow<String> = _phone.asStateFlow()
@@ -93,6 +95,7 @@ class EditProfileViewModel @Inject constructor(
             
             // 预填表单
             _nickname.value = currentUser.nickname ?: ""
+            _signature.value = currentUser.signature ?: ""
             _phone.value = currentUser.phone ?: ""
             _email.value = currentUser.email ?: ""
             _gender.value = currentUser.gender
@@ -114,6 +117,10 @@ class EditProfileViewModel @Inject constructor(
             value.length > 50 -> "昵称不能超过50个字符"
             else -> null
         }
+    }
+
+    fun onSignatureChange(value: String) {
+        _signature.value = value.take(100)
     }
     
     /**
@@ -183,6 +190,7 @@ class EditProfileViewModel @Inject constructor(
             
             // 创建更新请求
             val request = UpdateUserRequest(
+                signature = _signature.value.trim(),
                 nickname = _nickname.value.ifEmpty { null },
                 phone = _phone.value.ifEmpty { null },
                 email = _email.value.ifEmpty { null },

@@ -323,6 +323,7 @@ class RegisterRequest(BaseModel):
 
 class UpdateUserRequest(BaseModel):
     """更新用户信息请求"""
+    signature: Optional[str] = Field(None, max_length=100, description="个性签名")
     nickname: Optional[str] = Field(None, max_length=50, description="昵称")
     phone: Optional[str] = Field(None, max_length=20, description="手机号")
     email: Optional[str] = Field(None, max_length=100, description="邮箱")
@@ -332,6 +333,7 @@ class UpdateUserRequest(BaseModel):
 
 class UserResponse(BaseModel):
     """用户信息响应"""
+    signature: Optional[str] = Field(None, description="个性签名")
     id: int = Field(..., description="用户ID")
     username: str = Field(..., description="用户名")
     nickname: Optional[str] = Field(None, description="昵称")

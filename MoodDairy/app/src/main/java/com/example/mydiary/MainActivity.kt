@@ -40,6 +40,7 @@ import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FabPosition
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -69,6 +70,9 @@ import com.example.mydiary.navigation.NavGraph
 import com.example.mydiary.navigation.navigateMainTab
 import com.example.mydiary.navigation.Routes
 import com.example.mydiary.ui.theme.MyDiaryTheme
+import com.example.mydiary.ui.theme.PageTopBackground
+import com.example.mydiary.ui.theme.PageMiddleBackground
+import com.example.mydiary.ui.theme.SoftWhite
 import com.example.mydiary.ui.layout.KeyboardAwareScaffold
 import dagger.hilt.android.AndroidEntryPoint
 import java.time.LocalDate
@@ -173,8 +177,9 @@ fun MainScreen(
 
     val gradientBrush = Brush.verticalGradient(
         colors = listOf(
-            Color(0xFF9AEDCF),
-            Color(0xFFEBFFC7)
+            PageTopBackground,
+            PageMiddleBackground,
+            SoftWhite
         )
     )
 
@@ -196,17 +201,23 @@ fun MainScreen(
                 if (showMainFAB) {
                     FloatingActionButton(
                         onClick = { showQuickActions = true },
-                        containerColor = Color(0xFF9AEDCF),
+                        containerColor = Color(0xFF39856F),
                         contentColor = Color.White,
                         shape = CircleShape,
+                        elevation = FloatingActionButtonDefaults.elevation(
+                            defaultElevation = 1.dp,
+                            pressedElevation = 2.dp,
+                            focusedElevation = 1.dp,
+                            hoveredElevation = 2.dp,
+                        ),
                         modifier = Modifier
                             .offset(y = 0.dp)
-                            .size(56.dp)
+                            .size(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Add,
-                            contentDescription = "Quick actions",
-                            modifier = Modifier.size(28.dp)
+                            contentDescription = "新建日记或搜索",
+                            modifier = Modifier.size(23.dp)
                         )
                     }
                 }

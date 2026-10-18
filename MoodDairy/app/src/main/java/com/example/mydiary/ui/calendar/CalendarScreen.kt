@@ -1,11 +1,14 @@
 package com.example.mydiary.ui.calendar
 
+import com.example.mydiary.ui.components.PageLazyColumn
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -20,10 +23,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -40,6 +39,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -61,7 +61,11 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import com.example.mydiary.ui.theme.PageTopBackground
+import com.example.mydiary.ui.theme.PageMiddleBackground
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -69,6 +73,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.repeatOnLifecycle
 import com.example.mydiary.data.models.Diary
 import com.example.mydiary.data.models.MediaItem
 import com.example.mydiary.data.models.TodoItem
@@ -101,6 +106,19 @@ fun CalendarScreen(
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // A local backend can take time to restart. Recover while this page is visible,
+    // and stop polling as soon as it leaves the foreground.
+    LaunchedEffect(lifecycleOwner, viewModel) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
+            var retryDelay = 3_000L
+            while (true) {
+                kotlinx.coroutines.delay(retryDelay)
+                viewModel.retryFailedReads()
+                retryDelay = (retryDelay * 2).coerceAtMost(30_000L)
+            }
+        }
     }
 
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -168,8 +186,8 @@ fun CalendarScreen(
                 .background(
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            MintGreen.copy(alpha = 0.3f),
-                            PaleYellow.copy(alpha = 0.3f),
+                            PageTopBackground,
+                            PageMiddleBackground,
                             SoftWhite
                         )
                     )
@@ -181,44 +199,52 @@ fun CalendarScreen(
                     .padding(paddingValues)
                     .padding(16.dp)
             ) {
-                MonthHeader(
-                    currentMonth = uiState.currentMonth,
-                    onPreviousMonth = { viewModel.previousMonth() },
-                    onNextMonth = { viewModel.nextMonth() }
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                WeekDayHeader()
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                val animationDirection = uiState.monthAnimationDirection
-                AnimatedContent(
-                    targetState = uiState.currentMonth,
-                    transitionSpec = {
-                        if (animationDirection >= 0) {
-                            (slideInHorizontally { fullWidth -> fullWidth } + fadeIn())
-                                .togetherWith(slideOutHorizontally { fullWidth -> -fullWidth } + fadeOut())
-                        } else {
-                            (slideInHorizontally { fullWidth -> -fullWidth } + fadeIn())
-                                .togetherWith(slideOutHorizontally { fullWidth -> fullWidth } + fadeOut())
-                        }
-                    },
-                    label = "month_transition"
-                ) { month ->
-                    CalendarGrid(
-                        currentMonth = month,
-                        selectedDate = uiState.selectedDate,
-                        datesWithDiary = uiState.datesWithDiary,
-                        onDateClick = { date ->
-                            if (viewModel.selectDate(date)) onDateSelected(date)
-                        },
-                        onSwipeLeft = { viewModel.nextMonth() },
-                        onSwipeRight = { viewModel.previousMonth() }
+                Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MonthHeader(
+                        currentMonth = uiState.currentMonth,
+                        onPreviousMonth = { viewModel.previousMonth() },
+                        onNextMonth = { viewModel.nextMonth() }
                     )
-                }
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(
+                        Brush.verticalGradient(listOf(Color.White.copy(alpha = .68f), Color(0xFFF6FAF3).copy(alpha = .86f))))
+                        .padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text("一日一格，收藏日常", Modifier.weight(1f), color = Color(0xFF39856F), fontSize = 11.sp)
+                            val recordedDays = (uiState.datesWithDiary + uiState.datesWithTodos)
+                                .count { YearMonth.from(it) == uiState.currentMonth }
+                            Text(if (uiState.isLoading && recordedDays == 0) "正在整理…" else "$recordedDays 天有记录",
+                                color = Color(0xFF39856F), fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                        }
+                        WeekDayHeader()
+                        val animationDirection = uiState.monthAnimationDirection
+                        AnimatedContent(
+                            targetState = uiState.currentMonth,
+                            transitionSpec = {
+                                if (animationDirection >= 0) {
+                                    (slideInHorizontally { fullWidth -> fullWidth } + fadeIn())
+                                        .togetherWith(slideOutHorizontally { fullWidth -> -fullWidth } + fadeOut())
+                                } else {
+                                    (slideInHorizontally { fullWidth -> -fullWidth } + fadeIn())
+                                        .togetherWith(slideOutHorizontally { fullWidth -> fullWidth } + fadeOut())
+                                }
+                            },
+                            label = "month_transition"
+                        ) { month ->
+                            CalendarGrid(
+                                currentMonth = month,
+                                selectedDate = uiState.selectedDate,
+                                datesWithDiary = uiState.datesWithDiary + uiState.datesWithTodos,
+                                onDateClick = { date ->
+                                    if (viewModel.selectDate(date)) onDateSelected(date)
+                                },
+                                onSwipeLeft = { viewModel.nextMonth() },
+                                onSwipeRight = { viewModel.previousMonth() }
+                            )
+                        }
 
+                    }
+                }
                 if (uiState.isLoading) {
                     Box(
                         modifier = Modifier
@@ -237,9 +263,15 @@ fun CalendarScreen(
                 if (uiState.selectedDate != null) {
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    DiaryListSection(
+                    RecordListSection(
                                 selectedDate = uiState.selectedDate!!,
                                 diaries = uiState.selectedDateDiaries,
+                                todos = uiState.selectedDateTodos,
+                                isLoadingTodos = uiState.isLoadingTodos,
+                                isUpdatingTodo = uiState.isUpdatingTodo,
+                                todoLoadError = uiState.todoLoadError,
+                                onToggleDone = viewModel::toggleTodoDone,
+                                onDeleteTodo = { viewModel.deleteTodo(it.id) },
                                 isLoading = uiState.isLoadingDiaries,
                                 isDeleting = uiState.isDeleting,
                                 loadError = uiState.diaryLoadError,
@@ -264,38 +296,31 @@ private fun MonthHeader(
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        IconButton(onClick = onPreviousMonth) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                contentDescription = "上一个月",
-                tint = PaleYellow
-            )
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Bottom) {
+        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text("日常手账 · 收藏每一天", fontSize = 11.sp, color = Color(0xFF39856F), letterSpacing = 1.sp)
+            Text("${currentMonth.year}年 ${currentMonth.monthValue}月", fontSize = 23.sp,
+                fontWeight = FontWeight.SemiBold, color = Color(0xFF2C3E50))
         }
-
-        Text(
-            text = "${currentMonth.year}年 ${currentMonth.monthValue}月",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-
-        IconButton(onClick = onNextMonth) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = "下一个月",
-                tint = PaleYellow
-            )
+        Row(horizontalArrangement = Arrangement.spacedBy(0.dp)) {
+            IconButton(onClick = onPreviousMonth,
+                modifier = Modifier.size(48.dp)) {
+                Box(Modifier.size(34.dp).background(Color.White.copy(alpha = .52f), RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center) {
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "上一个月", modifier = Modifier.size(20.dp), tint = Color(0xFF39856F))
+                }
+            }
+            IconButton(onClick = onNextMonth,
+                modifier = Modifier.size(48.dp)) {
+                Box(Modifier.size(34.dp).background(Color.White.copy(alpha = .52f), RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center) {
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "下一个月", modifier = Modifier.size(20.dp), tint = Color(0xFF39856F))
+                }
+            }
         }
     }
 }
-
 @Composable
 private fun WeekDayHeader() {
     Row(
@@ -308,7 +333,7 @@ private fun WeekDayHeader() {
                 text = day,
                 modifier = Modifier.weight(1f),
                 textAlign = TextAlign.Center,
-                fontSize = 14.sp,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -331,39 +356,29 @@ private fun CalendarGrid(
 
     var dragOffset by remember { mutableStateOf(0f) }
 
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(7),
-        modifier = Modifier
-            .fillMaxWidth()
-            .pointerInput(Unit) {
-                detectHorizontalDragGestures(
-                    onDragEnd = {
-                        if (dragOffset > 100) {
-                            onSwipeRight()
-                        } else if (dragOffset < -100) {
-                            onSwipeLeft()
-                        }
-                        dragOffset = 0f
-                    },
-                    onHorizontalDrag = { _, dragAmount ->
-                        dragOffset += dragAmount
-                    }
-                )
+    Column(Modifier.fillMaxWidth().pointerInput(onSwipeLeft, onSwipeRight) {
+        detectHorizontalDragGestures(
+            onDragCancel = { dragOffset = 0f },
+            onDragEnd = {
+                if (dragOffset > 100) onSwipeRight()
+                else if (dragOffset < -100) onSwipeLeft()
+                dragOffset = 0f
             },
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        items(dates) { dateInfo ->
-            CalendarDateCell(
-                dateInfo = dateInfo,
-                isSelected = dateInfo.date == selectedDate,
-                hasDiary = dateInfo.date in datesWithDiary,
-                onClick = { onDateClick(dateInfo.date) }
-            )
+            onHorizontalDrag = { _, dragAmount -> dragOffset += dragAmount }
+        )
+    }, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        dates.chunked(7).forEach { week ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                week.forEach { dateInfo ->
+                    Box(Modifier.weight(1f)) {
+                        CalendarDateCell(dateInfo, dateInfo.date == selectedDate,
+                            dateInfo.date in datesWithDiary, onClick = { onDateClick(dateInfo.date) })
+                    }
+                }
+            }
         }
     }
 }
-
 @Composable
 private fun CalendarDateCell(
     dateInfo: CalendarDateInfo,
@@ -374,56 +389,28 @@ private fun CalendarDateCell(
     val today = LocalDate.now()
     val isToday = dateInfo.date == today
 
-    Box(
-        modifier = Modifier
-            .aspectRatio(1f)
-            .testTag("calendar-date-${dateInfo.date}")
-            .clip(RoundedCornerShape(8.dp))
-            .background(
-                when {
-                    isSelected -> MaterialTheme.colorScheme.primary
-                    isToday -> MaterialTheme.colorScheme.primaryContainer
-                    else -> Color.Transparent
-                }
-            )
-            .clickable(enabled = dateInfo.isCurrentMonth || dateInfo.date.isAfter(today)) { onClick() }
-            .padding(4.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = dateInfo.date.dayOfMonth.toString(),
-                fontSize = 16.sp,
-                fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal,
-                color = when {
-                    !dateInfo.isCurrentMonth -> MaterialTheme.colorScheme.outlineVariant
-                    isSelected -> MaterialTheme.colorScheme.onPrimary
-                    else -> MaterialTheme.colorScheme.onBackground
-                }
-            )
-
-            if (hasDiary && dateInfo.isCurrentMonth) {
-                Spacer(modifier = Modifier.height(2.dp))
-                Box(
-                    modifier = Modifier
-                        .size(6.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (isSelected) {
-                                MaterialTheme.colorScheme.onPrimary
-                            } else {
-                                MaterialTheme.colorScheme.primary
-                            }
-                        )
-                )
-            }
-        }
+    val shape = RoundedCornerShape(10.dp)
+    val ink = Color(0xFF39856F)
+    Box(Modifier.aspectRatio(1.16f).testTag("calendar-date-${dateInfo.date}")
+        .clip(shape).background(when {
+            isSelected -> ink
+            !dateInfo.isCurrentMonth -> Color.Transparent
+            hasDiary -> Color(0xFFC9E9DC)
+            else -> Color.White.copy(alpha = .45f)
+        }).border(if (isToday) 1.dp else 0.dp, if (isToday) ink.copy(alpha = .6f) else Color.Transparent, shape)
+        .clickable(enabled = dateInfo.isCurrentMonth || dateInfo.date.isAfter(today)) { onClick() }
+        .semantics { contentDescription = "${dateInfo.date}${if (isToday) "，今天" else ""}${if (hasDiary) "，有记录" else ""}${if (isSelected) "，已选中" else ""}" },
+        contentAlignment = Alignment.Center) {
+        Text(dateInfo.date.dayOfMonth.toString(), fontSize = 13.sp,
+            fontWeight = if (isToday || isSelected || hasDiary) FontWeight.Medium else FontWeight.Normal,
+            color = when {
+                isSelected -> Color.White
+                !dateInfo.isCurrentMonth -> Color(0xFFB7C6BE)
+                hasDiary || isToday -> Color(0xFF426456)
+                else -> Color(0xFF71897D)
+            })
     }
 }
-
 private data class CalendarDateInfo(
     val date: LocalDate,
     val isCurrentMonth: Boolean
@@ -471,102 +458,80 @@ private fun generateCalendarDates(yearMonth: YearMonth): List<CalendarDateInfo> 
 }
 
 @Composable
-private fun DiaryListSection(
+private fun RecordListSection(
     selectedDate: LocalDate,
     diaries: List<Diary>,
-    isLoading: Boolean,
-    isDeleting: Boolean,
-    loadError: String? = null,
-    onRetry: () -> Unit = {},
-    onDiaryClick: (Long) -> Unit,
-    onDeleteClick: (Diary) -> Unit
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = "${selectedDate.monthValue}月${selectedDate.dayOfMonth}日的日记",
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-
-        if (loadError != null) {
-            Text(loadError, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
-            TextButton(onClick = onRetry) { Text("重新加载日记") }
-        }
-        if ((isLoading && diaries.isEmpty()) || isDeleting) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(100.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-            }
-        } else if (diaries.isEmpty() && loadError == null) {
-            EmptyState("这一天还没有日记")
-        } else if (diaries.isNotEmpty()) {
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(diaries) { diary ->
-                    diary.id?.let { diaryId ->
-                        DiaryListItem(
-                            diary = diary,
-                            onClick = { onDiaryClick(diaryId) },
-                            onDeleteClick = { onDeleteClick(diary) }
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TodoListSection(
-    selectedDate: LocalDate,
     todos: List<TodoItem>,
     isLoading: Boolean,
-    isUpdating: Boolean,
+    isLoadingTodos: Boolean,
+    isDeleting: Boolean,
+    isUpdatingTodo: Boolean,
+    loadError: String?,
+    todoLoadError: String?,
+    onRetry: () -> Unit,
+    onDiaryClick: (Long) -> Unit,
+    onDeleteClick: (Diary) -> Unit,
     onToggleDone: (TodoItem) -> Unit,
     onDeleteTodo: (TodoItem) -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = "${selectedDate.monthValue}月${selectedDate.dayOfMonth}日的待办",
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-
-        if (isLoading || isUpdating) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(100.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-            }
-        } else if (todos.isEmpty()) {
-            EmptyState("这一天还没有待办")
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(todos) { todo ->
-                    TodoListItem(
-                        todo = todo,
-                        onToggleDone = { onToggleDone(todo) },
-                        onDelete = { onDeleteTodo(todo) }
-                    )
+    PageLazyColumn(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        item(key = "diaryHeading") {
+            Column(Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(Modifier.size(5.dp).background(Color(0xFF39856F), CircleShape))
+                    Text("日记", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF39856F))
+                    Text("${diaries.size} 篇", fontSize = 11.sp, color = Color(0xFF6D897B))
                 }
             }
         }
+        if (loadError != null) item(key = "diaryError") {
+            Text(loadError, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+            TextButton(onClick = onRetry) { Text("重新加载日记") }
+        }
+        if ((isLoading && diaries.isEmpty()) || isDeleting) item(key = "diaryLoading") {
+            Box(Modifier.fillMaxWidth().height(72.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        }
+        if (!isLoading && !isDeleting && diaries.isEmpty() && loadError == null) item(key = "emptyDiary") {
+            Text("这一天还没有日记", color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 12.dp))
+        }
+        items(diaries, key = { "diary_${it.id}" }) { diary ->
+            diary.id?.let { id ->
+                DiaryListItem(diary, onClick = { onDiaryClick(id) }, onDeleteClick = { onDeleteClick(diary) })
+            }
+        }
+        item(key = "todoHeading") {
+            Row(Modifier.padding(start = 4.dp, top = 16.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.size(5.dp).background(Color(0xFF39856F), CircleShape))
+                Text("待办", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF39856F))
+                Text("${todos.size} 项", fontSize = 11.sp, color = Color(0xFF6D897B))
+            }
+        }
+        if (todoLoadError != null) item(key = "todoError") {
+            Text(todoLoadError, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+            TextButton(onClick = onRetry) { Text("重新加载待办") }
+        }
+        if (isLoadingTodos && todos.isEmpty()) item(key = "todoLoading") {
+            Box(Modifier.fillMaxWidth().height(72.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        }
+        if (!isLoadingTodos && todos.isEmpty() && todoLoadError == null) item(key = "emptyTodo") {
+            Text("这一天还没有待办", color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 12.dp))
+        }
+        items(todos, key = { "todo_${it.id}" }) { todo ->
+            TodoListItem(todo, enabled = !isUpdatingTodo,
+                onToggleDone = { onToggleDone(todo) }, onDelete = { onDeleteTodo(todo) })
+        }
+        item(key = "recordsBottom") { Spacer(Modifier.height(80.dp)) }
     }
 }
 
@@ -576,144 +541,75 @@ private fun DiaryListItem(
     onClick: () -> Unit,
     onDeleteClick: () -> Unit
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = diary.title ?: "无标题",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    diary.createdAt?.let { createdAt ->
-                        Text(
-                            text = DateTimeFormatter.ofPattern("HH:mm")
-                                .format(createdAt.atZone(java.time.ZoneId.systemDefault())),
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    IconButton(
-                        onClick = onDeleteClick,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "删除日记",
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick)
+        .padding(horizontal = 4.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            diary.createdAt?.let { createdAt ->
+                Text(DateTimeFormatter.ofPattern("HH:mm").format(createdAt.atZone(java.time.ZoneId.systemDefault())),
+                    fontSize = 11.sp, color = Color(0xFF6D897B), letterSpacing = .5.sp)
+                Text("  /  ", fontSize = 11.sp, color = Color(0xFFABC4B7))
             }
-
-            val contentPreview = getContentPreview(diary)
-            if (contentPreview.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = contentPreview,
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            if (diary.mediaItems.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "${diary.mediaItems.size} 个媒体项",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.primary
-                )
+            Text(diary.title?.takeIf { it.isNotBlank() } ?: "无标题",
+                modifier = Modifier.weight(1f), fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
+                color = Color(0xFF2C493E), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            IconButton(onClick = onDeleteClick, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Default.Delete, contentDescription = "删除日记",
+                    tint = Color(0xFF6D897B), modifier = Modifier.size(18.dp))
             }
         }
+        val preview = getContentPreview(diary)
+        if (preview.isNotEmpty()) {
+            Text(preview, modifier = Modifier.padding(bottom = 12.dp, end = 12.dp),
+                fontSize = 14.sp, lineHeight = 23.sp, color = Color(0xFF6B8176),
+                maxLines = 3, overflow = TextOverflow.Ellipsis)
+        }
+        val attachments = diary.mediaItems.filterNot { it is MediaItem.Text }
+        if (attachments.isNotEmpty()) {
+            val labels = buildList {
+                val images = attachments.count { it is MediaItem.Image }
+                val audio = attachments.count { it is MediaItem.Audio }
+                val videos = attachments.count { it is MediaItem.Video }
+                if (images > 0) add("$images 张照片")
+                if (audio > 0) add("$audio 段语音")
+                if (videos > 0) add("$videos 段视频")
+            }
+            Text(labels.joinToString(" · "), fontSize = 11.sp, color = Color(0xFF39856F),
+                modifier = Modifier.padding(bottom = 14.dp))
+        }
+        HorizontalDivider(color = Color(0xFF39856F).copy(alpha = .14f),
+            modifier = Modifier.padding(top = 2.dp, bottom = 4.dp))
     }
 }
 
 @Composable
 private fun TodoListItem(
     todo: TodoItem,
+    enabled: Boolean = true,
     onToggleDone: () -> Unit,
     onDelete: () -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Checkbox(
-                checked = todo.isDone,
-                onCheckedChange = { onToggleDone() }
-            )
-
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 8.dp)
-            ) {
-                Text(
-                    text = todo.title,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (todo.isDone) {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    }
-                )
-
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(checked = todo.isDone, enabled = enabled, onCheckedChange = { onToggleDone() },
+                colors = androidx.compose.material3.CheckboxDefaults.colors(
+                    checkedColor = Color(0xFF39856F), uncheckedColor = Color(0xFF8DA498)))
+            Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
+                Text(todo.title, fontSize = 14.sp, fontWeight = FontWeight.Medium,
+                    color = if (todo.isDone) Color(0xFF8DA498) else Color(0xFF2C493E),
+                    textDecoration = if (todo.isDone) androidx.compose.ui.text.style.TextDecoration.LineThrough else null)
                 if (!todo.note.isNullOrBlank()) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = todo.note,
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Text(todo.note, modifier = Modifier.padding(top = 4.dp), fontSize = 12.sp,
+                        color = Color(0xFF6B8176), maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
             }
-
-            IconButton(onClick = onDelete) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "删除待办",
-                    tint = MaterialTheme.colorScheme.error
-                )
+            IconButton(onClick = onDelete, enabled = enabled) {
+                Icon(Icons.Default.Delete, contentDescription = "删除待办",
+                    tint = Color(0xFF6D897B), modifier = Modifier.size(18.dp))
             }
         }
+        HorizontalDivider(color = Color(0xFF39856F).copy(alpha = .10f), modifier = Modifier.padding(horizontal = 4.dp))
     }
 }
-
 @Composable
 private fun EmptyState(message: String) {
     Box(
@@ -755,3 +651,5 @@ private fun getContentPreview(diary: Diary): String {
 
     return ""
 }
+
+

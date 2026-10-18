@@ -1,7 +1,8 @@
 package com.example.mydiary.ui.chat
 
+import com.example.mydiary.ui.components.PageLazyColumn
+
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.*
@@ -63,7 +64,7 @@ internal fun ChatViewport(
     }
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxWidth().testTag("chat_fixed_header")) { header() }
-        LazyColumn(
+        PageLazyColumn(
             state = listState,
             reverseLayout = true,
             modifier = Modifier.weight(1f).fillMaxWidth().testTag("chat_timeline").padding(horizontal = 16.dp),

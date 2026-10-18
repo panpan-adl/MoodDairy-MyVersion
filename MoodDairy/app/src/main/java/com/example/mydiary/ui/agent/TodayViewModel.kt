@@ -31,8 +31,6 @@ data class TodayState(
     val plan: AgentPlan? = null,
     val planRequestId: String = UUID.randomUUID().toString(),
     val tasks: List<AgentTask> = emptyList(),
-    val historicalTasks: List<AgentTask> = emptyList(),
-    val historyLoaded: Boolean = false,
     val reflection: String = "",
     val review: String = "",
     val reviewRequestId: String = UUID.randomUUID().toString(),
@@ -177,18 +175,4 @@ class TodayViewModel @Inject constructor(
     }
     fun clearNotice() { _state.update { it.copy(error = null, message = null) } }
 
-    fun loadHistory() = action {
-        val history = call { api.agentTaskHistory() }
-        _state.update { it.copy(historicalTasks = history, historyLoaded = true) }
-    }
-
-    fun toggleHistorical(task: AgentTask) = action {
-        val updated = call { api.agentUpdateTask(task.id, AgentTaskUpdate(isDone = !task.isDone)) }
-        _state.update { s -> s.copy(historicalTasks = s.historicalTasks.map { if (it.id == updated.id) updated else it }) }
-    }
-
-    fun bringToToday(task: AgentTask) = action {
-        val updated = call { api.agentUpdateTask(task.id, AgentTaskUpdate(date = _state.value.date)) }
-        _state.update { s -> s.copy(tasks = s.tasks + updated, historicalTasks = s.historicalTasks.filterNot { it.id == updated.id }) }
-    }
 }

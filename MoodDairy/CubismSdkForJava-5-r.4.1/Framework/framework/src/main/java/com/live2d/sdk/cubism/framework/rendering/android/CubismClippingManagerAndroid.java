@@ -138,10 +138,9 @@ class CubismClippingManagerAndroid extends ACubismClippingManager<
             for (int i = 0; i < clipDrawCount; i++) {
                 final int clipDrawIndex = clipContext.clippingIdList[i];
 
-                // If vertex information is not updated and reliable, pass drawing.
-                if (!model.getDrawableDynamicFlagVertexPositionsDidChange(clipDrawIndex)) {
-                    continue;
-                }
+                // The atlas is cleared and its layout is rebuilt each frame.
+                // Unchanged vertices are still valid mask geometry: skipping
+                // them erases static masks (for example hair) when others move.
 
                 renderer.isCulling(model.getDrawableCulling(clipDrawIndex));
 

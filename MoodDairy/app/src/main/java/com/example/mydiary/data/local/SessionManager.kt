@@ -22,6 +22,7 @@ class SessionManager @Inject constructor(
             putLong(KEY_USER_ID, user.id)
             putString(KEY_USERNAME, user.username)
             putString(KEY_NICKNAME, user.nickname)
+            putString(KEY_SIGNATURE, user.signature)
             putString(KEY_AVATAR, user.avatar)
             putString(KEY_PHONE, user.phone)
             putString(KEY_EMAIL, user.email)
@@ -45,6 +46,7 @@ class SessionManager @Inject constructor(
             id = userId,
             username = sharedPreferences.getString(KEY_USERNAME, "") ?: "",
             nickname = sharedPreferences.getString(KEY_NICKNAME, null),
+            signature = sharedPreferences.getString(KEY_SIGNATURE, null),
             avatar = sharedPreferences.getString(KEY_AVATAR, null),
             phone = sharedPreferences.getString(KEY_PHONE, null),
             email = sharedPreferences.getString(KEY_EMAIL, null),
@@ -82,6 +84,7 @@ class SessionManager @Inject constructor(
         const val KEY_USER_ID = "user_id"
         const val KEY_USERNAME = "username"
         const val KEY_NICKNAME = "nickname"
+        const val KEY_SIGNATURE = "signature"
         const val KEY_AVATAR = "avatar"
         const val KEY_PHONE = "phone"
         const val KEY_EMAIL = "email"

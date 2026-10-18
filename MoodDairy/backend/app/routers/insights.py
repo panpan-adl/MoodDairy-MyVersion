@@ -93,7 +93,6 @@ async def get_growth_portrait(
         days=days,
         end_date=parsed_end_date,
     )
-    await db.commit()
     return result
 
 

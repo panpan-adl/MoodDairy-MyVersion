@@ -569,21 +569,8 @@ async def _exec_search_social_content(
     try:
         items = await client.search(keyword=keyword, platform=platform, limit=limit)
 
-        # 搜到 0 条时自动降级重试：换更短、更宽泛的关键词（如"操作系统的课程"→"操作系统"），
-        # 尽量让用户总能拿到内容卡片，而不是一句"没搜到"。
-        if not items:
-            tried = {keyword}
-            for kw in _keyword_variants(keyword):
-                if kw in tried:
-                    continue
-                tried.add(kw)
-                try:
-                    items = await client.search(keyword=kw, platform=platform, limit=limit)
-                except SocialSearchError:
-                    continue
-                if items:
-                    keyword = kw
-                    break
+        # Keep the confirmed keyword and request count; never purchase automatic
+        # broadened searches after an empty result.
 
         return ToolExecutionResult(
             ok=True,

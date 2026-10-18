@@ -107,9 +107,12 @@ class TikHubProvider(BaseSocialSearchProvider):
                     raise SocialSearchError("TikHub API Key 无效", code="INVALID_KEY")
                 logger.error("TikHub API error status=%s", status)
                 raise SocialSearchError(f"API error: {status}")
-            except httpx.HTTPError as e:
-                logger.error(f"TikHub API network error: {e}")
-                raise SocialSearchError(f"Network error: {e}")
+            except httpx.TimeoutException:
+                logger.warning("TikHub search request timed out")
+                raise SocialSearchError("搜索平台响应超时，请换个平台或稍后重新搜索", code="SEARCH_TIMEOUT") from None
+            except httpx.HTTPError:
+                logger.warning("TikHub search connection failed")
+                raise SocialSearchError("暂时无法连接搜索平台，请稍后重试", code="NETWORK_ERROR") from None
 
     # ------------------------------------------------------------------
     # Xiaohongshu (App V2)

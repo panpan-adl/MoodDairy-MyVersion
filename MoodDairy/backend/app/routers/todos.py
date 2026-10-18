@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date as date_type
 from typing import List
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -16,6 +16,16 @@ from app.security.deps import AuthenticatedUserId, EffectiveUserId
 from app.utils.error_handler import NotFoundError, ValidationError as AppValidationError
 
 router = APIRouter(prefix="/todos", tags=["todos"])
+
+
+@router.get("/dates", response_model=List[date_type], summary="Dates with todos in a month")
+async def todo_dates(
+    user_id: EffectiveUserId,
+    year: int = Query(ge=1, le=9998),
+    month: int = Query(ge=1, le=12),
+    db: AsyncSession = Depends(get_db),
+):
+    return await TodoService(db).get_dates_with_todos(user_id, year, month)
 
 
 @router.post(

@@ -19,6 +19,7 @@ else:
     _ARK_IMPORT_ERROR = None
 
 from app.utils.ark_runtime import build_http_client, get_ark_base_url, should_trust_env_proxy
+from app.drawing.generated_media import persist_generated_image
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +95,7 @@ class VolcengineClient:
                     extra_body={"watermark": watermark},
                 ),
             )
-            return response.data[0].url
+            return await persist_generated_image(response.data[0].url)
         except Exception as exc:
             logger.error("text_to_image failed: %s", exc)
             raise VolcengineAPIError(f"text_to_image failed: {exc}") from exc
@@ -119,7 +120,7 @@ class VolcengineClient:
                     extra_body={"image": image_url, "watermark": watermark},
                 ),
             )
-            return response.data[0].url
+            return await persist_generated_image(response.data[0].url)
         except Exception as exc:
             logger.error("image_to_image failed: %s", exc)
             raise VolcengineAPIError(f"image_to_image failed: {exc}") from exc

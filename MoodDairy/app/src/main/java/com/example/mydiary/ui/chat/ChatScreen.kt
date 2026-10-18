@@ -1,4 +1,6 @@
 package com.example.mydiary.ui.chat
+
+import com.example.mydiary.ui.components.PageLazyColumn
 import com.example.mydiary.ui.theme.PrimaryDark
 
 import android.Manifest
@@ -32,7 +34,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -92,6 +93,8 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import com.example.mydiary.ui.theme.PageTopBackground
+import com.example.mydiary.ui.theme.PageMiddleBackground
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -317,8 +320,8 @@ fun ChatScreen(
             .background(
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        MintGreen.copy(alpha = 0.3f),
-                        PaleYellow.copy(alpha = 0.3f),
+                        PageTopBackground,
+                        PageMiddleBackground,
                         SoftWhite,
                     ),
                 ),
@@ -1258,7 +1261,7 @@ private fun ConversationHistoryDialog(
                     )
                 } else {
                     Spacer(modifier = Modifier.height(8.dp))
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PageLazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(conversations, key = { it.conversationId }) { conv ->
                             Surface(
                                 shape = RoundedCornerShape(12.dp),

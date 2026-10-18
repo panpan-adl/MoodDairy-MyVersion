@@ -1,5 +1,7 @@
 package com.example.mydiary.ui.profile
 
+import com.example.mydiary.ui.components.pageVerticalScroll
+
 import android.app.DatePickerDialog
 import android.content.Context
 import android.net.Uri
@@ -23,7 +25,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -96,6 +97,7 @@ fun EditProfileScreen(
     val avatarUploadState by viewModel.avatarUploadState.collectAsStateWithLifecycle()
 
     val nickname by viewModel.nickname.collectAsStateWithLifecycle()
+    val signature by viewModel.signature.collectAsStateWithLifecycle()
     val phone by viewModel.phone.collectAsStateWithLifecycle()
     val email by viewModel.email.collectAsStateWithLifecycle()
     val gender by viewModel.gender.collectAsStateWithLifecycle()
@@ -226,7 +228,7 @@ fun EditProfileScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
+                    .pageVerticalScroll(rememberScrollState())
                     .padding(16.dp),
             ) {
                 Card(
@@ -344,6 +346,23 @@ fun EditProfileScreen(
                             ),
                             isError = nicknameError != null,
                             supportingText = nicknameError?.let { { Text(it, color = Error) } },
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        OutlinedTextField(
+                            value = signature,
+                            onValueChange = viewModel::onSignatureChange,
+                            label = { Text("个性签名") },
+                            placeholder = { Text("写一句话，介绍此刻的自己") },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 2,
+                            maxLines = 4,
+                            supportingText = { Text("${signature.length}/100") },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Primary,
+                                focusedLabelColor = Primary,
+                            ),
                         )
 
                         Spacer(modifier = Modifier.height(16.dp))

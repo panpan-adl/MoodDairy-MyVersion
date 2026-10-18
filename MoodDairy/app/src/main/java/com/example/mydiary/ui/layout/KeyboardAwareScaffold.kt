@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import com.example.mydiary.ui.components.PageScrollbarHost
 
 /** One owner for system/IME insets; children receive already-consumed padding. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -37,6 +38,6 @@ internal fun KeyboardAwareScaffold(
         floatingActionButton = floatingActionButton,
         floatingActionButtonPosition = FabPosition.End,
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) { content() }
+        Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) { PageScrollbarHost { content() } }
     }
 }

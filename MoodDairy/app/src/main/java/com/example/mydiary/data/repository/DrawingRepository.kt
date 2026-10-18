@@ -1,5 +1,6 @@
 package com.example.mydiary.data.repository
 
+import com.example.mydiary.data.models.buildFullMediaUrl
 import com.example.mydiary.data.models.DEFAULT_DRAWING_SIZE
 import com.example.mydiary.data.models.DrawingEnhanceRequest
 import com.example.mydiary.data.models.DrawingFromDiaryRequest
@@ -48,7 +49,7 @@ class DrawingRepository @Inject constructor(
         }
         val result = SafeApiCall.execute(apiCall)
         return when (result) {
-            is ApiResult.Success -> Result.success(result.data)
+            is ApiResult.Success -> Result.success(result.data.copy(imageUrl = buildFullMediaUrl(result.data.imageUrl) ?: result.data.imageUrl))
             is ApiResult.Error -> Result.failure(Exception(result.message))
             is ApiResult.Loading -> Result.failure(Exception("Unexpected loading state"))
         }
@@ -93,7 +94,7 @@ class DrawingRepository @Inject constructor(
         }
         val result = SafeApiCall.execute(apiCall)
         return when (result) {
-            is ApiResult.Success -> Result.success(result.data)
+            is ApiResult.Success -> Result.success(result.data.copy(imageUrl = buildFullMediaUrl(result.data.imageUrl) ?: result.data.imageUrl))
             is ApiResult.Error -> Result.failure(Exception(result.message))
             is ApiResult.Loading -> Result.failure(Exception("Unexpected loading state"))
         }
@@ -113,7 +114,7 @@ class DrawingRepository @Inject constructor(
         }
         val result = SafeApiCall.execute(apiCall)
         return when (result) {
-            is ApiResult.Success -> Result.success(result.data)
+            is ApiResult.Success -> Result.success(result.data.copy(imageUrl = buildFullMediaUrl(result.data.imageUrl) ?: result.data.imageUrl))
             is ApiResult.Error -> Result.failure(Exception(result.message))
             is ApiResult.Loading -> Result.failure(Exception("Unexpected loading state"))
         }

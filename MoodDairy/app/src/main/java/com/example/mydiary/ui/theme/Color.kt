@@ -8,6 +8,8 @@ import androidx.compose.ui.graphics.Color
 val MintGreen = Color(0xFF9AEDCF)      // 设计图核心主色
 val PaleYellow = Color(0xFFEBFFC7)     // 设计图辅助色
 val SoftWhite = Color(0xFFF9FDFB)      // 全局背景色 (带一点点绿的白，更护眼)
+val PageTopBackground = Color(0xFFB1EBD2) // 明亮薄荷绿融入柔和底色，向浅黄绿与近白色过渡
+val PageMiddleBackground = Color(0xFFE2F5D9)
 
 // ==========================================
 // 2. Material Theme 映射 (在原有变量上修改值)

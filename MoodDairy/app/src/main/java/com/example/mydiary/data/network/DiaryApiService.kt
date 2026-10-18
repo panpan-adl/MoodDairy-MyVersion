@@ -17,8 +17,9 @@ interface DiaryApiService {
     suspend fun relaxRecommendations(): Response<RelaxRecommendations>
     @GET("music/tracks/{songId}/playback")
     suspend fun relaxPlayback(@Path("songId") songId: String): Response<RelaxPlayback>
-    @GET("agent/tasks/history")
-    suspend fun agentTaskHistory(): Response<List<AgentTask>>
+    @GET("todos/dates")
+    suspend fun getDatesWithTodos(@Query("user_id") userId: Long,
+        @Query("year") year: Int, @Query("month") month: Int): Response<List<String>>
     @GET("agent/today")
     suspend fun agentToday(@Query("date") date: String): Response<AgentToday>
     @POST("agent/plan")

@@ -76,6 +76,34 @@ URL = '/insights/diaries/10/review'
 
 
 @pytest.mark.asyncio
+async def test_growth_portrait_reads_many_missing_insights_without_per_diary_writes(env):
+    from sqlalchemy import event, select
+    c, maker, owner, model = env
+    async with maker() as db:
+        db.add_all([Diary(id=100 + i, user_id=1, title='今天', content='完成了记录，感到开心。',
+                          diary_date=date.today()) for i in range(30)])
+        await db.commit()
+    statements = []
+    bind = maker.kw['bind'].sync_engine
+    def record(conn, cursor, statement, parameters, context, many):
+        statements.append(statement)
+    event.listen(bind, 'before_cursor_execute', record)
+    try:
+        response = await c.get('/insights/growth-portrait?days=30')
+    finally:
+        event.remove(bind, 'before_cursor_execute', record)
+    assert response.status_code == 200, response.text
+    assert len(response.json()['emotion_curve']) == 31
+    assert len(statements) <= 4
+    assert all(s.lstrip().upper().startswith('SELECT') for s in statements)
+    async with maker() as db:
+        assert (await db.execute(select(DiaryMultimodalInsight))).scalars().all() == []
+    model.assert_not_awaited()
+    owner[0] = 2
+    assert (await c.get('/insights/growth-portrait?days=30')).json()['emotion_curve'] == []
+
+
+@pytest.mark.asyncio
 async def test_explicit_generation_encrypted_cache_and_refresh_preservation(env):
     c, maker, owner, model = env
     initial = (await c.get(URL)).json()

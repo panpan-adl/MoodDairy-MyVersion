@@ -10,6 +10,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import com.example.mydiary.ui.theme.PageTopBackground
+import com.example.mydiary.ui.theme.PageMiddleBackground
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -29,10 +31,13 @@ fun LifeScreen(
     onOpenHighlights: () -> Unit,
     onOpenLittleJoys: () -> Unit,
 ) {
+    // Start review reads while the Today tab is visible.
+    val reviewViewModel: com.example.mydiary.ui.explore.ExploreViewModel =
+        androidx.hilt.navigation.compose.hiltViewModel()
     LifeContent(requestedSection, onSectionRequestHandled,
         today = { TodayScreen(onOpenAssistant, onOpenRecords, onOpenDiary, showTitle = false) },
         review = { ExploreScreen(onOpenGrowthPortrait, onOpenHighlights, onOpenLittleJoys,
-            onOpenDiary, showTitle = false) })
+            onOpenDiary, viewModel = reviewViewModel, showTitle = false) })
 }
 
 @Composable
@@ -51,7 +56,8 @@ internal fun LifeContent(
         }
     }
     Column(Modifier.fillMaxSize().background(Brush.verticalGradient(
-        listOf(MintGreen.copy(alpha = 0.3f), PaleYellow.copy(alpha = 0.3f), SoftWhite)))) {
+        if (section == "review") listOf(PageTopBackground, PageMiddleBackground, Color(0xFFFFFCF5))
+        else listOf(PageTopBackground, PageMiddleBackground, SoftWhite)))) {
         Surface(
             modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp),
             shape = RoundedCornerShape(18.dp),

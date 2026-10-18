@@ -1,0 +1,3 @@
+gradle.beforeProject { p ->
+    p.layout.buildDirectory.set(new File(p.projectDir, 'build/ranran-crash-fix'))
+}

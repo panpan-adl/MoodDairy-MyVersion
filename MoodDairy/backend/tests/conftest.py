@@ -57,6 +57,7 @@ def mock_user():
     user.username = "testuser"
     user.password = "hashed_password"
     user.nickname = "测试用户"
+    user.signature = None
     user.avatar = None
     user.phone = "13800138000"
     user.email = "test@example.com"

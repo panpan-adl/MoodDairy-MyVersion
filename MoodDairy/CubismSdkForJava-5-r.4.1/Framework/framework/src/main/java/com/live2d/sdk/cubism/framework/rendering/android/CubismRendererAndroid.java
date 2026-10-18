@@ -326,10 +326,8 @@ public class CubismRendererAndroid extends CubismRenderer {
                 for (int index = 0; index < clipDrawCount; index++) {
                     final int clipDrawIndex = clipContext.clippingIdList[index];
 
-                    // 頂点情報が更新されておらず、信頼性がない場合は描画をパスする
-                    if (!getModel().getDrawableDynamicFlagVertexPositionsDidChange(clipDrawIndex)) {
-                        continue;
-                    }
+                    // This target was just cleared. Redraw every source mesh,
+                    // including unchanged vertices, to rebuild the complete mask.
 
                     isCulling(getModel().getDrawableCulling(clipDrawIndex));
 

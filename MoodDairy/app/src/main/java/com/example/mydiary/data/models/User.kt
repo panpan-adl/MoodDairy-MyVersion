@@ -41,6 +41,8 @@ data class RegisterRequest(
  * 更新用户信息请求
  */
 data class UpdateUserRequest(
+    @SerializedName("signature")
+    val signature: String? = null,
     @SerializedName("nickname")
     val nickname: String? = null,
     
@@ -65,6 +67,8 @@ data class UpdateUserRequest(
  * 用户响应
  */
 data class UserResponse(
+    @SerializedName("signature")
+    val signature: String? = null,
     @SerializedName("id")
     val id: Long,
     
@@ -135,7 +139,8 @@ data class User(
     val birthday: String? = null,
     val status: Int = 1,
     val createdAt: String? = null,
-    val updatedAt: String? = null
+    val updatedAt: String? = null,
+    val signature: String? = null,
 ) {
     /**
      * 获取性别显示文本
@@ -186,6 +191,7 @@ fun UserResponse.toDomain(): User {
         id = this.id,
         username = this.username,
         nickname = this.nickname,
+        signature = this.signature,
         avatar = resolveUserAvatarUrl(this.avatar),
         phone = this.phone,
         email = this.email,

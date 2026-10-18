@@ -1,5 +1,7 @@
 package com.example.mydiary.ui.relax
 
+import com.example.mydiary.ui.components.PageLazyColumn
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,7 +20,6 @@ import com.example.mydiary.whitenoise.WhiteNoiseSound
 import com.example.mydiary.whitenoise.WhiteNoiseSoundList
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -124,7 +125,7 @@ internal fun RelaxContent(state: RelaxMusicState, onReload: () -> Unit, onNaviga
                         label = { Text(categories.getValue(key)) }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = PrimaryLight)) }
                 }
                 val visible = sounds.filter { (category == "全部" || it.category == category) && it.name.contains(query.trim(), true) }
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 160.dp)) {
+                PageLazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 160.dp)) {
                     if (visible.isEmpty()) item { Text("没有找到这个声音，试试其他关键词。", color = TextSecondary) }
                     items(visible, key = { it.id }) { sound ->
                         val selected = playback.whiteNoise && playback.trackId == sound.id
@@ -133,7 +134,7 @@ internal fun RelaxContent(state: RelaxMusicState, onReload: () -> Unit, onNaviga
                             artwork = { Text(sound.icon, fontSize = 25.sp) })
                     }
                 }
-            } else LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 160.dp)) {
+            } else PageLazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 160.dp)) {
                 if (state.loading) item { LinearProgressIndicator(Modifier.fillMaxWidth(), color = PrimaryVariant) }
                 state.error?.let { error -> item { Text(error, color = TextSecondary); TextButton(onClick = onReload) { Text("重新加载", color = PrimaryDark) } } }
                 items(state.tracks, key = { it.id }) { track ->

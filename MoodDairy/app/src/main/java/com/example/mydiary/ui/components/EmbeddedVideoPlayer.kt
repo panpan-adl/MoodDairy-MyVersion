@@ -45,7 +45,13 @@ internal fun EmbeddedVideoPlayer(
             playWhenReady = false
             addListener(object : Player.Listener {
                 override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                    playerError = "暂时无法播放，请检查网络后重试"
+                    val cause = error.cause
+                    val code = (cause as? androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException)?.responseCode
+                    playerError = if (code == 403 || code == 404) {
+                        "原视频链接已失效，请重新生成或添加视频"
+                    } else {
+                        "暂时无法播放，请检查网络后重试"
+                    }
                 }
                 override fun onIsPlayingChanged(playing: Boolean) {
                     if (playing) playerError = null

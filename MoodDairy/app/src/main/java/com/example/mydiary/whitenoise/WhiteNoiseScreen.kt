@@ -1,9 +1,10 @@
 package com.example.mydiary.whitenoise
 
+import com.example.mydiary.ui.components.PageLazyColumn
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -145,7 +146,7 @@ private fun WhiteNoiseCategoryListScreen(
             )
             
             // 分类列表
-            LazyColumn(
+            PageLazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 16.dp),
@@ -385,7 +386,7 @@ private fun WhiteNoiseCategoryDetailScreen(
             )
             
             // 音频列表
-            LazyColumn(
+            PageLazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 16.dp),

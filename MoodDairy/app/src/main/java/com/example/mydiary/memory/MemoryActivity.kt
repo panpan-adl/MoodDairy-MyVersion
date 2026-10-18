@@ -1,5 +1,7 @@
 package com.example.mydiary.memory
 
+import com.example.mydiary.ui.components.pageVerticalScroll
+
 import android.Manifest
 import android.content.Intent
 import android.media.MediaRecorder
@@ -12,6 +14,19 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
+import com.example.mydiary.ui.theme.TextPrimary
+import com.example.mydiary.ui.theme.TextSecondary
+import com.example.mydiary.ui.theme.PrimaryDark
+import com.example.mydiary.ui.theme.PrimaryVariant
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -30,6 +45,7 @@ import androidx.media3.ui.PlayerView
 import com.example.mydiary.data.local.SessionManager
 import com.example.mydiary.data.network.ApiEndpoints
 import com.example.mydiary.ui.theme.MyDiaryTheme
+import com.example.mydiary.ui.components.PageScrollbarHost
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.*
 import org.json.*
@@ -77,7 +93,7 @@ class MemoryActivity : ComponentActivity() {
         setContent {
             com.example.mydiary.live2d.CompanionHost(active = session.isLoggedIn(), assistant = false)
  MyDiaryTheme {
-            MaterialTheme(colorScheme=MaterialTheme.colorScheme.copy(primary=Color(0xFF356F5B),onPrimary=Color.White,secondary=Color(0xFF58744C))) { Screen() }
+            MaterialTheme(colorScheme=MaterialTheme.colorScheme.copy(primary=Color(0xFF356F5B),onPrimary=Color.White,secondary=Color(0xFF58744C))) { PageScrollbarHost { Screen() } }
         } }
         task { refresh() }
     }
@@ -189,38 +205,50 @@ class MemoryActivity : ComponentActivity() {
                 withContext(Dispatchers.IO) { contentResolver.openOutputStream(uri)!!.use { it.write(bytes) } }; message="视频已导出到你选择的位置"
             }
         }
-        Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFFCBF6E4),Color(0xFFF7F8E7))))
-            .safeDrawingPadding().imePadding().verticalScroll(rememberScrollState()).padding(20.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
-            Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                TextButton(onClick={ stopRecording(); playing=null; if(page in listOf("edit","detail")) { page="inbox"; task { refresh() } } else finish() }) { Text("返回",color=Color(0xFF2C3E50)) }
-                Text(if(page=="room") "我的情绪空间" else "时光信箱",style=MaterialTheme.typography.headlineSmall)
+        val pageScroll=rememberScrollState()
+        LaunchedEffect(page) { pageScroll.scrollTo(0) }
+        Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFFE5F5EC),Color(0xFFF8FAF3),Color(0xFFFFFCF5))))
+            .safeDrawingPadding().imePadding().pageVerticalScroll(pageScroll).padding(18.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment=Alignment.CenterVertically) {
+                IconButton(onClick={ stopRecording(); playing=null; if(page in listOf("edit","detail")) { page="inbox"; task { refresh() } } else finish() }, modifier=Modifier.size(36.dp)) {
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack,"返回",tint=TextPrimary)
+                }
+                Text(when(page) { "room" -> "我的情绪空间"; "edit" -> "写给未来"; "detail" -> "一封时光来信"; else -> "时光信箱" }, color=TextPrimary, fontSize=23.sp,
+                    fontWeight=FontWeight.Bold, modifier=Modifier.weight(1f).padding(start=8.dp))
+                if(page=="room") IconButton(onClick={task {refresh()}},enabled=!busy) {
+                    Icon(Icons.Outlined.Refresh,"刷新空间",tint=PrimaryDark)
+                }
             }
-            Row(horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                OutlinedButton(onClick={stopRecording(); page="inbox"; task { refresh() }},enabled=!busy) { Text("时光信箱") }
-                OutlinedButton(onClick={stopRecording(); page="room"; task { refresh() }},enabled=!busy) { Text("情绪空间") }
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color.White.copy(alpha=.78f)).padding(5.dp),
+                horizontalArrangement=Arrangement.spacedBy(5.dp)) {
+                for((key,label) in listOf("inbox" to "时光信箱","room" to "情绪空间")) {
+                    val active=if(key=="room") page=="room" else page!="room"
+                    Row(Modifier.weight(1f).clip(RoundedCornerShape(14.dp))
+                        .background(if(active) Color(0xFFC7F1E1) else Color.Transparent)
+                        .clickable(enabled=!busy) {stopRecording(); page=key; task {refresh()}}
+                        .padding(vertical=12.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(7.dp,Alignment.CenterHorizontally)) {
+                        Icon(if(key=="room") Icons.Outlined.Cottage else Icons.Outlined.MailOutline,null,Modifier.size(18.dp),tint=if(active) PrimaryDark else TextSecondary)
+                        Text(label,color=if(active) PrimaryDark else TextSecondary,fontSize=14.sp,fontWeight=if(active) FontWeight.SemiBold else FontWeight.Normal)
+                    }
+                }
             }
             if(busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             if(message.isNotEmpty()) Card { Text(message,Modifier.padding(16.dp)) }
             when(page) {
-                "inbox" -> {
-                    Text("把今天的话留给未来，也给以后的自己留一个回应的位置。")
-                    Button(onClick={ draft=fresh(); store.save(draft); page="edit" },enabled=!busy) { Text("写一封视频信") }
-                    for(local in store.drafts()) Row {
-                        OutlinedButton(onClick={draft=local; page="edit"},modifier=Modifier.weight(1f)) { Text("继续草稿：${local.optString("title")}") }
-                        TextButton(onClick={discardDraft=local}) {Text("移除")}
-                    }
-                    for(l in letters) Card(onClick={task { detail(l.getString("id")) }}) { Column(Modifier.fillMaxWidth().padding(18.dp)) {
-                        Text(l.getString("title"),style=MaterialTheme.typography.titleMedium)
-                        Text("${status(l)} · 开启 ${date(l)}")
-                        if(l.has("parent_id") && !l.isNull("parent_id")) Text("当时与现在的双时间线")
-                    } }
-                    OutlinedButton(onClick={task { refresh() }},enabled=!busy) { Text("刷新信箱") }
-                }
+                "inbox" -> TimeMailbox(
+                    letters=letters, drafts=store.drafts(), busy=busy,
+                    onWrite={ draft=fresh(); store.save(draft); page="edit" },
+                    onOpen={ letter -> task { detail(letter.getString("id")) } },
+                    onResume={ local -> draft=local; page="edit" },
+                    onDiscard={ local -> discardDraft=local },
+                    onRefresh={ task { refresh() } },
+                )
                 "edit" -> {
+                    LetterWritingIntro(draft.has("parent_id"))
                     Text("素材会保存独立副本；原日记修改或删除不会改变这封信。",style=MaterialTheme.typography.bodySmall)
                     if(draft.has("parent_id")) Text("双时间线依次播放当时与现在。每段超过90秒时，会在合成版中适度加速以保持总长不超过3分钟；原信不变。",style=MaterialTheme.typography.bodySmall)
-                    OutlinedTextField(draft.optString("title"),{change("title",it)},label={Text("信件标题")},modifier=Modifier.fillMaxWidth(),enabled=!busy)
-                    OutlinedTextField(draft.optString("text"),{change("text",it)},label={Text("想对未来的自己说什么？")},modifier=Modifier.fillMaxWidth().testTag("letter-body"),minLines=5,enabled=!busy)
+                    OutlinedTextField(draft.optString("title"),{change("title",it)},label={Text("信件标题")},modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(16.dp),enabled=!busy)
+                    OutlinedTextField(draft.optString("text"),{change("text",it)},label={Text("想对未来的自己说什么？")},modifier=Modifier.fillMaxWidth().testTag("letter-body"),minLines=5,shape=RoundedCornerShape(16.dp),placeholder={Text("最近有什么小事，让你想认真记住？\n也可以给未来的自己，留一个小小的愿望。",fontSize=13.sp)},enabled=!busy)
                     OutlinedButton(onClick={
                         val d=runCatching{LocalDate.parse(draft.optString("open_date"))}.getOrDefault(LocalDate.now())
                         DatePickerDialog(this@MemoryActivity,{_,y,m,day->change("open_date",LocalDate.of(y,m+1,day).toString())},d.year,d.monthValue-1,d.dayOfMonth).show()
@@ -347,34 +375,90 @@ class MemoryActivity : ComponentActivity() {
         }
     }
 
+    private fun prepareRoomPlacement(slot:Int=firstFree()) {
+        placement=JSONObject().put("source_type","diary").put("source_id","").put("kind","book")
+            .put("slot",slot).put("title","").put("description","")
+    }
+
     @Composable private fun RoomContent() {
-        Text("你的经历可以有一个安放的位置。空间风格由你决定。")
-        Row(horizontalArrangement=Arrangement.spacedBy(5.dp)) {
-            for((key,label) in listOf("study" to "温暖书房","bedroom" to "安静卧室","cabin" to "自然小屋")) {
-                FilterChip(selected=room.optString("theme")==key,onClick={task {store.api("emotion-space","PUT",JSONObject().put("version",room.getInt("version")).put("theme",key)); refresh()}},label={Text(label)},enabled=!busy)
+        val theme=room.optString("theme","study")
+        val items=(room.optJSONArray("items")?:JSONArray()).objects()
+        val style=roomStyle(theme)
+        Column(Modifier.fillMaxWidth().padding(horizontal=3.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+            Text("把经历，安放成喜欢的样子",color=TextPrimary,fontSize=20.sp,fontWeight=FontWeight.Bold)
+            Text("一段文字、一张照片、一句原声，都能在这里有个位置。",color=TextSecondary,fontSize=12.sp,lineHeight=19.sp)
+        }
+        RoomThemePicker(theme,!busy) {key->task {
+            store.api("emotion-space","PUT",JSONObject().put("version",room.getInt("version")).put("theme",key)); refresh()
+        }}
+        Column(verticalArrangement=Arrangement.spacedBy(9.dp)) {
+            MemoryRoom(theme,items,onEmptySlot={if(!busy) prepareRoomPlacement(it)}) {selected=it}
+            Row(Modifier.fillMaxWidth().padding(horizontal=3.dp),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
+                Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(5.dp)) {
+                    Icon(Icons.Outlined.TouchApp,null,Modifier.size(14.dp),tint=PrimaryDark)
+                    Text("轻点物件回看经历，点 ＋ 布置空位",fontSize=10.sp,color=TextSecondary)
+                }
+                Text(style.title,color=PrimaryDark,fontSize=10.sp)
             }
         }
-        val items=(room.optJSONArray("items")?:JSONArray()).objects()
-        MemoryRoom(room.optString("theme","study"),items) { selected=it }
-        Button(onClick={placement=JSONObject().put("source_type","diary").put("source_id","").put("kind","book").put("slot",firstFree()).put("title","").put("description","")},enabled=!busy) {Text("放入一段经历")}
+        Button(onClick={prepareRoomPlacement()},enabled=!busy,modifier=Modifier.fillMaxWidth().height(49.dp),
+            shape=RoundedCornerShape(16.dp),colors=ButtonDefaults.buttonColors(containerColor=PrimaryVariant,contentColor=Color.White)) {
+            Icon(Icons.Outlined.Add,null,Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text("放入一段经历",fontSize=14.sp,fontWeight=FontWeight.SemiBold)
+        }
         var choices by remember {mutableStateOf(JSONObject().put("diary_ids",JSONArray()))}
-        Text("选一至五篇日记，让 AI 提出摆放草稿",style=MaterialTheme.typography.titleMedium)
-        MaterialChoices(choices) {key,v->choices=JSONObject(choices.toString()).put(key,v)}
-        OutlinedButton(onClick={task {
-            val answer=store.api("emotion-space/suggest","POST",choices) as JSONObject
-            proposals=answer.getJSONArray("items").objects()
-        }},enabled=!busy&&(choices.optJSONArray("diary_ids")?.length()?:0)>0) {Text("推荐摆放（不会自动保存）")}
-        for(p in proposals) Card {Column(Modifier.padding(14.dp)) {
-            Text("${p.optString("title")} · 位置 ${p.optInt("slot")+1}"); Text(p.optString("description"))
-            TextButton(onClick={placement=JSONObject(p.toString()).put("source_type","diary").put("source_id",p.getLong("diary_id").toString())}) {Text("编辑并确认放入")}
-        }}
-        Text("物品列表",style=MaterialTheme.typography.titleMedium)
-        for(item in items) OutlinedButton(onClick={selected=item},modifier=Modifier.fillMaxWidth()) {Text("位置 ${item.getInt("slot")+1} · ${item.optString("title").ifBlank{item.getString("kind")}}")}
-        OutlinedButton(onClick={task {refresh()}},enabled=!busy) {Text("刷新空间")}
+        var suggestExpanded by remember {mutableStateOf(false)}
+        val choiceCount=choices.optJSONArray("diary_ids")?.length()?:0
+        RoomPanel {
+            Row(Modifier.fillMaxWidth().clickable {suggestExpanded=!suggestExpanded},verticalAlignment=Alignment.CenterVertically) {
+                Box(Modifier.weight(1f)) {RoomHeading("让回忆找到合适的位置","选择 1—5 篇日记，获取摆放灵感",Icons.Outlined.AutoAwesome)}
+                Icon(if(suggestExpanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,"展开摆放灵感",tint=PrimaryDark)
+            }
+            if(suggestExpanded) {
+                if(materials.isEmpty()) Text("还没有可选的日记，先去记录一段经历吧。",color=TextSecondary,fontSize=12.sp)
+                else MaterialChoices(choices) {key,v->choices=JSONObject(choices.toString()).put(key,v)}
+                OutlinedButton(onClick={task {
+                    val answer=store.api("emotion-space/suggest","POST",choices) as JSONObject
+                    proposals=answer.getJSONArray("items").objects()
+                }},enabled=!busy&&choiceCount>0,modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(12.dp)) {
+                    Icon(Icons.Outlined.AutoAwesome,null,Modifier.size(17.dp)); Spacer(Modifier.width(6.dp)); Text(if(choiceCount==0) "选择日记后获取灵感" else "为 $choiceCount 篇日记推荐摆放",fontSize=12.sp)
+                }
+                Text("推荐是草稿，确认后才会放入房间。",color=TextSecondary,fontSize=11.sp)
+            }
+            for(p in proposals) Surface(color=Color(0xFFF0F8F2),shape=RoundedCornerShape(14.dp)) {
+                Column(Modifier.fillMaxWidth().padding(14.dp),verticalArrangement=Arrangement.spacedBy(7.dp)) {
+                    Text(p.optString("title"),color=TextPrimary,fontSize=14.sp,fontWeight=FontWeight.SemiBold)
+                    Text("位置 ${p.optInt("slot")+1} · ${p.optString("description")}",color=TextSecondary,fontSize=12.sp,lineHeight=19.sp)
+                    TextButton(onClick={placement=JSONObject(p.toString()).put("source_type","diary").put("source_id",p.getLong("diary_id").toString())},enabled=!busy) {Text("编辑并确认放入",fontSize=12.sp)}
+                }
+            }
+        }
+        RoomPanel {
+            RoomHeading("房间里的收藏","每一件物品，都连着一段自己的故事",Icons.Outlined.Bookmarks,"${items.size} 件")
+            if(items.isEmpty()) Column(Modifier.fillMaxWidth().padding(vertical=13.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Outlined.Inventory2,null,Modifier.size(31.dp),tint=PrimaryVariant)
+                Text("第一段回忆，等你安放",color=TextPrimary,fontSize=14.sp)
+                Text("把喜欢的日记、照片或声音放进房间。",color=TextSecondary,fontSize=11.sp)
+            }
+            for(item in items.sortedBy {it.optInt("slot")}) {
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0xFFF5F9F5))
+                    .clickable {selected=item}.padding(12.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(11.dp)) {
+                    Box(Modifier.size(39.dp).clip(RoundedCornerShape(12.dp)).background(style.wall),contentAlignment=Alignment.Center) {
+                        Icon(roomItemIcon(item.optString("kind")),null,Modifier.size(22.dp),tint=style.accent)
+                    }
+                    Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                        Text(item.optString("title").ifBlank {roomItemName(item.optString("kind"))},color=TextPrimary,fontSize=13.sp,fontWeight=FontWeight.Medium,maxLines=1,overflow=TextOverflow.Ellipsis)
+                        Text("${roomItemName(item.optString("kind"))} · 位置 ${item.optInt("slot")+1}",color=TextSecondary,fontSize=10.sp)
+                    }
+                    Icon(Icons.Outlined.ChevronRight,"查看收藏",Modifier.size(18.dp),tint=PrimaryDark)
+                }
+            }
+        }
+        Text("让经历有处安放，让心情慢慢舒展。",color=TextSecondary,fontSize=11.sp,
+            modifier=Modifier.fillMaxWidth().padding(vertical=6.dp),textAlign=androidx.compose.ui.text.style.TextAlign.Center)
     }
 
     @Composable private fun ItemDialog(item:JSONObject) {
-        AlertDialog(onDismissRequest={selected=null},title={Text(item.optString("title","一段经历"))},text={Column(Modifier.heightIn(max=320.dp).verticalScroll(rememberScrollState())) {
+        AlertDialog(onDismissRequest={selected=null},title={Text(item.optString("title","一段经历"))},text={Column(Modifier.heightIn(max=320.dp).pageVerticalScroll(rememberScrollState())) {
             if(item.optBoolean("missing")) Text("来源已删除，可移除这个物品。")
             else {
                 Text(item.optString("description"))
@@ -404,7 +488,7 @@ class MemoryActivity : ComponentActivity() {
     @Composable private fun PlacementDialog(initial:JSONObject) {
         var edit by remember(initial) {mutableStateOf(JSONObject(initial.toString()))}
         fun changeItem(key:String,value:Any) { edit=JSONObject(edit.toString()).put(key,value) }
-        AlertDialog(onDismissRequest={placement=null},title={Text("布置一件物品")},text={Column(Modifier.heightIn(max=440.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+        AlertDialog(onDismissRequest={placement=null},title={Text("布置一件物品")},text={Column(Modifier.heightIn(max=440.dp).pageVerticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)) {
             if(message.isNotEmpty()) Text(message,color=MaterialTheme.colorScheme.error)
             OutlinedTextField(edit.optString("title"),{changeItem("title",it)},label={Text("你给它的名字")})
             OutlinedTextField(edit.optString("description"),{changeItem("description",it)},label={Text("想留下的话")})

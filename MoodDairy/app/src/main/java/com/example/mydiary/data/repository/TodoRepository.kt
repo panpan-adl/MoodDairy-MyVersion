@@ -18,6 +18,15 @@ class TodoRepository @Inject constructor(
     private val apiService: DiaryApiService
 ) {
 
+    fun getDatesWithTodos(userId: Long, year: Int, month: Int): Flow<ApiResult<List<LocalDate>>> = flow {
+        emit(ApiResult.Loading)
+        when (val result = SafeApiCall.execute { apiService.getDatesWithTodos(userId, year, month) }) {
+            is ApiResult.Success -> emit(ApiResult.Success(result.data.map(LocalDate::parse)))
+            is ApiResult.Error -> emit(result)
+            ApiResult.Loading -> Unit
+        }
+    }
+
     fun getTodosByDate(
         userId: Long,
         date: LocalDate

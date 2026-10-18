@@ -1,14 +1,18 @@
 package com.example.mydiary.ui.agent
 
+import com.example.mydiary.ui.components.PageLazyColumn
+
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -19,6 +23,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -45,7 +53,6 @@ private enum class TodaySection(val title: String, val icon: ImageVector) {
     REVIEW("晚间复盘", Icons.Outlined.NightsStay)
 }
 internal data class TodayActions(
-    val history: () -> Unit = {}, val toggleHistorical: (AgentTask) -> Unit = {}, val bringToToday: (AgentTask) -> Unit = {},
     val refresh: () -> Unit = {}, val record: (String) -> Unit = {},
     val energy: (String) -> Unit = {}, val minutes: (Int) -> Unit = {},
     val generatePlan: () -> Unit = {}, val manualPlan: () -> Unit = {},
@@ -69,7 +76,6 @@ fun TodayScreen(onOpenAssistant: () -> Unit, onOpenRecords: () -> Unit, onOpenDi
     }
     LaunchedEffect(viewModel) { viewModel.refresh() }
     TodayDashboard(state, TodayActions(
-        history = viewModel::loadHistory, toggleHistorical = viewModel::toggleHistorical, bringToToday = viewModel::bringToToday,
         refresh = viewModel::refresh, record = viewModel::updateRecord, energy = viewModel::updateEnergy,
         minutes = viewModel::updateMinutes, generatePlan = viewModel::generatePlan,
         manualPlan = viewModel::manualPlan, editDraft = viewModel::editDraft, addDraft = viewModel::addDraft,
@@ -107,57 +113,32 @@ internal fun TodayDashboard(state: TodayState, actions: TodayActions, showTitle:
             recordScroll.animateScrollToItem(2 + if (notice != null) 1 else 0)
         }
     }
-    Column(Modifier.fillMaxSize().background(Brush.verticalGradient(
-        listOf(MintGreen.copy(alpha = 0.3f), PaleYellow.copy(alpha = 0.3f), SoftWhite)))) {
+    Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = if (showTitle) 12.dp else 0.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 if (showTitle) Text("今天", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                 val dateLabel = runCatching { LocalDate.parse(state.date).format(DateTimeFormatter.ofPattern("M月d日  EEEE", Locale.CHINA)) }.getOrDefault(state.date)
-                Text("$dateLabel · 理清安排，给心情留些余地", fontSize = 12.sp, color = TextSecondary)
+                Text(dateLabel, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = PrimaryDark)
             }
             IconButton(onClick = actions.refresh, enabled = !state.busy) { Icon(Icons.Outlined.Refresh, "刷新今日任务", tint = PrimaryDark) }
         }
-        Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp), shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)) {
-            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.WbSunny, null, tint = PrimaryVariant, modifier = Modifier.size(20.dp)); Spacer(Modifier.width(8.dp))
-                    Text("今日概览", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary); Spacer(Modifier.weight(1f))
-                    Text(if (state.tasks.isEmpty()) "从一件小事开始" else "$completed / ${state.tasks.size} 已完成", fontSize = 12.sp, color = TextSecondary)
-                }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    SummaryStat("待完成", (state.tasks.size - completed).toString(), "项")
-                    SummaryStat("已完成", completed.toString(), "项")
-                    SummaryStat("待办用时", remaining.toString(), "分钟")
-                }
-                LinearProgressIndicator(progress = { if (state.tasks.isEmpty()) 0f else completed.toFloat() / state.tasks.size },
-                    modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(4.dp)), color = PrimaryVariant, trackColor = MintGreen.copy(alpha = 0.2f))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    domainNames.forEach { (domain, label) ->
-                        val count = state.tasks.count { it.domain == domain && !it.isDone }
-                        Row(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(domainColor(domain).copy(alpha = 0.12f))
-                            .clickable { filter = domain; selected = TodaySection.TASKS }.padding(horizontal = 8.dp, vertical = 9.dp),
-                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                            Icon(domainIcon(domain), null, tint = domainColor(domain), modifier = Modifier.size(16.dp)); Spacer(Modifier.width(5.dp))
-                            Text("$label $count", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
-                        }
-                    }
-                }
-            }
+        TodayOverview(state, completed, remaining) { domain ->
+            filter = domain
+            selected = TodaySection.TASKS
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).clip(RoundedCornerShape(14.dp))
-            .background(Color.White.copy(alpha = 0.85f)).padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            .background(Color.White.copy(alpha = 0.8f)).selectableGroup().padding(4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             TodaySection.entries.forEach { section ->
                 val active = selected == section
-                Row(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(if (active) MintGreen.copy(alpha = 0.55f) else Color.Transparent)
+                Row(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(if (active) PrimaryDark else Color.Transparent)
                     .selectable(selected = active, role = Role.Tab, onClick = { selected = section }).padding(vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                    Icon(section.icon, null, tint = if (active) PrimaryDark else TextSecondary, modifier = Modifier.size(17.dp)); Spacer(Modifier.width(4.dp))
-                    Text(section.title, fontSize = 12.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal, color = if (active) TextPrimary else TextSecondary, maxLines = 1)
+                    Icon(section.icon, null, tint = if (active) Color.White else TextSecondary, modifier = Modifier.size(17.dp)); Spacer(Modifier.width(4.dp))
+                    Text(section.title, fontSize = 12.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal, color = if (active) Color.White else TextSecondary, maxLines = 1)
                 }
             }
         }
-        LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth(),
+        PageLazyColumn(modifier = Modifier.weight(1f).fillMaxWidth(),
             state = when (selected) { TodaySection.RECORD -> recordScroll; TodaySection.TASKS -> tasksScroll; TodaySection.REVIEW -> reviewScroll },
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             if (state.busy) item(key = "loading") { LinearProgressIndicator(Modifier.fillMaxWidth(), color = PrimaryVariant, trackColor = MintGreen.copy(alpha = 0.2f)) }
@@ -172,17 +153,17 @@ internal fun TodayDashboard(state: TodayState, actions: TodayActions, showTitle:
             when (selected) {
                 TodaySection.RECORD -> {
                     item(key = "record") {
-                        AgentPanel("随手记录", "写下今天的目标和待办，用于安排任务", Icons.Outlined.EditNote) {
+                        AgentPanel("随手记录", "把脑海里的待办，轻轻放在这里", Icons.Outlined.EditNote) {
                             AgentTextField(state.record, actions.record, "今天，我想……", enabled = !state.busy,
-                                placeholder = "例如：完成工作方案、复习英语，晚饭后散步。", minLines = 3)
+                                placeholder = "例如：完成工作方案、复习英语，晚饭后散步。", minLines = 2)
                         }
                     }
                     item(key = "planning") {
                         AgentPanel("安排今天", "按你的精力和时间，给出可以执行的下一步", Icons.Outlined.AutoAwesome) {
                             Text("现在的精力", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                listOf("low" to "有些疲惫", "normal" to "还不错", "high" to "精力充足").forEach { (value, label) ->
-                                    SelectionPill(label, state.energy == value, Modifier.weight(1f), enabled = !state.busy) { actions.energy(value) }
+                            Row(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                listOf("low" to "有些疲惫", "normal" to "还不错", "high" to "精力充足").forEachIndexed { index, (value, label) ->
+                                    EnergyOption(label, index + 1, state.energy == value, Modifier.weight(1f), !state.busy) { actions.energy(value) }
                                 }
                             }
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -192,16 +173,13 @@ internal fun TodayDashboard(state: TodayState, actions: TodayActions, showTitle:
                             Slider(state.availableMinutes.toFloat(), { actions.minutes((it.toInt() / 15 * 15).coerceIn(15, 480)) },
                                 valueRange = 15f..480f, steps = 30, enabled = !state.busy,
                                 colors = SliderDefaults.colors(thumbColor = PrimaryVariant, activeTrackColor = PrimaryVariant, inactiveTrackColor = MintGreen.copy(alpha = 0.3f)))
+                            TimeBudget(remaining, budget)
                             if (state.energy == "low") Text("精力低时先按最多 90 分钟安排，留出休息空间。", fontSize = 12.sp, color = TextSecondary)
                             PrimaryAction("生成今日计划", Icons.Outlined.AutoAwesome, canOperate && state.record.isNotBlank(), actions.generatePlan)
                             OutlinedButton(onClick = actions.manualPlan, enabled = canOperate && state.plan == null,
                                 modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryDark), border = BorderStroke(1.dp, MintGreen)) {
                                 Icon(Icons.Outlined.Add, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("手动添加任务")
-                            }
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                TextButton(onClick = actions.assistant, colors = ButtonDefaults.textButtonColors(contentColor = PrimaryDark)) { Text("和助手聊聊", fontSize = 12.sp) }
-                                TextButton(onClick = actions.records, colors = ButtonDefaults.textButtonColors(contentColor = PrimaryDark)) { Text("查看日记与日历", fontSize = 12.sp) }
                             }
                         }
                     }
@@ -293,21 +271,6 @@ internal fun TodayDashboard(state: TodayState, actions: TodayActions, showTitle:
                             }
                         }
                     }
-                    item(key = "historyEntry") {
-                        TextButton(onClick = actions.history, enabled = !state.busy) { Text("查看以往任务") }
-                    }
-                    if (state.historyLoaded && state.historicalTasks.isEmpty()) item { Text("还没有以往任务", color = TextSecondary) }
-                    if (state.historyLoaded) items(state.historicalTasks, key = { "history_${it.id}" }) { task ->
-                        AgentPanel {
-                            Text("${task.date} · ${domainNames[task.domain]}", color = TextSecondary, fontSize = 12.sp)
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Checkbox(task.isDone, { actions.toggleHistorical(task) }, enabled = !state.busy)
-                                Text(task.title, Modifier.weight(1f), color = TextPrimary)
-                            }
-                            if (task.nextStep.isNotBlank()) Text(task.nextStep, color = TextSecondary)
-                            if (!task.isDone) TextButton(onClick = { actions.bringToToday(task) }, enabled = !state.busy) { Text("安排到今天") }
-                        }
-                    }
                 }
                 TodaySection.REVIEW -> {
                     item(key = "reflection") {
@@ -343,19 +306,117 @@ internal fun TodayDashboard(state: TodayState, actions: TodayActions, showTitle:
 }
 
 @Composable
-private fun SummaryStat(label: String, value: String, unit: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text(value, fontSize = 23.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-            Spacer(Modifier.width(3.dp)); Text(unit, Modifier.padding(bottom = 3.dp), fontSize = 10.sp, color = TextSecondary)
+private fun TodayOverview(state: TodayState, completed: Int, remaining: Int, onDomain: (String) -> Unit) {
+    val progress by animateFloatAsState(
+        if (state.tasks.isEmpty()) 0f else completed.toFloat() / state.tasks.size, label = "todayProgress")
+    Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp), shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Color(0xFFDDEDE4))) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Box(Modifier.size(88.dp).semantics(mergeDescendants = true) {
+                    contentDescription = "今日完成进度，已完成 $completed 项，共 ${state.tasks.size} 项"
+                }, contentAlignment = Alignment.Center) {
+                    Canvas(Modifier.fillMaxSize().padding(5.dp)) {
+                        drawArc(Color(0xFFEDF5EF), -90f, 360f, false, style = Stroke(7.dp.toPx()))
+                        if (progress > 0f) drawArc(PrimaryVariant, -90f, 360f * progress, false,
+                            style = Stroke(7.dp.toPx(), cap = StrokeCap.Round))
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("${(progress * 100).toInt()}%", fontSize = 23.sp, fontWeight = FontWeight.Bold, color = PrimaryDark)
+                        Text("已完成", fontSize = 10.sp, color = TextSecondary)
+                    }
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Icon(Icons.Outlined.WbSunny, null, tint = Color(0xFFC49A51), modifier = Modifier.size(16.dp))
+                        Text("今日概览", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                    }
+                    Text(if (state.tasks.isEmpty()) "从一件小事开始" else "$completed / ${state.tasks.size} 已完成 · 按自己的节奏来",
+                        fontSize = 11.sp, color = TextSecondary)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                        SummaryStat("待完成", (state.tasks.size - completed).toString(), "项")
+                        SummaryStat("待办用时", remaining.toString(), "分钟")
+                    }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                domainNames.forEach { (domain, label) ->
+                    val count = state.tasks.count { it.domain == domain && !it.isDone }
+                    val total = state.tasks.count { !it.isDone }.coerceAtLeast(1)
+                    Column(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(domainColor(domain).copy(alpha = 0.09f))
+                        .clickable { onDomain(domain) }.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(domainIcon(domain), null, tint = domainColor(domain), modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(label, fontSize = 11.sp, color = TextPrimary)
+                            Spacer(Modifier.weight(1f))
+                            Text("$count", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        }
+                        LinearProgressIndicator(progress = { count.toFloat() / total },
+                            modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(3.dp)),
+                            color = domainColor(domain), trackColor = domainColor(domain).copy(alpha = 0.1f), gapSize = 0.dp,
+                            drawStopIndicator = {})
+                    }
+                }
+            }
         }
-        Text(label, fontSize = 11.sp, color = TextSecondary)
     }
 }
+
+@Composable
+private fun SummaryStat(label: String, value: String, unit: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(value, fontSize = 21.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+            Spacer(Modifier.width(3.dp))
+            Text(unit, Modifier.padding(bottom = 3.dp), fontSize = 10.sp, color = TextSecondary)
+        }
+        Text(label, fontSize = 10.sp, color = TextSecondary)
+    }
+}
+
+@Composable
+private fun EnergyOption(label: String, level: Int, selected: Boolean, modifier: Modifier, enabled: Boolean, onClick: () -> Unit) {
+    val accent = when (level) { 1 -> Color(0xFF819BB5); 2 -> Color(0xFFB2955D); else -> PrimaryDark }
+    Surface(modifier.selectable(selected, enabled = enabled, role = Role.RadioButton, onClick = onClick),
+        shape = RoundedCornerShape(14.dp), color = if (selected) accent.copy(alpha = 0.09f) else SoftWhite,
+        border = BorderStroke(1.dp, if (selected) accent.copy(alpha = 0.55f) else Color(0xFFE8EEEA))) {
+        Column(Modifier.padding(vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.Bottom) {
+                repeat(3) { index ->
+                    Box(Modifier.width(8.dp).height((9 + index * 5).dp).clip(RoundedCornerShape(2.dp))
+                        .background(if (index < level) accent.copy(alpha = if (enabled) 0.85f else 0.3f) else accent.copy(alpha = 0.12f)))
+                }
+            }
+            Text(label, fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                color = if (!enabled) TextDisabled else if (selected) accent else TextSecondary)
+        }
+    }
+}
+
+@Composable
+private fun TimeBudget(remaining: Int, budget: Int) {
+    val overBudget = remaining > budget
+    val accent = if (overBudget) Color(0xFFB17A48) else PrimaryVariant
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFFF3F8F5)).padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Schedule, null, tint = accent, modifier = Modifier.size(15.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("已有待办 $remaining 分钟", Modifier.weight(1f), fontSize = 11.sp, color = TextPrimary)
+            Text(if (overBudget) "超出 ${remaining - budget} 分钟" else "余量 ${budget - remaining} 分钟", fontSize = 11.sp, color = accent)
+        }
+        LinearProgressIndicator(progress = { (remaining.toFloat() / budget.coerceAtLeast(1)).coerceIn(0f, 1f) },
+            modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(4.dp)),
+            color = accent, trackColor = Color(0xFFE2EEE6), gapSize = 0.dp, drawStopIndicator = {})
+    }
+}
+
 @Composable
 private fun AgentPanel(title: String? = null, subtitle: String? = null, icon: ImageVector? = null, content: @Composable ColumnScope.() -> Unit) {
-    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)) {
+    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, Color(0xFFE4EEE8)), elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (title != null) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -370,7 +431,6 @@ private fun AgentPanel(title: String? = null, subtitle: String? = null, icon: Im
                         if (subtitle != null) Text(subtitle, fontSize = 11.sp, lineHeight = 17.sp, color = TextSecondary)
                     }
                 }
-                HorizontalDivider(color = DividerColor)
             }
             content()
         }
@@ -379,7 +439,7 @@ private fun AgentPanel(title: String? = null, subtitle: String? = null, icon: Im
 @Composable
 private fun PrimaryAction(label: String, icon: ImageVector, enabled: Boolean, onClick: () -> Unit) {
     Button(onClick, enabled = enabled, modifier = Modifier.fillMaxWidth().heightIn(min = 46.dp), shape = RoundedCornerShape(12.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = MintGreen, contentColor = TextPrimary)) {
+        colors = ButtonDefaults.buttonColors(containerColor = PrimaryDark, contentColor = Color.White)) {
         Icon(icon, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(label, fontSize = 14.sp, fontWeight = FontWeight.Medium)
     }
 }

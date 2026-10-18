@@ -1,5 +1,7 @@
 package com.example.mydiary.ui.vip
 
+import com.example.mydiary.ui.components.pageVerticalScroll
+
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -17,7 +19,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
@@ -213,7 +214,7 @@ fun RechargeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
+                .pageVerticalScroll(rememberScrollState())
                 .background(Color(0xFFF8F8FA)),
         ) {
             val bound = status?.bound == true

@@ -106,7 +106,9 @@ class MultimodalInsightService:
         responses: List[DiaryMultimodalInsightResponse] = []
         for diary in diaries:
             if diary.multimodal_insight is None:
-                responses.append(await self._analyze_diary_entity(diary, persist=True))
+                # A portrait is a read: derive missing insights from the eagerly
+                # loaded data without a SELECT FOR UPDATE and flush per diary.
+                responses.append(await self._analyze_diary_entity(diary))
             else:
                 responses.append(
                     DiaryMultimodalInsightResponse(

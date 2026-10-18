@@ -17,6 +17,11 @@ from .tikhub_provider import SocialSearchError, TikHubProvider
 logger = logging.getLogger(__name__)
 
 
+def search_platform_timeout_seconds() -> float:
+    """A wall-clock limit, unlike HTTPX's independent per-network-phase deadlines."""
+    return min(45.0, max(1.0, float(settings.tikhub_timeout_seconds)))
+
+
 class TokenBucket:
     """Simple token bucket rate limiter."""
 
@@ -119,8 +124,11 @@ class SocialSearchClient:
 
         async def _run_one(coro):
             try:
-                res = await coro
+                res = await asyncio.wait_for(coro, timeout=search_platform_timeout_seconds())
                 return res.items
+            except asyncio.TimeoutError:
+                errors.append(SocialSearchError("搜索平台响应超时，请换个平台或稍后重新搜索", code="SEARCH_TIMEOUT"))
+                return []
             except SocialSearchError as e:
                 errors.append(e)
                 return []
@@ -128,10 +136,14 @@ class SocialSearchClient:
                 errors.append(SocialSearchError("平台搜索暂时失败，请稍后重试", code="PROVIDER_ERROR"))
                 return []
 
-        for target in targets:
-            method = provider_methods.get(target)
-            if method is not None:
-                results.extend(await _run_one(method(keyword, limit)))
+        # The confirmed auto search has at most two calls. Run them concurrently so
+        # one slow platform cannot consume the other platform's entire budget.
+        batches = await asyncio.gather(*[
+            _run_one(provider_methods[target](keyword, limit))
+            for target in targets if target in provider_methods
+        ])
+        for batch in batches:
+            results.extend(batch)
 
         # 余额不足：不兜底 mock，直接上抛（前端引导用户真实充值）
         if not results and errors:

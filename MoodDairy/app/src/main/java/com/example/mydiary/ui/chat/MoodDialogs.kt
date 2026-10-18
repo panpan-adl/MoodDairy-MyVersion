@@ -1,5 +1,7 @@
 package com.example.mydiary.ui.chat
 
+import com.example.mydiary.ui.components.pageVerticalScroll
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -7,7 +9,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -55,7 +56,7 @@ private fun MoodDialog(
             ) {
                 val stackActions = maxWidth < 320.dp || fontScale > 1.2f
                 Column(
-                    Modifier.verticalScroll(rememberScrollState()).padding(24.dp),
+                    Modifier.pageVerticalScroll(rememberScrollState()).padding(24.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     Text(title, color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)

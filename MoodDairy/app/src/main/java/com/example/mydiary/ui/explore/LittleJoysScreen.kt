@@ -1,10 +1,11 @@
 package com.example.mydiary.ui.explore
 
+import com.example.mydiary.ui.components.PageLazyColumn
+
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -95,7 +96,7 @@ fun LittleJoysScreen(
                 .background(joyGradient)
                 .padding(paddingValues)
         ) {
-            if (uiState.isLoading) {
+            if (uiState.isLoadingLittleJoys) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -108,7 +109,7 @@ fun LittleJoysScreen(
             } else if (uiState.littleJoyDiaries.isEmpty()) {
                 EmptyLittleJoysState()
             } else {
-                LazyColumn(
+                PageLazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(horizontal = 16.dp),

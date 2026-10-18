@@ -35,9 +35,15 @@ class Live2DView @JvmOverloads constructor(
     private val live2DManager = Live2DManager(context)
     private var renderer: Live2DRenderer? = null
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val loadGate = ModelLoadGate()
+
+    private fun queueWhileActive(action: () -> Unit) {
+        if (!loadGate.released) queueEvent { if (!loadGate.released) action() }
+    }
     
     /** 双击切换模型后在主线程回调新模型路径 */
     var onModelSwitched: ((String) -> Unit)? = null
+    var onModelError: ((String) -> Unit)? = null
     
     /** 渲染透明度（用于淡入淡出效果）*/
     @Volatile
@@ -51,7 +57,7 @@ class Live2DView @JvmOverloads constructor(
         super.onWindowVisibilityChanged(visibility)
         // Visibility does not invalidate textures. Actual context loss is handled
         // exclusively by onSurfaceCreated/onSurfaceRecreated on the GL thread.
-        renderer?.isRenderingEnabled = visibility == View.VISIBLE
+        renderer?.isRenderingEnabled = visibility == View.VISIBLE && !loadGate.released
     }
 
     override fun onDetachedFromWindow() {
@@ -81,7 +87,7 @@ class Live2DView @JvmOverloads constructor(
         val path = live2DManager.currentModel
         if (!path.isNullOrBlank()) {
             Log.d(TAG, "Surface 重新创建，刷新模型: $path")
-            queueEvent {
+            queueWhileActive {
                 live2DManager.loadModel(path)
                 performModelRendering("onSurfaceRecreated")
             }
@@ -116,17 +122,18 @@ class Live2DView @JvmOverloads constructor(
     /**
      * 加载模型
      */
-    fun loadModel(modelPath: String) {
+    fun loadModel(modelPath: String, onLoaded: (() -> Unit)? = null, onError: ((String) -> Unit)? = null) {
+        val token = loadGate.next() ?: return
         Log.d(TAG, "loadModel 被调用: $modelPath, 当前模型: ${live2DManager.currentModel}")
         queueEvent {
-            Log.d(TAG, "开始加载模型（OpenGL 线程）: $modelPath")
-
-            val success = live2DManager.loadModel(modelPath)
-            if (success) {
-                Log.d(TAG, "模型加载成功: $modelPath")
+            if (!loadGate.accepts(token)) return@queueEvent
+            try {
+                check(live2DManager.loadModel(modelPath)) { "模型加载失败" }
                 performModelRendering("加载模型")
-            } else {
-                Log.e(TAG, "模型加载失败: $modelPath")
+                mainHandler.post { if (loadGate.accepts(token)) onLoaded?.invoke() }
+            } catch (e: Exception) {
+                Log.e(TAG, "模型加载失败: $modelPath", e)
+                mainHandler.post { if (loadGate.accepts(token)) onError?.invoke("形象暂时无法加载，请重试") }
             }
         }
     }
@@ -135,8 +142,11 @@ class Live2DView @JvmOverloads constructor(
      * 切换为下一个模型，完成后在主线程回调新模型路径
      */
     fun switchModel(onSwitched: ((String) -> Unit)? = null) {
+        val token = loadGate.next() ?: return
         Log.d(TAG, "switchModel 被调用，当前模型: ${live2DManager.currentModel}")
         queueEvent {
+            if (!loadGate.accepts(token)) return@queueEvent
+            try {
             Log.d(TAG, "开始切换模型（OpenGL 线程），当前模型: ${live2DManager.currentModel}")
             live2DManager.switchModel()
             val newPath = live2DManager.currentModel
@@ -144,8 +154,15 @@ class Live2DView @JvmOverloads constructor(
             performModelRendering("切换模型")
             if (newPath != null) {
                 mainHandler.post {
+                    if (!loadGate.accepts(token)) return@post
                     onSwitched?.invoke(newPath)
                     this@Live2DView.onModelSwitched?.invoke(newPath)
+                }
+            }
+            } catch (e: Exception) {
+                Log.e(TAG, "切换形象失败", e)
+                mainHandler.post {
+                    if (loadGate.accepts(token)) onModelError?.invoke("形象暂时无法加载，请重试")
                 }
             }
         }
@@ -177,7 +194,7 @@ class Live2DView @JvmOverloads constructor(
                     }
                 }
                 
-                queueEvent {
+                queueWhileActive {
                     val normalizedX = (x / viewWidth) * 2.0f - 1.0f
                     val normalizedY = 1.0f - (y / viewHeight) * 2.0f
                     live2DManager.updateEyeBallTracking(normalizedX, normalizedY)
@@ -189,7 +206,7 @@ class Live2DView @JvmOverloads constructor(
                 return true
             }
             MotionEvent.ACTION_UP -> {
-                queueEvent {
+                queueWhileActive {
                     live2DManager.updateEyeBallTracking(0.0f, 0.0f)
                 }
                 return true
@@ -216,6 +233,10 @@ class Live2DView @JvmOverloads constructor(
     fun getRenderAlpha(): Float = renderAlpha
     
     fun release() {
+        if (!loadGate.release()) return
+        onModelSwitched = null
+        onModelError = null
+        live2DManager.onTextDisplay = null
         // 立即禁用渲染，使视图变透明（不等待 queueEvent 执行）
         renderer?.isRenderingEnabled = false
         queueEvent {
@@ -278,9 +299,6 @@ class Live2DRenderer(
      * 注意：此方法应在 OpenGL 线程中调用
      */
     fun clearBuffers() {
-        // Restore write masks before clearing: Cubism clipping changes GL state.
-        GLES20.glDisable(GLES20.GL_SCISSOR_TEST)
-        GLES20.glColorMask(true, true, true, true)
         GLES20.glClearColor(0f, 0f, 0f, 0f) // 透明，使页面背景透出
         GLES20.glClearDepthf(1.0f)
         GLES20.glDepthMask(true)
@@ -324,8 +342,7 @@ class Live2DRenderer(
         
         // 初始化 Live2D SDK
         live2DManager.initializeSDK()
-        // Shader program IDs cannot cross EGL contexts, including a recreated
-        // context on the same GL thread.
+        // Shader handles belong to the current EGL context.
         com.live2d.sdk.cubism.framework.rendering.android.CubismRendererAndroid.reloadShader()
         
         // 标记 OpenGL 上下文已就绪（必须在 initializeSDK 之后）

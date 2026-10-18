@@ -213,6 +213,15 @@ MAX_AGENT_ITERATIONS = 6
 TOOL_EXECUTION_TIMEOUT_SECONDS = 20
 
 
+def tool_execution_timeout_seconds(tool_name: str) -> float:
+    if tool_name == "search_social_content":
+        from app.services.social_search.client import search_platform_timeout_seconds
+        # Both platforms run in parallel. Allow ownership/key lookup and DB writes
+        # outside their bounded provider calls without changing other tool limits.
+        return max(TOOL_EXECUTION_TIMEOUT_SECONDS, search_platform_timeout_seconds() + 10)
+    return TOOL_EXECUTION_TIMEOUT_SECONDS
+
+
 class DiarySummarySimple(BaseModel):
     """Compact diary summary payload used by chat."""
 
@@ -475,7 +484,7 @@ async def _handle_confirmation_turn(request: ChatRequest, db: AsyncSession):
                 user_message=plan.request_message,
                 charge_confirmed=plan.tool == "search_social_content",
             ),
-            timeout=TOOL_EXECUTION_TIMEOUT_SECONDS,
+            timeout=tool_execution_timeout_seconds(plan.tool),
         )
     except asyncio.TimeoutError:
         await plan_store.mark_failed(
@@ -484,7 +493,8 @@ async def _handle_confirmation_turn(request: ChatRequest, db: AsyncSession):
             error_code="TOOL_TIMEOUT",
             error_message="tool execution timed out",
         )
-        message = "工具执行超时，请稍后重试。"
+        message = ("搜索服务响应超时，本次不会自动重复搜索。请稍后重新发起，或指定其他平台。"
+                   if plan.tool == "search_social_content" else "工具执行超时，请稍后重试。")
         yield {
             "type": "tool_result",
             "plan_id": plan.plan_id,
@@ -605,7 +615,7 @@ async def _handle_companion_search(request: ChatRequest, db: AsyncSession, argum
             tool_name="search_social_content", arguments=arguments, db=db,
             user_id=request.user_id, conversation_id=request.conversation_id,
             user_message=request.message, charge_confirmed=True, companion_search=True,
-        ), timeout=TOOL_EXECUTION_TIMEOUT_SECONDS)
+        ), timeout=tool_execution_timeout_seconds("search_social_content"))
         items = result.data.get("items", []) if result.ok else []
         ok = result.ok
     except Exception:
@@ -973,7 +983,7 @@ async def _handle_agent_turn(request: ChatRequest, db: AsyncSession):
                         conversation_id=request.conversation_id,
                         user_message=request.message or "",
                     ),
-                    timeout=TOOL_EXECUTION_TIMEOUT_SECONDS,
+                    timeout=tool_execution_timeout_seconds(tool_name),
                 )
             except asyncio.TimeoutError:
                 message = f"工具 {tool_name} 执行超时，请稍后再试。"

@@ -1,5 +1,7 @@
 ﻿package com.example.mydiary.ui.search
 
+import com.example.mydiary.ui.components.PageLazyColumn
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -9,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -124,7 +125,7 @@ fun DiarySearchScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                LazyColumn(
+                PageLazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(uiState.results) { diary ->

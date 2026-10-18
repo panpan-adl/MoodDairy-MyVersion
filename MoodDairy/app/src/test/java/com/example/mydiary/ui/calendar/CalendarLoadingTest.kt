@@ -15,12 +15,42 @@ import java.time.LocalDate
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CalendarLoadingTest {
-    private fun model(diaries: DiaryRepository): CalendarViewModel {
+    private fun model(diaries: DiaryRepository, todos: TodoRepository = mockk()): CalendarViewModel {
         val user = mockk<UserRepository>()
-        val todos = mockk<TodoRepository>()
+        every { todos.getDatesWithTodos(any(), any(), any()) } returns flowOf(ApiResult.Success(emptyList()))
         every { user.getCurrentUserId() } returns 1L
         every { todos.getTodosByDate(any(), any()) } returns flowOf(ApiResult.Success(emptyList()))
         return CalendarViewModel(diaries, todos, user)
+    }
+
+    @Test fun historicalTodosAppearByDateAndCompletionUpdatesTheSharedTask() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val diaries = mockk<DiaryRepository>()
+            val todos = mockk<TodoRepository>()
+            val date = LocalDate.now().minusDays(1)
+            val todo = com.example.mydiary.data.models.TodoItem(7, 1, date, "【生活】做饭", null, true, 0, null, null)
+            every { diaries.getDatesWithDiary(any(), any(), any()) } returns flowOf(ApiResult.Success(emptyList()))
+            every { diaries.getAllDiariesByDate(any(), any()) } returns flowOf(ApiResult.Success(emptyList()))
+            val vm = model(diaries, todos)
+            every { todos.getDatesWithTodos(any(), any(), any()) } returns flowOf(ApiResult.Success(listOf(date)))
+            every { todos.getTodosByDate(1, date) } returns flowOf(ApiResult.Success(listOf(todo)))
+            vm.refreshRecords()
+            vm.selectDate(date)
+            advanceUntilIdle()
+            assertEquals(setOf(date), vm.uiState.value.datesWithTodos)
+            assertEquals(listOf(todo), vm.uiState.value.selectedDateTodos)
+            every { todos.updateTodo(7, 1, isDone = false) } returns flowOf(ApiResult.Success(todo.copy(isDone = false)))
+            every { todos.getTodosByDate(1, date) } returns flowOf(ApiResult.Success(listOf(todo.copy(isDone = false))))
+            vm.toggleTodoDone(todo)
+            advanceUntilIdle()
+            verify(exactly = 1) { todos.updateTodo(7, 1, isDone = false) }
+            assertFalse(vm.uiState.value.selectedDateTodos.single().isDone)
+            vm.selectDate(date.minusDays(1))
+            runCurrent()
+            assertTrue(vm.uiState.value.selectedDateTodos.isEmpty())
+            advanceUntilIdle()
+        } finally { Dispatchers.resetMain() }
     }
 
     @Test fun stalledServiceStopsBothSpinnersAndRetryRecovers() = runTest {
@@ -59,6 +89,53 @@ class CalendarLoadingTest {
         attempts = 0
         calendarRead<Int> { attempts++; flowOf(ApiResult.Error(401, "unauthorized")) }
         assertEquals(1, attempts)
+    }
+
+    @Test fun healthySlowReadIsNotCancelledAfterFiveSeconds() = runTest {
+        var attempts = 0
+        val result = calendarRead {
+            attempts++
+            flow { emit(ApiResult.Loading); delay(7_000); emit(ApiResult.Success(42)) }
+        }
+        assertEquals(ApiResult.Success(42), result)
+        assertEquals(1, attempts)
+    }
+
+    @Test fun foregroundRecoveryReloadsFailedReadsAndStopsAfterSuccess() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val diaries = mockk<DiaryRepository>()
+            val date = LocalDate.now()
+            every { diaries.getDatesWithDiary(any(), any(), any()) } returns flowOf(ApiResult.Error(-1, "restarting"))
+            every { diaries.getAllDiariesByDate(any(), any()) } returns flowOf(ApiResult.Error(503, "restarting"))
+            val vm = model(diaries)
+            vm.selectDate(date); advanceUntilIdle()
+            assertNotNull(vm.uiState.value.calendarLoadError)
+            assertNotNull(vm.uiState.value.diaryLoadError)
+            every { diaries.getDatesWithDiary(any(), any(), any()) } returns flowOf(ApiResult.Success(listOf(date)))
+            every { diaries.getAllDiariesByDate(any(), any()) } returns flowOf(ApiResult.Success(emptyList()))
+            vm.retryFailedReads(); advanceUntilIdle()
+            assertNull(vm.uiState.value.calendarLoadError)
+            assertNull(vm.uiState.value.diaryLoadError)
+            assertEquals(setOf(date), vm.uiState.value.datesWithDiary)
+            clearMocks(diaries, answers = false)
+            vm.retryFailedReads(); advanceUntilIdle()
+            verify { diaries wasNot Called }
+        } finally { Dispatchers.resetMain() }
+    }
+
+    @Test fun foregroundRecoveryDoesNotReplayAuthFailures() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val diaries = mockk<DiaryRepository>()
+            every { diaries.getDatesWithDiary(any(), any(), any()) } returns flowOf(ApiResult.Error(401, "unauthorized"))
+            every { diaries.getAllDiariesByDate(any(), any()) } returns flowOf(ApiResult.Error(403, "forbidden"))
+            val vm = model(diaries)
+            vm.selectDate(LocalDate.now()); advanceUntilIdle()
+            clearMocks(diaries, answers = false)
+            vm.retryFailedReads(); advanceUntilIdle()
+            verify { diaries wasNot Called }
+        } finally { Dispatchers.resetMain() }
     }
 
     @Test fun failedRefreshKeepsExistingRecordsAndMonthMarkers() = runTest {
