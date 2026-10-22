@@ -42,20 +42,21 @@ class SupportFlowInstrumentedTest {
             MyDiaryTheme { RelaxContent(RelaxMusicState(tracks = listOf(RelaxTrack("test", "测试歌曲", "虚构作者", "https://music.163.com/song?id=1"))), {}, {}) }
         } }
         compose.onNodeWithText("放松一下").assertExists()
-        compose.onNodeWithText("播放").assertExists()
+        compose.onNodeWithContentDescription("播放").assertExists()
         compose.onNodeWithText("白噪音").performClick()
-        compose.onNodeWithText("自然声音").assertExists()
+        compose.onNodeWithText("搜索雨声、鸟鸣、海浪…").assertExists()
         compose.onNodeWithText("音乐").performClick()
         compose.onNodeWithText("测试歌曲").assertExists()
     }
 
-    @Test fun planningKeepsHistoryAccessAndHasNoFocusAction() {
+    @Test fun emptyTasksReturnToPlanningAndHaveNoFocusAction() {
         var requested = false
         compose.activityRule.scenario.onActivity { activity -> activity.setContent {
-            MyDiaryTheme { TodayDashboard(TodayState(loaded = true), TodayActions(history = { requested = true })) }
+            MyDiaryTheme { TodayDashboard(TodayState(loaded = true), TodayActions(manualPlan = { requested = true })) }
         } }
         compose.onNodeWithText("今日任务").performClick()
-        compose.onNodeWithText("查看以往任务").performScrollTo().performClick()
+        compose.onNodeWithText("去安排今天").performScrollTo().performClick()
+        compose.onNodeWithText("手动添加任务").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(true, requested) }
         compose.onNodeWithText("开始专注").assertDoesNotExist()
     }

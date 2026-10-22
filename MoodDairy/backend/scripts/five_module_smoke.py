@@ -76,10 +76,13 @@ async def main():
                 return
             body = dict(date=str(today), record='仅用于验收：今天准备实验报告，想把安排理清楚。' + marker,
                         request_id=str(uuid4()))
-            record = await check('expression', 'quick record saves diary', 'POST', '/agent/record', json=body)
-            await check('expression', 'quick record retry is idempotent', 'POST', '/agent/record', json=body,
-                        validate=lambda r: record is not None and r.json() == record.json())
-            did = record.json()['diary_id'] if record else None
+            await check('expression', 'retired quick record endpoint explains replacement',
+                        'POST', '/agent/record', (410,), json=body)
+            # Task planning no longer writes diaries. Exercise the actual editor API.
+            record = await check('expression', 'editor saves diary', 'POST', '/diaries/', (201,),
+                                 json=dict(user_id=uid, diary_date=str(today),
+                                           title='模块验收日记', content=body['record']))
+            did = record.json()['id'] if record else None
             if did:
                 await check('expression', 'saved diary decrypts correctly', 'GET', f'/diaries/id/{did}',
                             validate=lambda r: marker in r.json().get('content', ''))

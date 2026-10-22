@@ -86,7 +86,7 @@ class FunctionalUiInstrumentedTest {
                 activity.setContent {
                     MyDiaryTheme {
                         nav = rememberNavController()
-                        NavGraph(nav, Routes.CALENDAR, session)
+                        NavGraph(nav, Routes.CALENDAR, session, activity.relaxController)
                     }
                 }
             }

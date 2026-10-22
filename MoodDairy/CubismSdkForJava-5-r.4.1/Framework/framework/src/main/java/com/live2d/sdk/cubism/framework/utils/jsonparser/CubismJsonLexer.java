@@ -409,11 +409,14 @@ class CubismJsonLexer {
     /**
      * 文字列のトークン
      */
-    private static final CubismJsonToken STRING = new CubismJsonToken("");
+    // Payload tokens are mutated while lexing. Separate GL threads may load
+    // the floating companion and showcase simultaneously, so each lexer owns
+    // its payloads; only immutable punctuation tokens can be shared.
+    private final CubismJsonToken STRING = new CubismJsonToken("");
     /**
      * 数値のトークン
      */
-    private static final CubismJsonToken NUMBER = new CubismJsonToken(0.0);
+    private final CubismJsonToken NUMBER = new CubismJsonToken(0.0);
 
     /**
      * jsonChars配列の初期サイズ。

@@ -1,0 +1,54 @@
+{
+  "passed": true,
+  "samples": [
+    {
+      "case": "积极",
+      "source": "今天和朋友在公园散步，闻到桂花香，很开心。",
+      "review": "原文留下了“开心”这些感受。词语大小表示在这篇记录中的相对重要程度。",
+      "question": null,
+      "characters": 34,
+      "cached_read": true
+    },
+    {
+      "case": "疲惫",
+      "source": "今天赶完了实验报告，很累，回家只想安静躺一会儿。",
+      "review": "原文留下了“累”这些感受。词语大小表示在这篇记录中的相对重要程度。",
+      "question": null,
+      "characters": 33,
+      "cached_read": true
+    },
+    {
+      "case": "混合",
+      "source": "完成了机器学习实验报告，很有成就感，但想到明天答辩又有些担心。",
+      "review": "原文留下了“担心”这些感受。词语大小表示在这篇记录中的相对重要程度。",
+      "question": null,
+      "characters": 34,
+      "cached_read": true
+    },
+    {
+      "case": "短句",
+      "source": "烦。",
+      "review": "原文留下了“烦”这些感受。",
+      "question": null,
+      "characters": 13,
+      "cached_read": true
+    },
+    {
+      "case": "语音",
+      "source": "语音：今天练琴的时候卡了很久，最后弹顺了一小段。",
+      "review": "这篇记录没有明确的情绪表达，先把文字中的关键词留下，不替你判断心情。",
+      "question": null,
+      "characters": 34,
+      "cached_read": true
+    },
+    {
+      "case": "纯附件",
+      "source": "仅图片",
+      "review": null,
+      "question": null,
+      "characters": 0,
+      "cached_read": true
+    }
+  ],
+  "temporary_account_removed": true
+}

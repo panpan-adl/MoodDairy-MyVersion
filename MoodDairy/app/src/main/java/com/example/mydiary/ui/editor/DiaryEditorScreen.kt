@@ -463,22 +463,22 @@ fun DiaryEditorScreen(
     }
     
     Scaffold(
+        modifier = Modifier.background(LifeStyle.background),
         containerColor = Color.Transparent,
         topBar = {
-            // 顶部栏 - 绿色延伸到状态栏
+            // Let the shared page background continue through the header.
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Primary)
             ) {
-                // 状态栏占位（绿色背景）
+                // Preserve the status-bar inset without adding a solid color band.
                 Spacer(modifier = Modifier.statusBarsPadding())
                 
                 // 导航栏内容
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp)
+                        .height(56.dp)
                         .padding(horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -487,7 +487,7 @@ fun DiaryEditorScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回",
-                            tint = MaterialTheme.colorScheme.onPrimary
+                            tint = LifeStyle.ink
                         )
                     }
                     
@@ -495,8 +495,8 @@ fun DiaryEditorScreen(
                     Text(
                         text = formatDate(date),
                         fontSize = 18.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onPrimary,
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextPrimary,
                         modifier = Modifier.weight(1f)
                     )
                     
@@ -507,7 +507,7 @@ fun DiaryEditorScreen(
                         Icon(
                             imageVector = if (uiState.isHighlight) Icons.Filled.Lightbulb else Icons.Outlined.Lightbulb,
                             contentDescription = "高光时刻",
-                            tint = if (uiState.isHighlight) Color(0xFFFFD700) else MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
+                            tint = if (uiState.isHighlight) Color(0xFFAB7C37) else LifeStyle.mutedInk
                         )
                     }
                     
@@ -518,7 +518,7 @@ fun DiaryEditorScreen(
                         Icon(
                             imageVector = Icons.Outlined.Spa,
                             contentDescription = "小确幸",
-                            tint = if (uiState.isLittleJoy) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
+                            tint = if (uiState.isLittleJoy) LifeStyle.ink else LifeStyle.mutedInk
                         )
                     }
                     
@@ -531,13 +531,13 @@ fun DiaryEditorScreen(
                             CircularProgressIndicator(
                                 modifier = Modifier.size(24.dp),
                                 strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimary
+                                color = TextPrimary
                             )
                         } else {
                             Icon(
                                 imageVector = Icons.Default.Check,
                                 contentDescription = "保存",
-                                tint = MaterialTheme.colorScheme.onPrimary
+                                tint = LifeStyle.ink
                             )
                         }
                     }
@@ -564,15 +564,7 @@ fun DiaryEditorScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            MintGreen.copy(alpha = 0.3f),
-                            PaleYellow.copy(alpha = 0.3f),
-                            SoftWhite
-                        )
-                    )
-                )
+
         ) {
             Column(
                 modifier = Modifier

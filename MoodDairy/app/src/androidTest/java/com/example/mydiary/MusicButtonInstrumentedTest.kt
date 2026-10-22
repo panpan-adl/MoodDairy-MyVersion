@@ -6,7 +6,9 @@ import android.content.Intent
 import androidx.activity.compose.setContent
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.mydiary.ui.chat.ChatScreen
@@ -67,7 +69,7 @@ class MusicButtonInstrumentedTest {
                 ))
             }
             assertTrue(actions.isEmpty())
-            compose.onNodeWithText("听点音乐").performClick()
+            compose.onNodeWithText("听点音乐").performScrollTo().performClick()
             compose.waitUntil(5000) { actions.isNotEmpty() }
             assertEquals(listOf("open_relax"), actions.toList())
             assertTrue("The card must not start external playback", opened.isEmpty())
@@ -97,7 +99,7 @@ class MusicButtonInstrumentedTest {
             } }
             compose.waitForIdle()
             assertTrue(opened.isEmpty())
-            compose.onNodeWithText("播放").performClick()
+            compose.onNodeWithContentDescription("播放").performClick()
             assertEquals(listOf("qa"), selectedTracks.toList())
             assertTrue("Playback must stay inside the app", opened.isEmpty())
         } finally { instrumentation.removeMonitor(monitor) }

@@ -59,9 +59,18 @@ else:
 
 
 def extraction_queue_available() -> bool:
-    """Return whether the Celery runtime is available in this environment."""
+    """Require a reachable broker and a live worker, not just the Python package.
 
-    return CELERY_INSTALLED
+    Called from the dispatch thread so the bounded probe never delays saving.
+    """
+    if not CELERY_INSTALLED or celery_app is None:
+        return False
+    try:
+        with celery_app.connection_for_write(connect_timeout=1) as connection:
+            connection.ensure_connection(max_retries=0)
+        return bool(celery_app.control.inspect(timeout=1).ping())
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------------------

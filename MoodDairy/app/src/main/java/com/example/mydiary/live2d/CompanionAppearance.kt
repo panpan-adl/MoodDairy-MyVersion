@@ -35,6 +35,6 @@ object CompanionAppearance {
 @Composable
 fun rememberCompanionAppearance(): Live2DConfig.ModelInfo {
     val context = LocalContext.current
-    remember(context.applicationContext) { CompanionAppearance.initialize(context) }
+    LaunchedEffect(context.applicationContext) { CompanionAppearance.initialize(context) }
     return CompanionAppearance.current.collectAsState().value
 }

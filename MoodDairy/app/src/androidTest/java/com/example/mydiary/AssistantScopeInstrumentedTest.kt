@@ -30,7 +30,7 @@ class AssistantScopeInstrumentedTest {
         }
     }
 
-    @Test fun assistantOnlyPresenceTransientRecallAndBackgroundCleanup() {
+    @Test fun assistantOnlyPresenceRejectsStaleRecallAndBackgroundCleanup() {
         val original = PetOverlayService.enabled.value
         try {
             compose.onNodeWithText("助手").performClick()
@@ -42,17 +42,17 @@ class AssistantScopeInstrumentedTest {
             compose.onNodeWithText("记录").performClick()
             awaitVisible(false)
             assertSame("Changing tabs must keep the listening host alive", originalService, service())
-            // Exercise the appearance transition after recognition; this does not assert real mic recognition.
+            // A delayed callback from an old voice session must not reveal the
+            // companion after leaving the assistant page.
             compose.runOnIdle {
                 PetOverlayService::class.java.getDeclaredMethod("revealForInteraction").apply { isAccessible = true }.invoke(service())
             }
-            awaitVisible(true)
-            Thread.sleep(6000)
+            compose.waitForIdle()
+            awaitVisible(false)
             compose.runOnIdle {
                 PetOverlayService::class.java.getDeclaredMethod("maybeStartWakeListening").apply { isAccessible = true }.invoke(service())
             }
-            // Rearming recognition after silence must not extend the appearance window.
-            awaitVisible(false, 7000)
+            awaitVisible(false)
             compose.onNodeWithText("助手").performClick()
             awaitVisible(true)
             val view = root()

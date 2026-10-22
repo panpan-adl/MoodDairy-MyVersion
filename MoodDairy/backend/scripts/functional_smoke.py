@@ -1,17 +1,22 @@
 """Authenticated functional smoke test. Uses a dedicated QA account and removes its diary/todo."""
 import io
+import asyncio
 import json
 import os
 import time
 import uuid
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import requests
 from PIL import Image
 
-BASE = os.getenv("SMOKE_BASE_URL", "http://127.0.0.1:8001").rstrip("/")
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+BASE = os.getenv("SMOKE_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 S = requests.Session()
+S.trust_env = False
 results = []
 
 def check(label, method, path, expected=(200,), validate=None, **kwargs):
@@ -94,9 +99,10 @@ def main():
         check("face emotion report", "POST", "/face-emotion/report",json={"emotion":"happy","confidence":0.95,"captured_at":datetime.now().astimezone().isoformat(),"facial_expression":"smile"})
         check("invalid face label", "POST", "/face-emotion/report",(422,),json={"emotion":"invalid","confidence":0.9,"captured_at":datetime.now().astimezone().isoformat()})
         check("music recommendations upstream", "GET", "/music/recommendations",params={"mood":"calm","limit":2},validate=lambda r:len(r.json()["tracks"])>0)
-        for path in ["/drawing/mode","/drawing/enabled","/drawing/sd-enabled","/social-search/status","/personal-videos"]:
+        for path in ["/drawing/mode","/drawing/enabled","/drawing/sd-enabled","/social-search/status"]:
             check(path,"GET",path)
-        check("personal import needs account", "POST", "/personal-videos/import",(400,422),json={"platform":"douyin"})
+        check("removed personal video endpoint absent", "GET", "/personal-videos", (404,))
+        check("removed personal import endpoint absent", "POST", "/personal-videos/import", (404,), json={"platform":"douyin"})
         if os.getenv("SMOKE_CHAT") == "1":
             check("real AI chat", "POST", "/chat",json={"user_id":uid,"conversation_id":"qa_"+uuid.uuid4().hex,"message":"你好，请简短回复一句问候。"},timeout=120)
     finally:
@@ -104,9 +110,24 @@ def main():
             check("delete todo", "DELETE",f"/todos/{todo_id}",(204,))
         if diary_id:
             check("delete diary", "DELETE",f"/diaries/{diary_id}",(204,))
+        if uid is not None:
+            async def remove_owned_account():
+                from dotenv import load_dotenv
+                load_dotenv(ROOT / '.env')
+                from app.database import get_db
+                from app.models.database import User
+                async for db in get_db():
+                    user = await db.get(User, uid)
+                    if user is None or user.username != username:
+                        raise RuntimeError('QA account ownership could not be verified')
+                    await db.delete(user)
+                    await db.commit()
+            asyncio.run(remove_owned_account())
         output={"base_url":BASE,"qa_user_id":uid,"results":results,"passed":sum(x["passed"] for x in results),"failed":sum(not x["passed"] for x in results)}
-        Path("logs/functional-smoke.json").write_text(json.dumps(output,ensure_ascii=False,indent=2),encoding="utf-8")
+        (ROOT / "logs/functional-smoke.json").write_text(json.dumps(output,ensure_ascii=False,indent=2),encoding="utf-8")
         print(json.dumps({k:output[k] for k in ["passed","failed"]}),flush=True)
+    if any(not row['passed'] for row in results):
+        raise SystemExit(1)
 
 if __name__ == "__main__":
     main()

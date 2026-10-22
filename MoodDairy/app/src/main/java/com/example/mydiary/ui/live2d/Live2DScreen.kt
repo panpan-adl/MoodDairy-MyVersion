@@ -247,7 +247,7 @@ fun Live2DScreen(
 @Composable
 private fun VoiceWakeSwitch() {
     val context = LocalContext.current
-    remember { VoiceWakeSettings.initialize(context) }
+    LaunchedEffect(context.applicationContext) { VoiceWakeSettings.initialize(context) }
     val enabled by VoiceWakeSettings.enabled.collectAsState()
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         PetOverlayService.refreshVoiceWake()

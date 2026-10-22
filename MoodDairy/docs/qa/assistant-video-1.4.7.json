@@ -1,0 +1,59 @@
+{
+  "version": "1.4.7",
+  "version_code": 13,
+  "date": "2026-10-16",
+  "changes": [
+    {
+      "feature": "future_calendar_dates",
+      "result": "implemented_and_device_tested",
+      "message": "这一天还没到，暂时不能记录。先记下今天的心情吧。",
+      "behavior": "包含当前月及灰色下月未来日期；不选中、不跳转、不请求该日日记"
+    },
+    {
+      "feature": "video_background_music",
+      "result": "implemented_and_real_mux_verified",
+      "behavior": "仅背景音乐，无旁白；配乐完成才交付；并发轮询共用任务；失败明确反馈且单独重试配乐"
+    },
+    {
+      "feature": "companion_presence",
+      "result": "implemented_and_display_transitions_tested",
+      "behavior": "助手常驻，其他页面默认隐藏，前台已授权唤醒后临时显示，交互结束空闲10秒退场；后台停止监听"
+    },
+    {
+      "feature": "assistant_header",
+      "result": "implemented_and_device_tested",
+      "behavior": "删除视频信和情绪空间顶部按钮及占位，保留其他页面的原功能入口"
+    }
+  ],
+  "validation": {
+    "backend": {
+      "passed": 312,
+      "skipped": 1
+    },
+    "android_unit": {
+      "passed": 97
+    },
+    "distinct_device_cases": 23,
+    "android_build": "passed",
+    "installed": "emulator-5554, reinstall preserving app data"
+  },
+  "real_music_sample": {
+    "passed": true,
+    "duration_seconds": 3.0,
+    "mean_volume_db": -37.2,
+    "verified": "real mux, OSS upload/download, AAC decode and non-silent music",
+    "temporary_uploads_removed": 1
+  },
+  "limits": [
+    "真实人声经麦克风唤醒未人工实测；设备测试验证识别后的显示状态与生命周期，不替代真实麦克风验收",
+    "未重新发起付费图生视频生成，使用虚构无声片段验证实际配乐、上传、下载与AAC音轨",
+    "未执行搜索数据库迁移，未修复电脑滚轮链路，未推送GitHub"
+  ],
+  "evidence": [
+    "app/build/companion-video-device.log",
+    "app/build/companion-memory-device.log",
+    "app/build/companion-video-build.log",
+    "backend/logs/companion-video-backend.xml",
+    "backend/logs/video-music-acceptance.json"
+  ]
+}

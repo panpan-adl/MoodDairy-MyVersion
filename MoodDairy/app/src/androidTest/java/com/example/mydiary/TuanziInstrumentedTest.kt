@@ -54,13 +54,22 @@ class TuanziInstrumentedTest {
         touch(MotionEvent.ACTION_UP, rect.exactCenterX(), rect.exactCenterY(), time)
     }
 
+    private fun longClick(node: AccessibilityNodeInfo) {
+        val rect = bounds(node)
+        val time = SystemClock.uptimeMillis()
+        touch(MotionEvent.ACTION_DOWN, rect.exactCenterX(), rect.exactCenterY(), time)
+        SystemClock.sleep(700)
+        touch(MotionEvent.ACTION_UP, rect.exactCenterX(), rect.exactCenterY(), time)
+    }
+
     @Test fun catAppearsWithoutOverlayGrantAndSurvivesActivityResume() {
         val info = automation.serviceInfo
         val previousFlags = info.flags
         info.flags = info.flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
         automation.serviceInfo = info
-        instrumentation.targetContext.getSharedPreferences("companion", 0)
-            .edit().putBoolean("enabled", true).commit()
+        val context = instrumentation.targetContext
+        val originalEnabled = com.example.mydiary.live2d.PetOverlayService.enabled.value
+        instrumentation.runOnMainSync { com.example.mydiary.live2d.PetOverlayService.setEnabled(context, true) }
         try {
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                 val before = bounds(await("然然"))
@@ -76,15 +85,26 @@ class TuanziInstrumentedTest {
                 SystemClock.sleep(150)
                 assertTrue("Cat should move when dragged", bounds(await("然然")).left < before.left - 50)
 
-                click(await("然然 · 打字聊"))
+                longClick(await("然然"))
                 await("跟然然说点什么…")
-                click(await("然然 · 打字聊"))
+                longClick(await("然然"))
 
-                click(await("关闭然然"))
-                await("开启然然")
+                // This AVD has no Virtio mouse by design. Dispatch the hover to
+                // the native container, then verify the real popup by touch.
+                instrumentation.runOnMainSync {
+                    val type = com.example.mydiary.live2d.PetOverlayService::class.java
+                    val service = type.getDeclaredField("instance").apply { isAccessible = true }.get(null)
+                    val character = type.getDeclaredField("characterView").apply { isAccessible = true }.get(service) as android.view.View
+                    val container = character.parent as android.view.ViewGroup
+                    val hover = MotionEvent.obtain(SystemClock.uptimeMillis(), SystemClock.uptimeMillis(),
+                        MotionEvent.ACTION_HOVER_ENTER, character.x + character.width / 2f, character.y + character.height / 2f, 0)
+                    hover.source = android.view.InputDevice.SOURCE_MOUSE
+                    container.dispatchGenericMotionEvent(hover); hover.recycle()
+                }
+                click(await("关闭悬浮陪伴"))
                 SystemClock.sleep(200)
                 assertNull("Hide should remove the companion window", find("然然"))
-                click(await("开启然然"))
+                instrumentation.runOnMainSync { com.example.mydiary.live2d.PetOverlayService.setEnabled(context, true) }
                 await("然然")
 
                 scenario.moveToState(Lifecycle.State.CREATED)
@@ -95,6 +115,7 @@ class TuanziInstrumentedTest {
                 await("然然")
             }
         } finally {
+            instrumentation.runOnMainSync { com.example.mydiary.live2d.PetOverlayService.setEnabled(context, originalEnabled) }
             info.flags = previousFlags
             automation.serviceInfo = info
         }

@@ -1,0 +1,149 @@
+{
+  "date": "2026-10-16",
+  "version": "1.4.6 development worktree",
+  "backend": {
+    "passed": 307,
+    "skipped": 1
+  },
+  "android_unit": {
+    "passed": 85
+  },
+  "android_device": {
+    "passed": 36
+  },
+  "live_api": {
+    "passed": 38
+  },
+  "search_confirmation": {
+    "passed": 3,
+    "failed": 1
+  },
+  "coverage": [
+    {
+      "module": "表达当下",
+      "feature": "随手记录、保存日记、重复保存不重复创建、空白输入校验",
+      "status": "通过",
+      "evidence": "真实接口"
+    },
+    {
+      "module": "表达当下",
+      "feature": "图片上传、关联日记、日记解密读取",
+      "status": "通过",
+      "evidence": "临时账号与虚构图片，真实服务"
+    },
+    {
+      "module": "表达当下",
+      "feature": "语音服务与情绪处理；表情模型推理",
+      "status": "自动化通过，实录待测",
+      "evidence": "服务模拟测试、Android 模型推理；未做真实麦克风和摄像头采集验收"
+    },
+    {
+      "module": "获得陪伴",
+      "feature": "小嘉然普通情绪对话与流式返回",
+      "status": "通过",
+      "evidence": "真实云端模型，仅发送虚构验收文字"
+    },
+    {
+      "module": "获得陪伴",
+      "feature": "Enter 不误发、回复中继续编辑、软键盘布局、历史阅读位置",
+      "status": "通过",
+      "evidence": "Android 设备交互；电脑滚轮链路另列"
+    },
+    {
+      "module": "获得陪伴",
+      "feature": "数字人入口、主导航与页面切换",
+      "status": "通过",
+      "evidence": "设备入口/页面验证；未覆盖长时间角色运行和真实表情同步"
+    },
+    {
+      "module": "选择支持",
+      "feature": "工作/学习/生活规划生成、确认、修改、完成、防重复提交、历史任务",
+      "status": "通过",
+      "evidence": "真实 AI 与数据库；状态/过滤切换另有设备测试"
+    },
+    {
+      "module": "选择支持",
+      "feature": "指定 MBTI 卡片、模糊测试选择、六种测试加载与计分、结果历史重新读取",
+      "status": "通过",
+      "evidence": "真实聊天卡片 + Android 数据/入口/持久化测试；未人工逐题体验全部问卷"
+    },
+    {
+      "module": "选择支持",
+      "feature": "心理书籍/纪录片搜索费用确认预览与取消",
+      "status": "通过",
+      "evidence": "真实计划与确认接口；取消不购买"
+    },
+    {
+      "module": "选择支持",
+      "feature": "点击确认搜索、缺少密钥的明确引导",
+      "status": "失败，阻断",
+      "evidence": "数据库不接受 executing 状态，返回 STREAM_INTERNAL_ERROR，未到密钥检查阶段"
+    },
+    {
+      "module": "选择支持",
+      "feature": "搜索无结果、上游失败、重复确认等",
+      "status": "自动化通过",
+      "evidence": "模拟服务/数据库测试；未绑定真实 TikHub 密钥，余额不足与真实付费结果未实测"
+    },
+    {
+      "module": "选择支持",
+      "feature": "音乐推荐、统一放松入口、点击具体歌曲跳转、进入不自动播放",
+      "status": "通过",
+      "evidence": "真实推荐接口；设备监视外部跳转 Intent，未声称外部网易云实际播放通过"
+    },
+    {
+      "module": "选择支持",
+      "feature": "白噪音本地实际播放、切换页面继续、暂停、测试后恢复音量",
+      "status": "通过",
+      "evidence": "真实 Android ExoPlayer；静音运行，验证播放位置递增和暂停状态"
+    },
+    {
+      "module": "选择支持",
+      "feature": "AI 绘画/草图/图生视频接口、参数与错误处理",
+      "status": "自动化及入口通过，完整生成待测",
+      "evidence": "已启用火山模式与绘图/SD功能开关；不等于 SD/LoRA 训练服务可用。未执行付费生成、LoRA训练或日记→图片→视频完整链路"
+    },
+    {
+      "module": "留下记忆",
+      "feature": "高光时刻、小确幸标记保存与列表回读",
+      "status": "通过",
+      "evidence": "真实数据库 + 主要页面挂载"
+    },
+    {
+      "module": "留下记忆",
+      "feature": "时光信箱保存、字幕整理、私有 MP4、分段读取、封存保护、到期开启、双时间线回复",
+      "status": "通过",
+      "evidence": "临时账号真实完整流程；原生界面生成预览亦通过"
+    },
+    {
+      "module": "留下记忆",
+      "feature": "情绪空间 AI 建议、用户确认保存、日记/信件联动、主题切换、物品点击、离线草稿隔离",
+      "status": "通过",
+      "evidence": "真实服务 + 原生交互 + 本地草稿持久化；截图仅含虚构内容"
+    },
+    {
+      "module": "回顾成长",
+      "feature": "日历日期、关键词检索、高光/小确幸回看、成长画像、无效时间范围",
+      "status": "通过",
+      "evidence": "真实接口与页面挂载；未评估长期画像的心理解释质量"
+    },
+    {
+      "module": "回顾成长",
+      "feature": "晚间复盘生成与保存为日记",
+      "status": "通过",
+      "evidence": "真实 AI 和数据库"
+    },
+    {
+      "module": "跨模块",
+      "feature": "记录→规划→完成→复盘；记录→空间/信箱→重访",
+      "status": "通过",
+      "evidence": "分段真实流程与原生关键操作；非全部步骤逐屏人工验收"
+    },
+    {
+      "module": "跨模块",
+      "feature": "电脑鼠标→Android Studio内嵌模拟器→页面滚动",
+      "status": "未通过/待修复",
+      "evidence": "此前已复现，本轮仅通过 Android 内部滚轮注入测试，不能替代电脑端链路"
+    }
+  ]
+}

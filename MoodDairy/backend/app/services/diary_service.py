@@ -72,7 +72,12 @@ class DiaryService:
         diary_id: int,
         force: bool,
     ) -> None:
-        asyncio.create_task(asyncio.to_thread(worker, diary_id, force))
+        async def run():
+            try:
+                await asyncio.to_thread(worker, diary_id, force)
+            except Exception:
+                logger.exception("后台日记提取失败: diary_id=%s", diary_id)
+        asyncio.create_task(run())
 
     def _trigger_extraction_async(self, diary_id: int, force: bool = False):
         """
@@ -90,11 +95,16 @@ class DiaryService:
             # 导入 trigger_extraction 函数
             from app.celery_app import _run_extraction, extraction_queue_available, trigger_extraction
 
-            # 在后台触发提取任务（不等待结果）
-            if extraction_queue_available():
-                self._launch_extraction_worker(trigger_extraction, diary_id, force)
-            else:
-                self._launch_extraction_worker(_run_extraction, diary_id, force)
+            def dispatch(diary_id: int, force: bool):
+                if extraction_queue_available():
+                    try:
+                        return trigger_extraction(diary_id, force)
+                    except Exception:
+                        # The broker may disappear after the availability probe.
+                        logger.warning("提取任务入队失败，改用本地执行: diary_id=%s", diary_id)
+                return _run_extraction(diary_id, force)
+
+            self._launch_extraction_worker(dispatch, diary_id, force)
 
             logger.info(f"已触发提取任务: diary_id={diary_id}, force={force}")
         except Exception as e:

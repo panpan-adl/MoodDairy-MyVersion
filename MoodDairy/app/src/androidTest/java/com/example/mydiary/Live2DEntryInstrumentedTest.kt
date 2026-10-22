@@ -4,6 +4,8 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.performClick
 import org.junit.Rule
 import org.junit.Test
@@ -14,9 +16,9 @@ class Live2DEntryInstrumentedTest {
     @Test fun assistantOpensBundledDigitalHuman() {
         compose.onNodeWithText("助手").performClick()
         compose.waitUntil(10_000) {
-            compose.onAllNodesWithText("数字人").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithContentDescription("assistant_avatar").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithText("数字人").assertIsDisplayed().performClick()
+        compose.onNodeWithContentDescription("assistant_avatar").assertIsDisplayed().performClick()
         compose.waitUntil(10_000) {
             compose.onAllNodesWithText("数字人 · 然然").fetchSemanticsNodes().isNotEmpty()
         }

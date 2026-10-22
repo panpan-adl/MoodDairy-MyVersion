@@ -1,0 +1,14 @@
+{
+  "passed": true,
+  "samples": [
+    {
+      "case": "积极",
+      "source": "今天和朋友在公园散步，闻到桂花香，很开心。",
+      "review": "你今天和朋友在公园散步，闻到了桂花香，心里满是开心。和好友相伴的松弛时刻，裹着桂香的风，都成了今天里很鲜活的小片段，这样的时刻总是让人觉得很舒心，值得留在记忆里。",
+      "question": "要不要再讲讲这次散步的其他细节？",
+      "characters": 81,
+      "cached_read": true
+    }
+  ],
+  "temporary_account_removed": true
+}

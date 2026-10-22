@@ -70,7 +70,7 @@ class TodayDashboardInstrumentedTest {
         tab("今日任务").assertIsSelected()
         compose.onNodeWithText("完成项目提纲").assertExists()
         screenshot("tasks")
-        compose.onNode(hasText("工作") and hasClickAction()).performClick()
+        compose.onNode(hasText("工作") and isSelectable()).performClick()
         compose.onNodeWithText("完成项目提纲").assertExists()
         compose.onNodeWithText("复习英语单词").assertDoesNotExist()
         tab("晚间复盘").performClick()

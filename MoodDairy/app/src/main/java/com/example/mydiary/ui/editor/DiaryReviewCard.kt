@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.SubcomposeLayout
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -143,7 +144,10 @@ private fun ScatteredDiaryWords(words: List<DiaryReviewKeyword>, replay: Int, mo
         val placeables = words.mapIndexed { index, word ->
             subcompose("word_$index") {
                 FloatingDiaryWord(word, index,
-                    maximumFont = diaryCloudMaximumFont(width / density))
+                    maximumFont = diaryCloudMaximumFont(width / density),
+                    // Measurement-only content is never placed. Exclude it from
+                    // accessibility so every visible keyword has one node.
+                    modifier = Modifier.clearAndSetSemantics {})
             }.single().measure(wordConstraints)
         }
         val angles = placeables.mapIndexed { index, word ->

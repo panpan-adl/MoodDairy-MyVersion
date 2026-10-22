@@ -17,7 +17,7 @@ class SessionManager @Inject constructor(
     private val sharedPreferences: SharedPreferences =
         SecurePreferences.create(context, PREF_NAME)
 
-    fun saveSession(user: User, accessToken: String) {
+    fun saveSession(user: User, accessToken: String): Unit = synchronized(SESSION_LOCK) {
         sharedPreferences.edit().apply {
             putLong(KEY_USER_ID, user.id)
             putString(KEY_USERNAME, user.username)
@@ -31,7 +31,7 @@ class SessionManager @Inject constructor(
             putInt(KEY_STATUS, user.status)
             putString(KEY_ACCESS_TOKEN, accessToken)
             putBoolean(KEY_IS_LOGGED_IN, true)
-            apply()
+            check(commit()) { "Unable to persist account session" }
         }
     }
 
@@ -58,8 +58,8 @@ class SessionManager @Inject constructor(
         )
     }
 
-    fun clearSession() {
-        sharedPreferences.edit().clear().apply()
+    fun clearSession() = synchronized(SESSION_LOCK) {
+        check(sharedPreferences.edit().clear().commit()) { "Unable to clear account session" }
     }
 
     fun isLoggedIn(): Boolean =
@@ -72,14 +72,17 @@ class SessionManager @Inject constructor(
         return if (userId == -1L) null else userId
     }
 
-    fun updateSession(user: User) {
-        if (isLoggedIn()) {
+    fun updateSession(user: User): Unit = synchronized(SESSION_LOCK) {
+        // A profile request may complete after logout or an account switch.
+        // It must never replace the newly active account with its old response.
+        if (getUserId() == user.id) {
             val token = getAccessToken() ?: return
             saveSession(user, token)
         }
     }
 
     companion object {
+        private val SESSION_LOCK = Any()
         private const val PREF_NAME = "diary_session_secure"
         const val KEY_USER_ID = "user_id"
         const val KEY_USERNAME = "username"

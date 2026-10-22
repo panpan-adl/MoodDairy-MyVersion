@@ -90,8 +90,12 @@ class TestExtractionTrigger:
             patch("app.celery_app.trigger_extraction", queued_worker), \
             patch("app.celery_app._run_extraction", local_worker):
             service._trigger_extraction_async(diary_id=7, force=False)
-
-        service._launch_extraction_worker.assert_called_once_with(queued_worker, 7, False)
+            service._launch_extraction_worker.assert_called_once()
+            queued_worker.assert_not_called()
+            worker, diary_id, force = service._launch_extraction_worker.call_args.args
+            worker(diary_id, force)
+            queued_worker.assert_called_once_with(7, False)
+            local_worker.assert_not_called()
 
     def test_trigger_extraction_async_falls_back_to_local_worker(self, mock_db_session):
         from app.services.diary_service import DiaryService
@@ -106,8 +110,22 @@ class TestExtractionTrigger:
             patch("app.celery_app.trigger_extraction", queued_worker), \
             patch("app.celery_app._run_extraction", local_worker):
             service._trigger_extraction_async(diary_id=7, force=True)
+            worker, diary_id, force = service._launch_extraction_worker.call_args.args
+            worker(diary_id, force)
+            local_worker.assert_called_once_with(7, True)
+            queued_worker.assert_not_called()
 
-        service._launch_extraction_worker.assert_called_once_with(local_worker, 7, True)
+    def test_broker_failure_after_probe_falls_back_to_local(self, mock_db_session):
+        from app.services.diary_service import DiaryService
+        service = DiaryService(mock_db_session)
+        service._launch_extraction_worker = MagicMock()
+        with patch("app.celery_app.extraction_queue_available", return_value=True), \
+             patch("app.celery_app.trigger_extraction", side_effect=ConnectionError("broker offline")), \
+             patch("app.celery_app._run_extraction", return_value={"success": True}) as local:
+            service._trigger_extraction_async(7, force=True)
+            worker, diary_id, force = service._launch_extraction_worker.call_args.args
+            assert worker(diary_id, force) == {"success": True}
+            local.assert_called_once_with(7, True)
 
 
 class TestGetDiary:
@@ -158,26 +176,32 @@ class TestGetDiaryByDate:
 
 
 class TestUpdateDiary:
-    @pytest.mark.skip(reason="requires a more complete extraction service setup")
     @pytest.mark.asyncio
-    async def test_update_diary_success(self, mock_db_session, mock_diary):
+    async def test_update_diary_success(self, mock_db_session):
         from app.models.schemas import UpdateDiaryRequest
+        from app.models.database import Diary
         from app.services.diary_service import DiaryService
 
-        mock_diary.content = "original content"
+        diary = Diary(id=1, user_id=1, title="original title", content="original content",
+                      diary_date=date.today(), media_items=[], voice_transcriptions=[])
 
         mock_result = MagicMock()
-        mock_result.unique = MagicMock(return_value=mock_result)
-        mock_result.scalar_one_or_none = MagicMock(return_value=mock_diary)
+        mock_result.scalar_one_or_none.return_value = diary
+        mock_result.scalar_one.return_value = diary
         mock_db_session.execute = AsyncMock(return_value=mock_result)
 
         service = DiaryService(mock_db_session)
 
-        with patch.object(service, "_trigger_extraction_async", MagicMock()):
+        with patch.object(service, "_trigger_extraction_async") as extract, \
+             patch.object(service, "_trigger_embedding_async") as embed:
             update_data = UpdateDiaryRequest(title="updated title")
-            await service.update_diary(diary_id=1, data=update_data)
+            updated = await service.update_diary(diary_id=1, data=update_data)
 
-        mock_db_session.commit.assert_called()
+        mock_db_session.commit.assert_called_once()
+        assert updated.title == "updated title"
+        assert updated.content == "original content"
+        extract.assert_called_once_with(1, force=False)
+        embed.assert_called_once_with(1, force=True)
 
 
 class TestDeleteDiary:

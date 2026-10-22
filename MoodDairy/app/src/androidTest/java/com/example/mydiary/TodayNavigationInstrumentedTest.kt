@@ -70,15 +70,15 @@ class TodayNavigationInstrumentedTest {
     @Test fun lifeSelectionSurvivesOtherTabsAndDetailReturn() {
         val nav = mount()
         compose.onNodeWithText("生活").performClick()
-        compose.onNodeWithText("回顾").performClick()
+        compose.onNodeWithText("足迹").performClick()
         compose.onNodeWithText("成长画像入口").performClick()
         compose.onNodeWithText("成长详情").assertExists()
         compose.runOnIdle { nav.popBackStack() }
-        compose.onNodeWithText("回顾").assertIsSelected()
+        compose.onNodeWithText("足迹").assertIsSelected()
         for (tab in listOf("记录", "助手", "我的")) {
             compose.onNodeWithText(tab).performClick()
             compose.onNodeWithText("生活").performClick()
-            compose.onNodeWithText("回顾").assertIsSelected()
+            compose.onNodeWithText("足迹").assertIsSelected()
         }
         compose.onNodeWithText("助手").performClick()
         compose.runOnIdle {

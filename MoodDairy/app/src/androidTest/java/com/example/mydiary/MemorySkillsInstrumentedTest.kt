@@ -47,7 +47,7 @@ class MemorySkillsInstrumentedTest {
             compose.activityRule.scenario.onActivity {activity -> activity.setContent {
                 MyDiaryTheme {MemoryRoom(theme,listOf(JSONObject().put("slot",0).put("kind","book").put("title","一次小进步"))) {clicked=true}}
             }}
-            compose.onNodeWithContentDescription("一次小进步").performClick()
+            compose.onNodeWithText("一次小进步").performClick()
             assertTrue(clicked); clicked=false
         }
         compose.mainClock.advanceTimeBy(1500)
@@ -108,7 +108,13 @@ class MemorySkillsInstrumentedTest {
             compose.waitUntil(30000) { runCatching {compose.onNodeWithText("写一封视频信").assertIsEnabled(); true}.getOrDefault(false) }
             compose.onNodeWithText("写一封视频信").performClick()
             compose.onNodeWithTag("letter-body").performScrollTo().performTextInput("这是一封用于测试的信。愿你记得今天的努力。")
-            compose.onNodeWithText("保存到账号").performScrollTo().performClick()
+            activity.onActivity { screen ->
+                screen.currentFocus?.clearFocus()
+                (screen.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
+                    .hideSoftInputFromWindow(screen.window.decorView.windowToken, 0)
+            }
+            compose.waitForIdle()
+            compose.onNodeWithText("保存到账号").performScrollTo().assertIsEnabled().performClick()
             compose.waitUntil(30000) { compose.onAllNodesWithText("已保存到账号").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("生成视频并预览").performScrollTo().performClick()
             compose.waitUntil(90000) { compose.onAllNodesWithText("确认封存").fetchSemanticsNodes().isNotEmpty() }
@@ -121,10 +127,19 @@ class MemorySkillsInstrumentedTest {
             }
             compose.onNodeWithText("情绪空间").performScrollTo().performClick()
             compose.waitUntil(20000) { compose.onAllNodesWithText("自然小屋").fetchSemanticsNodes().isNotEmpty() }
-            compose.onNodeWithContentDescription("测试的记忆").performClick()
+            compose.waitUntil(30000) { runCatching { compose.onNodeWithText("放入一段经历").assertIsEnabled(); true }.getOrDefault(false) }
+            // The shelf and the collection list intentionally share the title.
+            compose.onAllNodesWithText("测试的记忆").onFirst().performClick()
             compose.onNodeWithText("仅用于手机端验收的虚构日记。").assertExists()
             compose.onNodeWithText("关闭").performClick()
             compose.onRoot().captureToImage().asAndroidBitmap().let {bitmap -> File(context.getExternalFilesDir(null),"memory-native-screen-qa.png").outputStream().use{bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)} }
+        } catch (failure: Throwable) {
+            runCatching { compose.onRoot().captureToImage().asAndroidBitmap().let { bitmap ->
+                File(context.getExternalFilesDir(null), "memory-native-failure.png").outputStream().use {
+                    bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+                }
+            } }
+            throw failure
         } finally {
             activity?.close()
             val store=MemoryStore(context,session); for(d in store.drafts()) store.discard(d)

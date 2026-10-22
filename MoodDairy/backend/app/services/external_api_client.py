@@ -578,8 +578,9 @@ class QianfanClient:
     {{"name": "地点名", "type": "地点类型（如：餐饮、户外、工作场所）"}}
   ],
   "emotion_analysis": {{
-    "primary_emotion": "主要情绪（开心/平静/焦虑/愤怒/低落/兴奋/复杂/中性）",
+    "primary_emotion": "开心",
     "emotion_score": 75,
+    "emotion_intensity": "中等",
     "emotion_distribution": {{
       "开心": 0.6,
       "中性": 0.3,
@@ -593,19 +594,19 @@ class QianfanClient:
     "key_sentences": ["体现情绪的关键句子1", "体现情绪的关键句子2"]
   }},
   "has_small_happiness": 0,
-  "small_happiness_content": "小确幸内容（如果有）",
+  "small_happiness_content": null,
   "has_highlight": 0,
-  "highlight_summary": "高光时刻摘要（如果有）"
+  "highlight_summary": null
 }}
 
 注意事项：
 1. 摘要要简洁准确，突出重点，控制在100-200字
 2. 关键词要有代表性，提取3-10个最重要的词
-3. 情绪分析要结合上下文，emotion_score范围1-100（50为中性，>50为积极，<50为消极）
+3. primary_emotion 只能为开心、平静、焦虑、愤怒、低落、兴奋、复杂、中性；评分1-100，开心/兴奋为56-100，低落/愤怒/焦虑为1-45，平静/复杂/中性为46-55。emotion_intensity 必须为轻微、中等或强烈。
 4. emotion_distribution 各项之和应为1.0
 5. 小确幸是指生活中微小但温暖的瞬间（如：喝到好喝的咖啡、看到美丽的日落）
 6. 高光时刻是指值得骄傲和纪念的重要时刻（如：完成重要项目、获得认可、达成目标）
-7. has_small_happiness 和 has_highlight 为 0 或 1
+7. has_small_happiness 和 has_highlight 为 0 或 1；标记为0时对应内容必须为null，标记为1时必须有不超过200字的真实原文事件说明。
 8. 只返回 JSON，不要添加任何其他文字说明
 """
 
@@ -695,7 +696,8 @@ class QianfanClient:
 6. 只返回 JSON，不要添加任何其他文字说明
 """
     
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, *, chat_url: Optional[str] = None,
+                 model: Optional[str] = None, trust_env: bool = True):
         """
         初始化千帆客户端
         
@@ -703,6 +705,9 @@ class QianfanClient:
             api_key: 完整的 API Key，格式为 bce-v3/ALTAK-xxx/xxx
         """
         self.api_key = api_key
+        self.chat_url = chat_url or self.CHAT_URL
+        self.model = model or os.getenv("QIANFAN_MODEL_NAME") or os.getenv("QIANYI_MODEL_NAME", "deepseek-v3.1-250821")
+        self.trust_env = trust_env
     
     async def _call_llm(
         self,
@@ -727,7 +732,7 @@ class QianfanClient:
             LLMAPIError: 如果 API 调用失败
         """
         request_data = {
-            "model": os.getenv("QIANYI_MODEL_NAME", "deepseek-v3.1-250821"),
+            "model": self.model,
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens
@@ -737,9 +742,9 @@ class QianfanClient:
         
         for attempt in range(max_retries):
             try:
-                async with httpx.AsyncClient(timeout=60.0) as client:
+                async with httpx.AsyncClient(timeout=60.0, trust_env=self.trust_env) as client:
                     response = await client.post(
-                        self.CHAT_URL,
+                        self.chat_url,
                         json=request_data,
                         headers={
                             "Content-Type": "application/json",
@@ -1037,7 +1042,7 @@ class QianfanClient:
         
         # 构建请求
         request_data = {
-            "model": os.getenv("QIANYI_MODEL_NAME", "deepseek-v3.1-250821"),
+            "model": self.model,
             "messages": [
                 {
                     "role": "system",
@@ -1052,10 +1057,10 @@ class QianfanClient:
             "max_tokens": 2000
         }
         
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=60.0, trust_env=self.trust_env) as client:
             try:
                 response = await client.post(
-                    self.CHAT_URL,
+                    self.chat_url,
                     json=request_data,
                     headers={
                         "Content-Type": "application/json",
@@ -1145,7 +1150,17 @@ class ExternalAPIClient:
         # 百度千帆客户端（文本优化）
         qianfan_api_key = os.getenv("QIANFAN_API_KEY")
         
-        if qianfan_api_key:
+        ark_api_key = os.getenv("ARK_API_KEY", "").strip()
+        if ark_api_key:
+            # Diary extraction and speech polishing use the same configured
+            # provider/model as the current chat and planning features.
+            from app.utils.ark_runtime import get_ark_base_url, should_trust_env_proxy
+            self._qianfan_client = QianfanClient(ark_api_key,
+                chat_url=get_ark_base_url() + "/chat/completions",
+                model=os.getenv("ARK_MODEL_NAME", "doubao-seed-1-8-251228"),
+                trust_env=should_trust_env_proxy())
+            logger.info("Diary language client initialized with the configured Ark model")
+        elif qianfan_api_key:
             self._qianfan_client = QianfanClient(qianfan_api_key)
             logger.info("Qianfan client initialized")
         else:
